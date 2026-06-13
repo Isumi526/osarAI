@@ -3,13 +3,17 @@
 // 新規登録（メール＋パスワード）。サインアップで auth.users 作成 → DBトリガーが
 // profiles を LL組織・member で自動生成（migration 0003）。
 // ※フェーズ4でこの後段に Stripe Checkout（14日トライアル）を挿入する。
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // チャネル割引コード（LL案内リンクに ?code=LL2026 で埋め込まれる）を引き継ぐ
+  const code = searchParams.get('code');
+  const subscribeHref = code ? `/subscribe?code=${encodeURIComponent(code)}` : '/subscribe';
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,7 +41,8 @@ export default function SignupPage() {
       setDone(true);
       return;
     }
-    router.push('/dashboard');
+    // 登録完了 → プラン選択（Stripe Checkout）へ
+    router.push(subscribeHref);
     router.refresh();
   }
 
@@ -91,5 +96,13 @@ export default function SignupPage() {
         既にアカウントをお持ちの方は <Link href="/login">ログイン</Link>
       </p>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
   );
 }

@@ -1,5 +1,5 @@
 // 3層プラン定義（§11）。価格は定価（チャネル割引はStripe Coupon側で額引き）。
-import type { PlanId } from './types.js';
+import type { PlanId } from './types';
 
 export interface PlanDef {
   id: PlanId;

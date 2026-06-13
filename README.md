@@ -17,7 +17,15 @@ supabase/        migrations（DDL+RLS） / functions（Edge Functions）
 ```bash
 pnpm install
 cp .env.example .env   # 値は各自記入（§13）。.env はコミットしない
+
+# 各アプリは自分のディレクトリの env を読む（Next=apps/web、Vite=apps/mobile）。
+# ルート .env を単一ソースにしてシンボリックリンクで共有する：
+ln -sf ../../.env apps/web/.env.local
+ln -sf ../../.env apps/mobile/.env
 ```
+
+> 秘匿値（service_role/Gemini/Stripe secret）は接頭辞なし＝サーバーのみ。
+> クライアントに出るのは `NEXT_PUBLIC_` / `VITE_` 接頭辞の値だけ。
 
 ## 開発サーバ
 
