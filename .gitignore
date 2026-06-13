@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+
+# build outputs
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# capacitor native projects (generated)
+apps/mobile/ios/
+apps/mobile/android/
+
+# supabase
+supabase/.branches/
+supabase/.temp/
+
+# misc
+.DS_Store
+*.log
+.vscode/
+.idea/
+coverage/

@@ -1,0 +1,7 @@
+node_modules
+dist
+.next
+out
+build
+pnpm-lock.yaml
+packages/shared/database.types.ts

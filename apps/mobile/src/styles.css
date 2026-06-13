@@ -1,0 +1,21 @@
+:root {
+  font-family: system-ui, -apple-system, 'Hiragino Sans', sans-serif;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  background: #faf9f7;
+  color: #2a2622;
+}
+
+.screen {
+  padding: 24px 20px;
+  max-width: 640px;
+  margin: 0 auto;
+}

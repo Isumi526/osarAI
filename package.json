@@ -1,0 +1,22 @@
+{
+  "name": "osarai",
+  "version": "0.0.0",
+  "private": true,
+  "description": "osarAI 〜おさらい〜 — 顧客記憶＆関係維持アプリ（モノレポ）",
+  "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:mobile": "pnpm --filter @osarai/mobile dev",
+    "dev:web": "pnpm --filter @osarai/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3"
+  }
+}
