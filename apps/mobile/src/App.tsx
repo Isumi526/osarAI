@@ -4,6 +4,7 @@ import { Login } from './screens/Login.js';
 import { Home } from './screens/Home.js';
 import { Osarai } from './screens/Osarai.js';
 import { CustomerDetail } from './screens/CustomerDetail.js';
+import { CustomerForm } from './screens/CustomerForm.js';
 import { AiChat } from './screens/AiChat.js';
 import { Settings } from './screens/Settings.js';
 
@@ -24,6 +25,8 @@ export function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/osarai" element={<Osarai />} />
+        <Route path="/customers/new" element={<CustomerForm />} />
+        <Route path="/customers/:id/edit" element={<CustomerForm />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/chat" element={<AiChat />} />
         <Route path="/settings" element={<Settings />} />
