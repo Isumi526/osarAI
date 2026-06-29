@@ -1,0 +1,16 @@
+# 独立レビュー（scripts/independent-review.mjs）の accepted-findings レジストリ。
+# ここに載せた finding は report に「accepted(tracked: ticket)」として出るが、
+# verdict=block の集計からは除外される（＝人間が把握済み・チケットで追跡中の既知事項）。
+# verdict=block になるのは「未acceptの critical/🔴 が1件以上」の時だけ。
+#
+# entry: { rule, target, reason, ticket }
+#   rule   … ルール名（.md は省略可。finding.rule と部分一致で判定）
+#   target … 対象（テーブル名/ファイル名等。finding.file か finding.message に含まれれば一致）
+#   reason … なぜ未対応で許容しているか
+#   ticket … 追跡している Notion ページID（集約先）
+#
+# ── osarAI 用は空から開始（sido のベースラインは引き継がない）。
+#    osarAI は Supabase Auth + org_id/owner_id RLS が初期から有効な認証アプリで、
+#    sido の「anon公開キー前提・RLS未適用ベースライン」は存在しないため。
+#    既知許容が出たらここに追記する。
+entries: []
