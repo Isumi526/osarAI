@@ -573,3 +573,4 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 - **設定済（2026-06-29 解消）**: `HUMANBALL_WEBHOOK_URL`/`HUMANBALL_WEBHOOK_SECRET`（sido と同一LINE通知先を流用＝A案。`notify-humanball.mjs` は本文 task に `[osarAI]` 接頭辞を付与し混線回避）／`main`・`dev` ブランチ（origin へ push 済）。
 - **未設定（実 /run には後日でOK・要確認）**: `SUPABASE_PROD_DB_URL`（rls-audit の本番監査・local監査/dry-runには不要）, `DEPLOY_PLATFORM`（web のデプロイ基盤未確認）, E2E/Playwright（テスト導入時に PLAYWRIGHT_PROJECTS 更新）。
 - `scripts/`: dispatcher / notify-humanball / independent-review / rls-audit / next-target（+ `.kody/rules`・`.kody/accepted.yml` は osarAI ドメインへ書換済）。
+- **コマンド**: `.claude/commands/run.md`（/run・自走ループ）／`.claude/commands/review.md`（/review・レビュー待ち→本番待ちの人力ナビ）。**/review は web中心**＝apps/web/mobile は原則ブラウザ（{{DEV_URL}}）で確認し、ネイティブ依存（プッシュ実機体裁・カメラ・APNS/FCM・課金実機）は `⚠実機確認` 扱いで初回リリース基盤確立後に実機ナビを足す。status更新は REST PATCH（Notion-Version 2025-09-03）。
