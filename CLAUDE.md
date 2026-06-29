@@ -568,6 +568,14 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 - テナント = `org_id`（profiles.org_id = current_org_id()）、所有者 = `owner_id`/`author_id`/`user_id` = `auth.uid()`。
 - 全テーブルで RLS 有効（Supabase Auth 前提）。sido のような anon 公開キー直叩きモデルは無い（＝anon-access は Stripe webhook / 公開リンク等に限定）。
 
+### APP_LAYOUT_NOTES（/review が参照・モバイルアプリ）
+- 構成: `apps/web`(Next.js・管理/Web UI・{{DEV_URL}}=`pnpm dev:web`＝`next dev -p 3000`) ＋ `apps/mobile`(Vite+Capacitor・`pnpm dev:mobile` でブラウザ確認) ＋ `packages/shared`。
+- 確認方針: UI/ロジックは原則ブラウザ。**ネイティブ依存（プッシュ通知の実機体裁・カメラ・APNS/FCM・課金の実機フロー）は `⚠実機確認`**（ブラウザで足りる範囲は承認可）。
+- 画面パス例: `/customers`(顧客) `/sessions`(おさらい) `/billing`(課金/サブスク) `/settings/notifications`(通知設定) `/`(ホーム) ※実パスは apps/web ルーティングに合わせる。
+- 外部送信媒体＝**プッシュ通知(APNS/FCM)・メール・Stripe課金**（実送信は自分宛・隔離）。複合一意の例＝`push_tokens(user_id, token)`・`subscriptions(user_id PK)`。
+- 本番: DEPLOY_PLATFORM ⚠️未確定（要確認）・本番未リリース。スモークの認可ガード対象＝Stripe webhook / 公開リンク等。`NOTIFY_PREFIX=[osarAI]`（notify-humanball が付与）。
+- ※osarAI は ship.md を配置しない（本番リリース基盤未確立）。/run・/review のみ運用。
+
 ### /run harness の前提（移植メモ）
 - `.env` に `NOTION_TOKEN`（共有バックログ統合・sido と同一）, `BACKLOG_PROJECT_ID`(=osarAI), `BACKLOG_DS_ID`/`BACKLOG_DATA_SOURCE_ID`, `AUTO_MERGE_TARGET=dev`, `AUTO_TIER=低`, `MAX_WALL=180`, `GEMINI_REVIEW_API_KEY`/`GEMINI_REVIEW_MODEL` を設定済。
 - **設定済（2026-06-29 解消）**: `HUMANBALL_WEBHOOK_URL`/`HUMANBALL_WEBHOOK_SECRET`（sido と同一LINE通知先を流用＝A案。`notify-humanball.mjs` は本文 task に `[osarAI]` 接頭辞を付与し混線回避）／`main`・`dev` ブランチ（origin へ push 済）。

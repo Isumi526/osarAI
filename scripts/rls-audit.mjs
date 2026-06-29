@@ -40,6 +40,9 @@ const ASSERT = has('--assert')
 const JSON_ONLY = has('--json')
 const PROD = has('--prod-readonly')
 const DB_URL_OVERRIDE = getOpt('--db-url')
+// ローカル Supabase の既定DB接続。標準ポートは 54322。
+// 別ポートで隔離起動するプロジェクト（例: garage は DB 55322）は .env の LOCAL_DB_URL で上書きする
+// （config.toml のポート変更はローカル作業ツリーのみでコミットしない方針＝接続値は gitignore の .env 側に置く）。
 const LOCAL_DEFAULT = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 
 // ---- .env 読み（値はログに出さない）----
@@ -62,7 +65,7 @@ function resolveConn(env) {
     url = env.SUPABASE_PROD_DB_URL
     if (!url) { console.error('✗ --prod-readonly だが .env に SUPABASE_PROD_DB_URL が無い'); process.exit(2) }
     label = 'PROD(read-only)'; readOnly = true
-  } else { url = LOCAL_DEFAULT; label = 'local(54322)'; readOnly = false }
+  } else { url = (env.LOCAL_DB_URL || '').trim() || LOCAL_DEFAULT; label = `local(${new URL(url).port || '5432'})`; readOnly = false }
 
   let u
   try { u = new URL(url) } catch { console.error('✗ DB URL の形式が不正'); process.exit(2) }

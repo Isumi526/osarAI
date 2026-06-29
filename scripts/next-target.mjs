@@ -45,7 +45,7 @@ if (!PROJECT_ID) { console.error('✗ BACKLOG_PROJECT_ID が .env にありま�
 const PROJECT_NAMES = {
   '3540ff81-c56b-802e-871d-ca995e01718f': 'SIDO',
   '37a0ff81-c56b-81d9-a527-eebd543686c3': 'osarAI',
-  '37a0ff81-c56b-81b5-9341-c89f8bd69355': 'Garage Connect',
+  '3690ff81-c56b-8099-94dc-d196307d2b79': 'Garage Connect',
 }
 const norm = (id) => (id || '').replace(/-/g, '')
 const PROJECT_NAME = Object.entries(PROJECT_NAMES).find(([id]) => norm(id) === norm(PROJECT_ID))?.[1]

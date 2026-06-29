@@ -144,13 +144,18 @@ const acceptedFindings = findings.filter((f) => f._accepted)
 // verdict は「未acceptの critical/🔴 が1件以上」なら block、それ以外は pass（accepted は除外）
 const verdict = unacceptedCrit.length >= 1 ? 'block' : 'pass'
 
-// riskClass: 機微な差分 or 未acceptの high/critical があれば high
+// riskClass: 機微な差分 or 未acceptの high/critical があれば high。
+// ドメイン固有の機微キーワードは .env の REVIEW_HIGH_RISK_KEYWORDS（| 区切り）で各プロジェクトが指定可。
+// 未設定時は共通ベース（migrations/functions/verify_jwt は別途検出するので、ここは横断の機微語）。
+const KW_BASE = 'stripe|invoice|payment|subscription|billing|webhook|auth\\/callback|service_role'
+const KW_RAW = ((process.env.REVIEW_HIGH_RISK_KEYWORDS || env.REVIEW_HIGH_RISK_KEYWORDS || '').trim()) || KW_BASE
+let KW_RE
+try { KW_RE = new RegExp(KW_RAW, 'i') } catch { KW_RE = new RegExp(KW_BASE, 'i') }
 function computeRisk() {
-  const hi = /(^|\n)[+-].*supabase\/migrations\//.test(diff) || /supabase\/migrations\//.test(diff)
+  const hi = /supabase\/migrations\//.test(diff)
     || /supabase\/functions\//.test(diff)
     || (/config\.toml/.test(diff) && /verify_jwt/.test(diff))
-    || /stripe|invoice|payment|subscription|billing|customers|interactions/i.test(diff)
-    || /webhook|auth\/callback|push_tokens|service_role/i.test(diff)
+    || KW_RE.test(diff)
     || unacceptedSevere.length > 0
   return hi ? 'high' : 'low'
 }
