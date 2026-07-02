@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server';
 import { buildAdvicePrompt, ADVICE_SYSTEM_PROMPT, type ChatScope, type AiSummary } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
+import { getEntitlement } from '@/lib/entitlement';
 import { geminiText, GEMINI_MODEL_LITE } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
@@ -36,6 +37,30 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!profile) return json({ error: 'profile not found' }, 400);
   const orgId = profile.org_id;
+
+  // 契約ゲート（§16）＋ プラン別 AI相談 月間上限（§11 Light=10回）
+  const ent = await getEntitlement(supabase, user.id);
+  if (!ent.active) {
+    return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
+  }
+  const limit = ent.def?.aiAdviceLimit ?? null;
+  if (limit != null) {
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    // RLS により自分のチャットのメッセージのみ数える
+    const { count } = await supabase
+      .from('ai_chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'user')
+      .gte('created_at', monthStart.toISOString());
+    if ((count ?? 0) >= limit) {
+      return json(
+        { error: 'advice_limit_reached', message: `今月のAI相談は上限(${limit}回)に達しました。上位プランで無制限になります。` },
+        429,
+      );
+    }
+  }
 
   // --- チャット取得 or 新規作成 ---
   let chatId = body.chatId;

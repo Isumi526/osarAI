@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import type { AiSummary, InteractionSource, OsaraiExtracted } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
+import { getEntitlement } from '@/lib/entitlement';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { geminiTranscribe, geminiJson, GEMINI_MODEL_LITE, type GeminiSchema } from '@/lib/gemini';
 
@@ -58,6 +59,18 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!profile) return json({ error: 'profile not found' }, 400);
   const orgId = profile.org_id;
+
+  // 契約ゲート（§16）＋ 録音取り込みはプラン機能（§11 Standard以上）
+  const ent = await getEntitlement(supabase, user.id);
+  if (!ent.active) {
+    return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
+  }
+  if (ent.def && !ent.def.recordingImport) {
+    return json(
+      { error: 'plan_upgrade_required', message: '録音取り込みは Standard 以上でご利用いただけます。' },
+      403,
+    );
+  }
 
   // 対象顧客が自分のものか（RLSで見えるか）確認
   const { data: customer } = await supabase

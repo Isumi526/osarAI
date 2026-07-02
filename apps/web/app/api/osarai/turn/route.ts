@@ -11,6 +11,7 @@ import {
   type AiSummary,
 } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
+import { getEntitlement } from '@/lib/entitlement';
 import { geminiJson, GEMINI_MODEL_DIALOGUE, type GeminiSchema } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
@@ -59,6 +60,12 @@ export async function POST(req: Request) {
   };
   const message = (body.message ?? '').trim();
   if (!message) return json({ error: 'message required' }, 400);
+
+  // 契約ゲート（§16 未契約/解約は機能制限）
+  const ent = await getEntitlement(supabase, user.id);
+  if (!ent.active) {
+    return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
+  }
 
   // 自分の org_id（RLS の insert に必要）
   const { data: profile } = await supabase

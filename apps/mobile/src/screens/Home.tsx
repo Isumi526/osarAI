@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listCustomers, type Customer } from '../lib/db.js';
+import { getEntitlement } from '../lib/subscription.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
 
 const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥', warm: '☀️', cold: '❄️' };
@@ -13,6 +14,7 @@ export function Home() {
   const [temp, setTemp] = useState<Temperature | ''>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subActive, setSubActive] = useState(true); // 判定前は制限を出さない
 
   useEffect(() => {
     let active = true;
@@ -26,6 +28,12 @@ export function Home() {
     };
   }, [status, temp]);
 
+  useEffect(() => {
+    getEntitlement()
+      .then((e) => setSubActive(e.active))
+      .catch(() => setSubActive(true)); // 取得失敗時はブロックしない（APIが最終ゲート）
+  }, []);
+
   return (
     <main className="screen">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -33,11 +41,35 @@ export function Home() {
         <Link to="/settings">設定</Link>
       </header>
 
+      {!subActive && (
+        <div
+          style={{
+            background: '#fff7ed',
+            border: '1px solid #f0d9b5',
+            borderRadius: 10,
+            padding: 12,
+            margin: '12px 0',
+            fontSize: 13,
+            color: '#8a6d3b',
+          }}
+        >
+          ご利用にはお申し込みが必要です。登録・プラン変更はWebから行えます（14日無料トライアル）。
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
-        <button onClick={() => navigate('/osarai')} style={{ flex: 1, padding: 12, fontSize: 15 }}>
+        <button
+          onClick={() => navigate('/osarai')}
+          disabled={!subActive}
+          style={{ flex: 1, padding: 12, fontSize: 15 }}
+        >
           ＋ おさらいする
         </button>
-        <button onClick={() => navigate('/chat')} style={{ flex: 1, padding: 12, fontSize: 15 }}>
+        <button
+          onClick={() => navigate('/chat')}
+          disabled={!subActive}
+          style={{ flex: 1, padding: 12, fontSize: 15 }}
+        >
           AIに相談
         </button>
       </div>
