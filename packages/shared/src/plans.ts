@@ -43,3 +43,18 @@ export const PLANS: Record<PlanId, PlanDef> = {
 
 /** 14日カード先取りトライアル（§11） */
 export const TRIAL_PERIOD_DAYS = 14;
+
+// ---- サブスク状態から機能アクセスを判定（§11 / §16 未契約は機能制限）----
+
+/** 機能を使える契約状態（トライアル中も可） */
+export const ACTIVE_SUB_STATUSES = ['trialing', 'active'] as const;
+
+export function isSubscriptionActive(status: string | null | undefined): boolean {
+  return !!status && (ACTIVE_SUB_STATUSES as readonly string[]).includes(status);
+}
+
+/** plan 文字列（DBは自由文字列）から PlanDef を引く。不明なら null。 */
+export function planDef(plan: string | null | undefined): PlanDef | null {
+  if (plan && plan in PLANS) return PLANS[plan as PlanId];
+  return null;
+}

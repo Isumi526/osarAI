@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useSession } from './hooks/useSession.js';
+import { registerPushIfGranted } from './lib/push.js';
 import { Login } from './screens/Login.js';
 import { Home } from './screens/Home.js';
 import { Osarai } from './screens/Osarai.js';
@@ -11,6 +13,11 @@ import { Settings } from './screens/Settings.js';
 // 認証ガード：未ログインは Login のみ、ログイン済みは各画面へ。
 export function App() {
   const { session, loading } = useSession();
+
+  // ログイン済みなら（許可済みの端末で）プッシュトークンを再登録
+  useEffect(() => {
+    if (session) void registerPushIfGranted();
+  }, [session]);
 
   if (loading) {
     return <main className="screen">読み込み中…</main>;

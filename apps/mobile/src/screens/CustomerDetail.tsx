@@ -1,5 +1,5 @@
-// CustomerDetail（カード＋タイムライン＝interactions時系列）。§9 F-01。
-import { useEffect, useState } from 'react';
+// CustomerDetail（カード＋タイムライン＝interactions時系列）。§9 F-01 + F-03(録音取り込み)。
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   getCustomer,
@@ -8,7 +8,8 @@ import {
   type Customer,
   type Interaction,
 } from '../lib/db.js';
-import type { AiSummary, Temperature } from '@osarai/shared';
+import { importRecording } from '../lib/recordings.js';
+import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
 
 const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥 hot', warm: '☀️ warm', cold: '❄️ cold' };
 const SOURCE_LABEL: Record<string, string> = {
@@ -25,8 +26,11 @@ export function CustomerDetail() {
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recSource, setRecSource] = useState<InteractionSource>('in_person_rec');
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  function reload() {
     if (!id) return;
     setLoading(true);
     Promise.all([getCustomer(id), listInteractions(id)])
@@ -36,7 +40,28 @@ export function CustomerDetail() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function onPickRecording(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = ''; // 同じファイルを再選択できるように
+    if (!file || !id) return;
+    setError(null);
+    setImporting(true);
+    try {
+      await importRecording({ customerId: id, file, source: recSource });
+      reload();
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err));
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function onDelete() {
     if (!id || !confirm('この顧客を削除しますか？（履歴も消えます）')) return;
@@ -78,6 +103,55 @@ export function CustomerDetail() {
             削除
           </button>
         </div>
+      </section>
+
+      {/* 導線: おさらい / 録音取り込み（F-03サブ経路） */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button
+          onClick={() => navigate(`/osarai?customerId=${customer.id}`)}
+          style={{ flex: 1, padding: 10 }}
+        >
+          ＋ この人をおさらい
+        </button>
+        <button
+          onClick={() => navigate(`/chat?customerId=${customer.id}`)}
+          style={{ padding: 10 }}
+        >
+          相談
+        </button>
+      </div>
+      <section
+        style={{
+          background: '#fff',
+          border: '1px solid #e7e1d6',
+          borderRadius: 12,
+          padding: 12,
+          marginTop: 8,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={recSource}
+            onChange={(e) => setRecSource(e.target.value as InteractionSource)}
+            disabled={importing}
+          >
+            <option value="in_person_rec">対面録音</option>
+            <option value="zoom_rec">Zoom録画</option>
+          </select>
+          <button onClick={() => fileRef.current?.click()} disabled={importing} style={{ flex: 1, padding: 10 }}>
+            {importing ? '取り込み中…（文字起こし）' : '🎧 録音を取り込む'}
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          onChange={onPickRecording}
+          style={{ display: 'none' }}
+        />
+        <p style={{ margin: '8px 0 0', color: '#9a9183', fontSize: 12 }}>
+          録れた時だけの任意導線。音声から自動で要約・タイムライン化します。
+        </p>
       </section>
 
       {/* タイムライン */}
