@@ -2,7 +2,7 @@
 // コンテキスト化して Gemini に相談 → 回答。会話は ai_chats / ai_chat_messages に保存。
 // コスト優先で Flash-Lite（§8 末尾）。データが薄い初期は一般営業ナレッジで補う。
 import { NextResponse } from 'next/server';
-import { buildAdvicePrompt, ADVICE_SYSTEM_PROMPT, type ChatScope, type AiSummary } from '@osarai/shared';
+import { buildAdvicePrompt, ADVICE_SYSTEM_PROMPT, jstMonthStartUtc, type ChatScope, type AiSummary } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
 import { geminiText, GEMINI_MODEL_LITE } from '@/lib/gemini';
@@ -45,9 +45,10 @@ export async function POST(req: Request) {
   }
   const limit = ent.def?.aiAdviceLimit ?? null;
   if (limit != null) {
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    // A5対策: サーバー(Vercel)はUTCで動くため、素の new Date().setHours(0,0,0,0) は
+    // UTC深夜0時になりJSTの月初と最大9時間ずれる（月初/月末付近でカウント境界が狂う）。
+    // JST固定で「今月」を判定する。
+    const monthStart = jstMonthStartUtc();
     // RLS により自分のチャットのメッセージのみ数える
     const { count } = await supabase
       .from('ai_chat_messages')

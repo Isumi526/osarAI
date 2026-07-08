@@ -72,7 +72,15 @@ devブランチ作業。本番デプロイ・実決済・本番DB書込みは一
 - Gemini独立レビュー(T5・🧱土台につき`--runs 3`): findings 0件、verdict=pass、riskClass=high。
 - コミット: `060ca6a`。devブランチ・未push。
 
-### A5: 未着手
+### A5: 完了 ✅
+- 修正:
+  - `packages/shared/src/jst.ts`（新規）— `jstMonthStartUtc(now?)`: JST(UTC+9)基準で「今月の月初0:00」を実時刻(UTC基準Date)として返す純粋関数。
+  - `apps/web/app/api/advice/route.ts` — 月次上限カウントの起点を `new Date().setHours(0,0,0,0)`（サーバーのローカル時刻＝Vercel上はUTC）から `jstMonthStartUtc()` に置換。
+- テスト: `apps/web/e2e/jst-month-boundary.spec.ts`。UTC基準では前月/当月の判定がJSTとズレる境界時刻を3ケース（月初直後・月末直前・日中）で検証。関数の入出力を直接assertする形（DBシード等を要する重い月境界の実時刻テストより決定的で確実なため。ledger記載の「timezoneをJST固定 **or** 専用カウンタ」のうちJST固定を採用）。
+- 残課題（今回の修正範囲外・ledgerの恒久対策では対象外）: 月次カウントは依然「毎回count」方式のため、理論上は同時多重リクエストでカウント境界のわずかな超過余地が残る（ledger原文でも「timezone固定 **or** 専用カウンタ」のORで許容されている）。実害は僅少（誤請求ではなく無料枠のわずかな超過）のため今回は対象外。将来 専用カウンタ化する場合は別チケット。
+- typecheck/build: green。
+- Gemini独立レビュー(T5): 後述。
+- コミット: 次コミットで反映予定。devブランチ・未push。
 
 ## ローカルE2E環境の補足メモ（重要・再開時に読むこと）
 
