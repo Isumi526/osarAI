@@ -79,8 +79,44 @@ devブランチ作業。本番デプロイ・実決済・本番DB書込みは一
 - テスト: `apps/web/e2e/jst-month-boundary.spec.ts`。UTC基準では前月/当月の判定がJSTとズレる境界時刻を3ケース（月初直後・月末直前・日中）で検証。関数の入出力を直接assertする形（DBシード等を要する重い月境界の実時刻テストより決定的で確実なため。ledger記載の「timezoneをJST固定 **or** 専用カウンタ」のうちJST固定を採用）。
 - 残課題（今回の修正範囲外・ledgerの恒久対策では対象外）: 月次カウントは依然「毎回count」方式のため、理論上は同時多重リクエストでカウント境界のわずかな超過余地が残る（ledger原文でも「timezone固定 **or** 専用カウンタ」のORで許容されている）。実害は僅少（誤請求ではなく無料枠のわずかな超過）のため今回は対象外。将来 専用カウンタ化する場合は別チケット。
 - typecheck/build: green。
-- Gemini独立レビュー(T5): 後述。
-- コミット: 次コミットで反映予定。devブランチ・未push。
+- Gemini独立レビュー(T5・`--runs 2`): findings 2件(medium・いずれも「上限チェックとDB書き込みが非アトミック＝連打で上限超過の可能性」＝上記「残課題」として既に認識・スコープ外と明記済みの内容と同一)。verdict=pass（非ブロッカー）。→ 独立レビューが同じリスクを検出したことで、スコープ外判断が恣意的でないことを確認。
+- コミット: `3296a2b`。devブランチ・未push。
+
+---
+
+## フェーズ2 完了サマリ（2026-07-08）
+
+Stripe課金負債台帳 A1〜A5、全5件を実損順（A4→A3→A1→A2→A5）で修正・テスト・Gemini独立レビューまで完了。全てdevブランチにローカルcommit済み・未push（本番/リモートには一切触れていない）。
+
+| # | 内容 | コミット | Geminiレビュー |
+|---|---|---|---|
+| A4 | promoコードのプラン紐付け検証 | `6ab8724` | pass・findings 0 |
+| A3 | 自動課金失敗の通知＋再決済導線 | `681239c` | pass・findings 0 |
+| A1 | webhookのplan同期 | `af2926e` | pass・findings 0(冪等性=A2を先取り検出) |
+| A2 | webhookイベント冪等化＋順序ガード(🧱土台・migration) | `060ca6a` | pass・findings 0(runs 3) |
+| A5 | AI相談月次上限のJST化 | `3296a2b` | pass・findings 2(既知・スコープ外と明記済みの残課題と一致) |
+
+**ゲート**: `pnpm -r typecheck` / `pnpm -r build` 全green。`node scripts/rls-audit.mjs --assert` verdict=pass(violations:0)。Playwright E2E 9件全green（`apps/web/playwright.config.ts`・新規導入）。
+
+**この作業で追加/変更したファイル一覧**（主要なもの）:
+- `supabase/migrations/0005_webhook_idempotency.sql`（新規migration・🧱土台）
+- `apps/web/app/api/stripe/checkout/route.ts`・`webhook/route.ts`・`app/api/stripe/portal/route.ts`（新規）
+- `apps/web/app/billing/`（新規）・`apps/web/lib/notify-operator.ts`（新規）・`apps/web/lib/stripe.ts`
+- `packages/shared/src/jst.ts`（新規）
+- `apps/web/e2e/*.spec.ts`（新規5ファイル）・`apps/web/playwright.config.ts`（新規）
+- `packages/shared/database.types.ts`（`supabase gen types`で再生成）
+
+**未pushの理由**: DECISIONS T14/厳守により、mainマージ・pushは人の明示タイミング承認が前提。今回はdevへのローカルcommitまで（レビュー待ち相当の状態）。
+
+## フェーズ3（未着手・人の判断待ち）
+
+デプロイ経路の確定に停止。詳細は会話内の質問を参照（本ファイルには機密性の低い要点のみ記載）：
+- Web(apps/web)のホスティング先（Vercel前提で進めてよいか）
+- 本番用Supabaseプロジェクトの新規作成可否・タイミング
+- 独自ドメインの有無
+- Stripe本番鍵への切替タイミング・取扱い
+
+これらが確定するまで、本番への実デプロイ・実決済・本番DB書込みは一切行わない（deny壁維持）。
 
 ## ローカルE2E環境の補足メモ（重要・再開時に読むこと）
 
