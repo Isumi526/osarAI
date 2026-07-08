@@ -23,6 +23,9 @@ export async function POST(req: Request) {
   }
 
   // チャネル割引コード（任意）。コード文字列 → Promotion Code ID を解決して適用。
+  // A4対策: コードは特定プラン向けに発行される（Coupon.metadata.plan が正）。
+  // 選択プランと不一致なら Coupon の applies_to 設定に依存せずここで拒否する
+  // （例: Standard用¥1000offコードをLightに適用して過剰割引＝恒久的な請求漏れを防ぐ）。
   let discounts: { promotion_code: string }[] | undefined;
   let appliedCode: string | undefined;
   if (body.promoCode) {
@@ -33,6 +36,13 @@ export async function POST(req: Request) {
     });
     const pc = found.data[0];
     if (pc) {
+      const codePlan = pc.coupon.metadata?.plan;
+      if (codePlan !== plan) {
+        return NextResponse.json(
+          { error: 'このコードは選択したプランには使用できません。プランをご確認ください。' },
+          { status: 400 },
+        );
+      }
       discounts = [{ promotion_code: pc.id }];
       appliedCode = pc.code;
     }
