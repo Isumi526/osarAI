@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 import { getStripe, toIso } from '@/lib/stripe';
 import { createServiceRoleClient } from '@/lib/supabase/server';
+import { notifyOperator } from '@/lib/notify-operator';
 
 export async function POST(req: Request) {
   const sig = req.headers.get('stripe-signature');
@@ -61,6 +62,30 @@ export async function POST(req: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('stripe_subscription_id', sub.id);
+      break;
+    }
+    case 'invoice.payment_failed': {
+      // A3対策: 14日トライアル後などの自動課金失敗は放置すると誰にも気づかれない
+      // （§監視必須パス＝請求）。運営者へ通知＋ユーザーが自分で再決済できる導線(/billing)を用意する。
+      // DBの status 自体は Stripe が続けて送る customer.subscription.updated(status=past_due等)で同期される。
+      const invoice = event.data.object;
+      const subId = typeof invoice.subscription === 'string' ? invoice.subscription : null;
+      let userId: string | null = null;
+      if (subId) {
+        const { data } = await db
+          .from('subscriptions')
+          .select('user_id')
+          .eq('stripe_subscription_id', subId)
+          .maybeSingle();
+        userId = data?.user_id ?? null;
+      }
+      await notifyOperator({
+        kind: '要対応',
+        task: '自動課金 失敗（invoice.payment_failed）',
+        detail: `user_id=${userId ?? '不明'} / customer=${
+          typeof invoice.customer === 'string' ? invoice.customer : '不明'
+        } / invoice=${invoice.id}。ユーザーは /billing から再決済できます。`,
+      });
       break;
     }
     default:

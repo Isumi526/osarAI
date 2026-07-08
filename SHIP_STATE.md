@@ -33,10 +33,62 @@ devブランチ作業。本番デプロイ・実決済・本番DB書込みは一
 
 ## Phase 2: 修正（実損順 A4→A3→A1→A2→A5）
 
-### A4: 進行中
-(更新予定)
+### A4: 完了 ✅
+- 修正: `apps/web/app/api/stripe/checkout/route.ts` — 選択プランと `Coupon.metadata.plan` の不一致を400で拒否。既存Stripe Coupon 3種(test mode)に `metadata.plan` を設定して整合。
+- テスト: `apps/web/e2e/stripe-checkout-promo.spec.ts`（Playwright・不一致拒否／一致時正常遷移の2ケース）→ green。
+- Gemini独立レビュー(T5・`--runs 2`): findings 0件、verdict=pass、riskClass=high。
+- コミット: `4f154b2`(chore基盤) / `6ab8724`(fix本体)。devブランチ・未push。
 
-### A3 / A1 / A2 / A5: 未着手
+### A3: 完了 ✅
+- 修正:
+  - `apps/web/app/api/stripe/webhook/route.ts` — `invoice.payment_failed` ケースを新規追加。`apps/web/lib/notify-operator.ts`（既存 notify-humanball.mjs と同一契約のfetch実装・サーバーレス関数からchild_process起動できないため）でbest-effort運営者通知。DBの`status`同期自体は既存の`customer.subscription.updated`(status=past_due)で従来通りカバー。
+  - `apps/web/app/api/stripe/portal/route.ts`（新規）— 認証済ユーザー本人の`stripe_customer_id`からStripe Billing Portalセッションを作成。
+  - `apps/web/app/billing/page.tsx` + `BillingPortalButton.tsx`（新規）— お支払い状況の確認＋past_due時のバナー＋再決済導線（ユーザー自身で解決できる自己解決導線）。pipeline設定表に元々予定されていた`/billing`パスに対応。
+- テスト: `apps/web/e2e/stripe-payment-failed.spec.ts`（Playwright）。実LINEを鳴らさないようモック運営者通知サーバー(localhost:3999)を使い、(1)invoice.payment_failed受信→通知内容(kind=要対応/task/user_id含むdetail)を検証 (2)/billingでpast_dueバナー表示→ポータル遷移(billing.stripe.com)まで確認。
+- Gemini独立レビュー(T5)・typecheck・build: 後述。
+- コミット: `7b52af0`(chore) / 本体は次コミット。devブランチ・未push。
+
+### A1 / A2 / A5: 未着手
+
+## ローカルE2E環境の補足メモ（重要・再開時に読むこと）
+
+- **2つのwebインスタンスを使い分けている**:
+  - `pnpm dev:web`（port 3000）: `.env.local`のまま = **ホスト型Supabase**(`apiagxfbazxmdqcbynxk.supabase.co`)に接続。signup等の書き込みテストをここに向けない（実プロジェクトへの書き込みになるため）。
+  - E2E専用インスタンス（port 3055・`NEXT_DIST_DIR=.next-e2e`）: env変数を上書きしてlocal Supabase(127.0.0.1:54321)・`HUMANBALL_WEBHOOK_URL`をローカルモック(3999)に向けて起動。Playwrightの既定baseURLはこちら。起動コマンドは本ファイルの後方に残す（再現用）。
+- ローカルGoTrue（このCLIバージョン=2.75.0のイメージ）は `auth.admin.*` 系管理APIが新旧どちらのキー形式でも `403 bad_jwt (signing method HS256 is invalid)` になる既知の不具合がある。テストユーザー作成は通常の `/auth/v1/signup` + ログインUIを使うことで回避している（本番のGoTrueとは無関係のローカル限定の地雷）。
+- ローカル `supabase/config.toml` を2箇所調整済み（本番Supabase Cloudには影響しない、local CLIのみの設定）:
+  - `[analytics] enabled=false`（logflareコンテナがこの環境で恒常的にunhealthy化しstart全体をブロックするため）
+  - `[auth.rate_limit] email_sent=300`（既定2/hだとE2Eのsignup connタが即枯渇するため）
+- `supabase start` は `--ignore-health-check` を付けないと（realtime/storage/pg_meta/studioの一部が）unhealthy判定でロールバックすることがある。DB/Authは実際には正常に機能する。
+- 2つの`next dev`を同じ`.next`に向けると生成物が競合破損する（macOS "` 2`"複製ファイルが`.next/**`に大量発生し型検査が壊れる）。`next.config.mjs`に`NEXT_DIST_DIR`環境変数でdistDirを分離できるようにした。
+
+### E2Eインスタンス起動コマンド（再現用）
+```bash
+supabase start --ignore-health-check   # ローカルSupabase起動(このリポ直下で)
+cd apps/web
+export SUPABASE_URL="http://127.0.0.1:54321"
+export SUPABASE_ANON_KEY="sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH"
+export SUPABASE_SERVICE_ROLE_KEY="sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz"
+export NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL"
+export NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+export GEMINI_API_KEY=$(grep '^GEMINI_API_KEY=' .env.local | cut -d= -f2-)
+export STRIPE_SECRET_KEY=$(grep '^STRIPE_SECRET_KEY=' .env.local | cut -d= -f2-)
+export STRIPE_WEBHOOK_SECRET="whsec_e2e_test_secret"
+export STRIPE_PRICE_LIGHT=$(grep '^STRIPE_PRICE_LIGHT=' .env.local | cut -d= -f2-)
+export STRIPE_PRICE_STANDARD=$(grep '^STRIPE_PRICE_STANDARD=' .env.local | cut -d= -f2-)
+export STRIPE_PRICE_PRO=$(grep '^STRIPE_PRICE_PRO=' .env.local | cut -d= -f2-)
+export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$(grep '^NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=' .env.local | cut -d= -f2-)
+export HUMANBALL_WEBHOOK_URL="http://127.0.0.1:3999/mock-humanball"
+export HUMANBALL_WEBHOOK_SECRET="e2e-mock-secret"
+export NOTIFY_PREFIX="[osarAI-e2e]"
+export NOTIFY_PROJECT="osarAI"
+export NEXT_DIST_DIR=".next-e2e"
+npx next dev -p 3055 &
+
+# テスト実行時（Stripe実APIを叩くテストのみ必要）:
+export E2E_STRIPE_SECRET_KEY=$(grep '^STRIPE_SECRET_KEY=' .env.local | cut -d= -f2-)
+npx playwright test
+```
 
 ---
 

@@ -8,6 +8,8 @@ export default defineConfig({
   fullyParallel: false,
   retries: 0,
   reporter: 'list',
+  // next dev の初回コンパイル(route単位)やStripeホスト側ページの読み込みでばらつくため既定30sでは不安定。
+  timeout: 60_000,
   use: {
     // NOTE: 既定は3000ではなくlocal Supabase向けの専用インスタンス。
     // `pnpm dev:web`(3000)は.env.local経由でホスト型Supabaseに繋がっており、
