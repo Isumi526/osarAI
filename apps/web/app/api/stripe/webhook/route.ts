@@ -25,6 +25,19 @@ export async function POST(req: Request) {
 
   const db = createServiceRoleClient();
 
+  // A2対策: Stripeはイベントを再送しうる（同一event.idの重複配信）。
+  // event.idをユニーク制約で先に記録し、既に処理済み(insert失敗=一意制約違反)なら
+  // 何もせず200を返す(冪等)。並行到達に対しても安全(insertの一意制約が最終防御)。
+  const { error: dedupeError } = await db
+    .from('stripe_webhook_events')
+    .insert({ id: event.id, type: event.type });
+  if (dedupeError) {
+    if (dedupeError.code === '23505') {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    return NextResponse.json({ error: 'dedupe insert failed' }, { status: 500 });
+  }
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
@@ -55,7 +68,21 @@ export async function POST(req: Request) {
       // A1対策: 従来はstatus/trial_end/current_period_endのみ同期しplanを更新していなかった。
       // プラン変更（アップグレード/ダウングレード）がDBへ反映されず、entitlementが旧プランの
       // ままゲートし続けるバグがあった。Stripeの正=price idからplanを都度同期する。
+      //
+      // A2対策(順序ガード): event.id の冪等化だけでは「同じstripe_subscription_idに対する
+      // 複数イベントが順序逆転して届く」ケース(再送・配信遅延)は防げない。event.created
+      // (発生時刻)が既に適用済みの状態より古ければ、新しい状態を古い内容で巻き戻さないよう
+      // 適用をスキップする。
       const sub = event.data.object;
+      const eventCreatedIso = toIso(event.created);
+      const { data: current } = await db
+        .from('subscriptions')
+        .select('last_stripe_event_at')
+        .eq('stripe_subscription_id', sub.id)
+        .maybeSingle();
+      if (current?.last_stripe_event_at && eventCreatedIso && current.last_stripe_event_at > eventCreatedIso) {
+        break; // より新しいイベントが既に適用済み＝順序逆転を検知、古い内容での上書きをスキップ
+      }
       const plan = planForPriceId(priceIdFromSubscription(sub));
       await db
         .from('subscriptions')
@@ -64,6 +91,7 @@ export async function POST(req: Request) {
           status: sub.status,
           trial_end: toIso(sub.trial_end),
           current_period_end: toIso(sub.current_period_end),
+          last_stripe_event_at: eventCreatedIso,
           updated_at: new Date().toISOString(),
         })
         .eq('stripe_subscription_id', sub.id);

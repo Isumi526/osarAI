@@ -6,6 +6,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // 複数specが同一の固定ローカルポート(mock humanballサーバー等)を使うため、
+  // クロスファイル並列も止めて完全直列にする(ポート競合防止)。
+  workers: 1,
   retries: 0,
   reporter: 'list',
   // next dev の初回コンパイル(route単位)やStripeホスト側ページの読み込みでばらつくため既定30sでは不安定。

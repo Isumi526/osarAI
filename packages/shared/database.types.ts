@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -394,9 +389,28 @@ export type Database = {
           },
         ]
       }
+      stripe_webhook_events: {
+        Row: {
+          created_at: string
+          id: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          type?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           current_period_end: string | null
+          last_stripe_event_at: string | null
           plan: string | null
           promo_code: string | null
           status: string | null
@@ -408,6 +422,7 @@ export type Database = {
         }
         Insert: {
           current_period_end?: string | null
+          last_stripe_event_at?: string | null
           plan?: string | null
           promo_code?: string | null
           status?: string | null
@@ -419,6 +434,7 @@ export type Database = {
         }
         Update: {
           current_period_end?: string | null
+          last_stripe_event_at?: string | null
           plan?: string | null
           promo_code?: string | null
           status?: string | null
@@ -580,3 +596,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

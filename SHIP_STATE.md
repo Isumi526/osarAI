@@ -56,10 +56,23 @@ devブランチ作業。本番デプロイ・実決済・本番DB書込みは一
 - テスト: `apps/web/e2e/stripe-webhook-plan-sync.spec.ts`。Standard→Lightダウングレードを模したイベントでDBのplanが追従することを確認。**修正前コードに一時的に戻して赤(plan='standard'のまま)→修正を戻して緑になることを確認済み**（回帰再現の検証込み）。
   - ついでにA4テスト2件のflaky対策（Stripeホスト側ページの`waitForURL`を`waitUntil:'load'`→`'commit'`に変更。並列実行時に'load'イベントが発火しないケースがあった）。
 - typecheck/build: green。
+- Gemini独立レビュー(T5・`--runs 2`): findings 1件(medium・冪等性=A2そのもの。verdict=pass・非ブロック)、verdict=pass、riskClass=high。→ 次のA2で解消。
+- コミット: `af2926e`。devブランチ・未push。
+
+### A2: 完了 ✅
+- 修正（🧱土台・migration追加）:
+  - `supabase/migrations/0005_webhook_idempotency.sql`（新規）— `stripe_webhook_events`テーブル(event.id冪等化・RLS ON+ポリシー0件でservice_role以外完全遮断・T9#1準拠) ＋ `subscriptions.last_stripe_event_at`カラム(順序ガード用)。
+  - `apps/web/app/api/stripe/webhook/route.ts` — 署名検証直後に`event.id`をinsertし一意制約違反(23505)なら`{received:true, duplicate:true}`で即終了(冪等)。`customer.subscription.*`では`event.created`が既に適用済みの状態より古ければ更新をスキップ(順序逆転ガード)。
+  - `packages/shared/database.types.ts` — `supabase gen types typescript --local`で再生成。
+- テスト: `apps/web/e2e/stripe-webhook-idempotency.spec.ts`（(1)同一event.id再送で二重通知しない (2)順序逆転イベントで新しい状態(pro)が古いイベント(light)に巻き戻らない）。**修正前コードに一時的に戻して両方赤→戻して緑になることを確認済み**。
+- flaky対策: 複数specが固定ローカルポート(mock humanballサーバー)を共有するため、cross-file並列も止めて`workers:1`(完全直列)に変更。
+- ローカル適用: `supabase migration up`でlocal DBへ適用済み（**本番へは絶対適用しない・`db push`は使用していない**）。
+- RLS監査: `node scripts/rls-audit.mjs --assert --json` → `verdict:"pass"`, violations:0。`stripe_webhook_events`はRLS ON・policies:0・anon権限なし=想定通り。
+- typecheck/build: green。
 - Gemini独立レビュー(T5): 後述。
 - コミット: 次コミットで反映予定。devブランチ・未push。
 
-### A2 / A5: 未着手
+### A5: 未着手
 
 ## ローカルE2E環境の補足メモ（重要・再開時に読むこと）
 
