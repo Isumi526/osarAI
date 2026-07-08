@@ -3,7 +3,7 @@
 // 署名検証のため raw body を使う。
 import { NextResponse } from 'next/server';
 import type Stripe from 'stripe';
-import { getStripe, toIso } from '@/lib/stripe';
+import { getStripe, toIso, planForPriceId, priceIdFromSubscription } from '@/lib/stripe';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { notifyOperator } from '@/lib/notify-operator';
 
@@ -52,10 +52,15 @@ export async function POST(req: Request) {
     }
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted': {
+      // A1対策: 従来はstatus/trial_end/current_period_endのみ同期しplanを更新していなかった。
+      // プラン変更（アップグレード/ダウングレード）がDBへ反映されず、entitlementが旧プランの
+      // ままゲートし続けるバグがあった。Stripeの正=price idからplanを都度同期する。
       const sub = event.data.object;
+      const plan = planForPriceId(priceIdFromSubscription(sub));
       await db
         .from('subscriptions')
         .update({
+          ...(plan ? { plan } : {}),
           status: sub.status,
           trial_end: toIso(sub.trial_end),
           current_period_end: toIso(sub.current_period_end),

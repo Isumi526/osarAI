@@ -45,10 +45,21 @@ devブランチ作業。本番デプロイ・実決済・本番DB書込みは一
   - `apps/web/app/api/stripe/portal/route.ts`（新規）— 認証済ユーザー本人の`stripe_customer_id`からStripe Billing Portalセッションを作成。
   - `apps/web/app/billing/page.tsx` + `BillingPortalButton.tsx`（新規）— お支払い状況の確認＋past_due時のバナー＋再決済導線（ユーザー自身で解決できる自己解決導線）。pipeline設定表に元々予定されていた`/billing`パスに対応。
 - テスト: `apps/web/e2e/stripe-payment-failed.spec.ts`（Playwright）。実LINEを鳴らさないようモック運営者通知サーバー(localhost:3999)を使い、(1)invoice.payment_failed受信→通知内容(kind=要対応/task/user_id含むdetail)を検証 (2)/billingでpast_dueバナー表示→ポータル遷移(billing.stripe.com)まで確認。
-- Gemini独立レビュー(T5)・typecheck・build: 後述。
-- コミット: `7b52af0`(chore) / 本体は次コミット。devブランチ・未push。
+- typecheck/build: green（`pnpm -r typecheck` / `pnpm -r build`）。
+- Gemini独立レビュー(T5・`--runs 2`): findings 0件、verdict=pass、riskClass=high。
+- コミット: `7b52af0`(chore) / `681239c`(fix本体)。devブランチ・未push。
 
-### A1 / A2 / A5: 未着手
+### A1: 完了 ✅
+- 修正:
+  - `apps/web/lib/stripe.ts` — `planForPriceId`（price id→plan逆引き）・`priceIdFromSubscription` を追加。
+  - `apps/web/app/api/stripe/webhook/route.ts` — `customer.subscription.updated/deleted` で `plan` を同期（Stripeの正=price idから逆引き。未知price idの時は既存planを上書きしない=フェイルセーフ）。
+- テスト: `apps/web/e2e/stripe-webhook-plan-sync.spec.ts`。Standard→Lightダウングレードを模したイベントでDBのplanが追従することを確認。**修正前コードに一時的に戻して赤(plan='standard'のまま)→修正を戻して緑になることを確認済み**（回帰再現の検証込み）。
+  - ついでにA4テスト2件のflaky対策（Stripeホスト側ページの`waitForURL`を`waitUntil:'load'`→`'commit'`に変更。並列実行時に'load'イベントが発火しないケースがあった）。
+- typecheck/build: green。
+- Gemini独立レビュー(T5): 後述。
+- コミット: 次コミットで反映予定。devブランチ・未push。
+
+### A2 / A5: 未着手
 
 ## ローカルE2E環境の補足メモ（重要・再開時に読むこと）
 
