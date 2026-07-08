@@ -29,6 +29,7 @@ supabase/.temp/
 .vscode/
 .idea/
 coverage/
+.vercel
 
 # playwright
 test-results/
