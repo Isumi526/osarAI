@@ -69,8 +69,8 @@ devブランチ作業。本番デプロイ・実決済・本番DB書込みは一
 - ローカル適用: `supabase migration up`でlocal DBへ適用済み（**本番へは絶対適用しない・`db push`は使用していない**）。
 - RLS監査: `node scripts/rls-audit.mjs --assert --json` → `verdict:"pass"`, violations:0。`stripe_webhook_events`はRLS ON・policies:0・anon権限なし=想定通り。
 - typecheck/build: green。
-- Gemini独立レビュー(T5): 後述。
-- コミット: 次コミットで反映予定。devブランチ・未push。
+- Gemini独立レビュー(T5・🧱土台につき`--runs 3`): findings 0件、verdict=pass、riskClass=high。
+- コミット: `060ca6a`。devブランチ・未push。
 
 ### A5: 未着手
 
