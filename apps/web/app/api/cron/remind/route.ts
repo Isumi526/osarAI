@@ -43,16 +43,18 @@ export async function GET(req: Request) {
     .select('user_id')
     .in('status', ['trialing', 'active']);
   const activeUserIds = (activeSubs ?? []).map((s) => s.user_id);
-  if (activeUserIds.length === 0) {
-    return NextResponse.json({ targeted: 0, sent: 0, failed: 0, configured: true });
+
+  const tokens: string[] = [];
+  if (activeUserIds.length > 0) {
+    const { data: tokenRows } = await db
+      .from('push_tokens')
+      .select('token')
+      .in('user_id', activeUserIds);
+    tokens.push(...(tokenRows ?? []).map((t) => t.token));
   }
 
-  const { data: tokenRows } = await db
-    .from('push_tokens')
-    .select('token')
-    .in('user_id', activeUserIds);
-  const tokens = (tokenRows ?? []).map((t) => t.token);
-
+  // tokens=[] でも sendPush() 側が FCM_SERVICE_ACCOUNT の有無を正しく configured に反映する
+  // （ここで早期returnして configured を決め打ちしない）。
   const result = await sendPush(tokens, { title: TITLE, body: BODY, data: { screen: 'osarai' } });
 
   return NextResponse.json({ targeted: tokens.length, ...result });
