@@ -2,7 +2,7 @@
 // scope=all は全顧客サマリ、customer は対象顧客の履歴を踏まえてコーチが助言。
 // ?customerId=... 付きで来たら顧客指定で開始。
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { askAdvice } from '../lib/advice.js';
 import { listCustomers, type Customer } from '../lib/db.js';
 import type { ChatScope } from '@osarai/shared';
@@ -10,6 +10,7 @@ import type { ChatScope } from '@osarai/shared';
 type Msg = { role: 'user' | 'assistant'; content: string };
 
 export function AiChat() {
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const initialCustomerId = params.get('customerId');
 
@@ -84,7 +85,7 @@ export function AiChat() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/">← ホーム</Link>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#2d7d46' }}>← 戻る</button>
         <strong>AIに相談</strong>
         <span style={{ width: 48 }} />
       </header>

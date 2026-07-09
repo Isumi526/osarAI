@@ -2,7 +2,7 @@
 // 人と会ったあと、AIが1問ずつヒアリング→done で顧客カード(interactions/customers)へ自動反映。
 // ?customerId=... 付きなら既存顧客のおさらい、無ければ新規（done 時に名前から自動でカード生成）。
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { osaraiTurn, transcribeAudio } from '../lib/osarai.js';
 import { updateInteractionSummary } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
@@ -131,7 +131,7 @@ export function Osarai() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/">← ホーム</Link>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#2d7d46' }}>← 戻る</button>
         <strong>おさらい</strong>
         <span style={{ width: 48 }} />
       </header>
