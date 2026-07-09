@@ -273,11 +273,20 @@ AI相談・リーダーダッシュボード・RLS・IAP回避・entitlement gat
 - 本番デプロイ済み・エンドポイントの認証ガード(401)と実行(`{targeted,configured,sent,failed}`)を確認。
   テスト実行で作られた`cron_runs`行は削除済み（本日の実スケジュール実行を妨げないように）。
 
-### 残課題（このセッションのスコープ外）
-- **`FCM_SERVICE_ACCOUNT`が本番未設定のため、cronは正しく動くが実際のプッシュ送信はできない**
-  （`configured:false`で応答）。Firebaseコンソールでサービスアカウントを発行し人から共有してもらう
-  必要がある（Stripe/DB資格情報と同様、人が取得してCCに渡す運用）。
+### FCM_SERVICE_ACCOUNT 設定完了（2026-07-09）
+Firebaseプロジェクト `osarai-38171` のサービスアカウントJSONを人から受領→base64化して
+Vercel環境変数 `FCM_SERVICE_ACCOUNT` に設定→再デプロイ。
+`/api/cron/remind` の応答が `configured:false`→**`configured:true`に変化したことを確認**
+（サービスアカウントJSONの必須フィールド(project_id/client_email/private_key)を正しく
+読み込めている）。
+
+### 残課題
+- **実際にFCMへメッセージ送信してOAuth2/JWT署名が最後まで通るかは未検証**（対象ユーザーが
+  本番に0件のため）。テスト用ユーザーを本番Supabaseに作ろうとしたが `@example.com` は
+  Supabase Auth側のメールバリデーションで拒否され作成できなかった（実害なし・作成試行は失敗で終了）。
 - 実機でのプッシュ到達確認は未実施（モバイルアプリがまだ実機にインストールされていないため）。
+- モバイルアプリ側もこのFirebaseプロジェクト(`osarai-38171`)向けの設定
+  （`google-services.json`/APNs連携）が別途必要（今回のスコープ外）。
 
 ---
 
