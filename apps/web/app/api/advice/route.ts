@@ -8,6 +8,8 @@ import { getEntitlement } from '@/lib/entitlement';
 import { geminiText, GEMINI_MODEL_LITE } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
+// lib/gemini.ts のリトライが最悪ケースでGemini呼び出しを複数回行うため余裕を持たせる
+export const maxDuration = 60;
 
 export function OPTIONS() {
   return corsPreflight();

@@ -10,7 +10,7 @@ node_modules/
 # build outputs
 dist/
 .next/
-.next-e2e/
+.next-*/
 out/
 build/
 *.tsbuildinfo
@@ -30,6 +30,7 @@ supabase/.temp/
 .idea/
 coverage/
 .vercel
+.claude/scheduled_tasks.lock
 
 # playwright
 test-results/

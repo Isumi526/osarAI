@@ -15,6 +15,8 @@ import { getEntitlement } from '@/lib/entitlement';
 import { geminiJson, GEMINI_MODEL_DIALOGUE, type GeminiSchema } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
+// lib/gemini.ts のリトライ+モデルフォールバックが最悪ケースでGemini呼び出しを複数回行うため余裕を持たせる
+export const maxDuration = 60;
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
