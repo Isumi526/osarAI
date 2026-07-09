@@ -44,9 +44,36 @@ export function Osarai() {
   const recorder = useRecorder();
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // 時間指定の深掘りセッション（既定5分・延長可）。最初の発話が送られてから計測開始。
+  const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  const [ending, setEnding] = useState(false);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, done]);
+
+  useEffect(() => {
+    if (remainingSec === null || done) return;
+    if (remainingSec <= 0) return;
+    const t = setInterval(() => setRemainingSec((s) => (s === null ? null : Math.max(0, s - 1))), 1000);
+    return () => clearInterval(t);
+  }, [remainingSec === null, done]);
+
+  function formatMMSS(sec: number) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function onBack() {
+    if (!done && messages.length > 1) {
+      const ok = confirm(
+        'ここまでの内容はまだ保存されていません。\n「ここまでで終える」で保存してから戻ることをおすすめします。\nこのまま戻りますか？（内容は失われます）',
+      );
+      if (!ok) return;
+    }
+    navigate(-1);
+  }
 
   // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）
   useEffect(() => {
@@ -93,6 +120,7 @@ export function Osarai() {
     try {
       const res = await osaraiTurn({ message: text, sessionId, customerId });
       setSessionId(res.sessionId);
+      setRemainingSec((s) => (s === null ? 300 : s)); // 最初の送信でタイマー開始（既定5分）
       if (res.next_question) {
         setMessages((m) => [...m, { role: 'assistant', content: res.next_question! }]);
       }
@@ -113,6 +141,28 @@ export function Osarai() {
       setMessages((m) => m.slice(0, -1));
     } finally {
       setSending(false);
+    }
+  }
+
+  // 明示的な終了（達成感UI）: ここまでの内容で強制的にdone扱いにして保存
+  async function endEarly() {
+    if (!sessionId || sending || done || ending) return;
+    setError(null);
+    setEnding(true);
+    try {
+      const res = await osaraiTurn({ message: '', sessionId, customerId, forceEnd: true });
+      setDone(true);
+      setSavedCustomerId(res.customerId);
+      setSavedInteractionId(res.interactionId);
+      const ext: OsaraiExtracted = res.extracted ?? {};
+      setEditPoints(toLines(ext.points));
+      setEditNeeds(toLines(ext.needs));
+      setEditNextActions(toLines(ext.next_actions));
+      setEditTemperature(ext.temperature ?? null);
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setEnding(false);
     }
   }
 
@@ -146,15 +196,47 @@ export function Osarai() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>おさらい</strong>
-        <span style={{ width: 48 }} />
+        {remainingSec !== null && !done ? (
+          <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+            {formatMMSS(remainingSec)}
+          </span>
+        ) : (
+          <span style={{ width: 48 }} />
+        )}
       </header>
 
       {messages.length <= 1 && !done && (
         <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
           思い出したことをそのままの言葉で話してくれるだけでOKです。AIが掘り下げて整理します。
         </p>
+      )}
+
+      {remainingSec === 0 && !done && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary-border)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            marginTop: 8,
+            fontSize: 13,
+          }}
+        >
+          <span>予定の5分になりました。続けても、ここで終えても大丈夫です。</span>
+          <button
+            type="button"
+            onClick={() => setRemainingSec(300)}
+            style={{ padding: '6px 10px', fontSize: 13, whiteSpace: 'nowrap' }}
+          >
+            +5分延長
+          </button>
+        </div>
       )}
 
       {/* 対話 */}
@@ -279,7 +361,26 @@ export function Osarai() {
           </section>
         )
       ) : (
-        <div style={{ display: 'flex', gap: 8, paddingBottom: 8, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
+          {sessionId && (
+            <button
+              type="button"
+              onClick={endEarly}
+              disabled={ending || sending}
+              style={{
+                alignSelf: 'flex-end',
+                background: 'none',
+                border: 'none',
+                padding: '4px 0',
+                color: 'var(--color-text-muted)',
+                fontSize: 13,
+                textDecoration: 'underline',
+              }}
+            >
+              {ending ? '保存中…' : 'ここまでで終える'}
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           {recorder.supported && (
             <button
               onClick={toggleMic}
@@ -321,6 +422,7 @@ export function Osarai() {
           >
             送信
           </button>
+          </div>
         </div>
       )}
     </main>

@@ -59,9 +59,11 @@ export async function POST(req: Request) {
     sessionId?: string;
     customerId?: string | null;
     message?: string;
+    forceEnd?: boolean;
   };
+  const forceEnd = body.forceEnd === true;
   const message = (body.message ?? '').trim();
-  if (!message) return json({ error: 'message required' }, 400);
+  if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
   // 契約ゲート（§16 未契約/解約は機能制限）
   const ent = await getEntitlement(supabase, user.id);
@@ -93,6 +95,8 @@ export async function POST(req: Request) {
     if (sess.status === 'done') return json({ error: 'session already done' }, 409);
     messages = (sess.messages as ChatMessage[]) ?? [];
     customerId = sess.customer_id ?? customerId;
+  } else if (forceEnd) {
+    return json({ error: 'no session to end' }, 400);
   } else {
     const { data: created, error } = await supabase
       .from('osarai_sessions')
@@ -101,6 +105,9 @@ export async function POST(req: Request) {
       .single();
     if (error || !created) return json({ error: 'session create failed' }, 500);
     sessionId = created.id;
+  }
+  if (forceEnd && messages.length === 0) {
+    return json({ error: 'nothing to summarize yet' }, 400);
   }
 
   // 既存顧客データ（あれば差分を聞かせる）
@@ -114,8 +121,8 @@ export async function POST(req: Request) {
     if (c) customerJson = JSON.stringify(c);
   }
 
-  // ユーザー発話を履歴に追加
-  messages.push({ role: 'user', content: message });
+  // ユーザー発話を履歴に追加（forceEndで空発話の場合は追加しない）
+  if (message) messages.push({ role: 'user', content: message });
 
   // --- Gemini 1ターン ---
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
@@ -129,6 +136,10 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     return json({ error: 'ai failed', detail: String(e) }, 502);
+  }
+  // 明示的な終了操作は、Geminiの done 判定にかかわらずここまでの抽出内容で必ず完了させる
+  if (forceEnd) {
+    result = { ...result, done: true, next_question: null };
   }
 
   // AI の質問を履歴に追加（done のときは next_question=null）
