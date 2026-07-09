@@ -56,6 +56,9 @@ export function PlanPicker({ code }: { code: string | null }) {
             >
               {loading === id ? '...' : '14日無料で始める'}
             </button>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
+              トライアル期間中にキャンセルすれば料金はかかりません。
+            </p>
           </div>
         );
       })}

@@ -57,6 +57,11 @@ export default async function BillingPage() {
               </p>
             </div>
           )}
+          {status === 'trialing' && sub.trial_end && (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+              トライアル期間中（{new Date(sub.trial_end).toLocaleDateString('ja-JP')}まで）にキャンセルすれば料金はかかりません。
+            </p>
+          )}
           {sub.stripe_customer_id && <BillingPortalButton />}
         </>
       )}
