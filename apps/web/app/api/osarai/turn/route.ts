@@ -174,7 +174,8 @@ export async function POST(req: Request) {
       status: result.done ? 'done' : 'in_progress',
       resulting_interaction_id: resultingInteractionId,
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .eq('user_id', user.id);
   if (sessionUpdateError) {
     console.error('osarai_sessions update failed', sessionId, sessionUpdateError);
   }
