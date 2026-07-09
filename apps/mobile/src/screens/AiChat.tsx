@@ -73,14 +73,15 @@ export function AiChat() {
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Shift+Enter または Ctrl+Enter のみ送信。Enter単独は誤送信防止のため無視。
+    if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       send();
     }
   }
 
   const placeholder =
-    scope === 'all' ? '例: 今週フォローすべき人は？' : '例: この人に次どう連絡するのがいい？';
+    scope === 'all' ? '例: 今週フォローすべき人は？（Shift+Enterで送信）' : '例: この人に次どう連絡するのがいい？（Shift+Enterで送信）';
 
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
