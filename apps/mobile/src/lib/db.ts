@@ -17,6 +17,19 @@ export async function getMyProfile(): Promise<Profile | null> {
   return (data as Profile | null) ?? null;
 }
 
+// AI戦略相談のコンテキストに使う自由記述プロフィール（年齢/性別/経歴/仕事/扱い商品/目標）
+export async function updateMyUserProfile(userProfile: Record<string, string>): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { error } = await supabase
+    .from('profiles')
+    .update({ user_profile: userProfile as never })
+    .eq('id', user.id);
+  if (error) throw error;
+}
+
 export async function listCustomers(opts: {
   status?: CustomerStatus;
   temperature?: Temperature;

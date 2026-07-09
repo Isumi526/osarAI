@@ -348,6 +348,7 @@ export type Database = {
           industry: string | null
           org_id: string
           role: string
+          user_profile: Json
         }
         Insert: {
           created_at?: string
@@ -356,6 +357,7 @@ export type Database = {
           industry?: string | null
           org_id: string
           role?: string
+          user_profile?: Json
         }
         Update: {
           created_at?: string
@@ -364,6 +366,7 @@ export type Database = {
           industry?: string | null
           org_id?: string
           role?: string
+          user_profile?: Json
         }
         Relationships: [
           {

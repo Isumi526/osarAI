@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('org_id')
+    .select('org_id, user_profile')
     .eq('id', user.id)
     .maybeSingle();
   if (!profile) return json({ error: 'profile not found' }, 400);
@@ -102,7 +102,8 @@ export async function POST(req: Request) {
 
   // --- 顧客データをコンテキスト化 ---
   const data = await buildContext(supabase, scope, customerId);
-  const systemAndData = buildAdvicePrompt({ scope, data });
+  const userProfile = formatUserProfile(profile.user_profile as Record<string, string> | null);
+  const systemAndData = buildAdvicePrompt({ scope, data, userProfile });
   const convo = (history ?? [])
     .map((m) => `${m.role === 'user' ? 'ユーザー' : 'コーチ'}: ${m.content}`)
     .join('\n');
@@ -179,6 +180,23 @@ async function buildContext(
       return `- ${c.name}（温度: ${c.temperature ?? '?'} / ニーズ: ${c.needs ?? '未把握'} / 最終接触: ${when}）`;
     })
     .join('\n');
+}
+
+const USER_PROFILE_LABEL: Record<string, string> = {
+  age: '年齢',
+  gender: '性別',
+  background: '経歴',
+  job: '仕事',
+  products: '扱っている商品',
+  goal: '目標',
+};
+
+function formatUserProfile(userProfile: Record<string, string> | null): string | undefined {
+  if (!userProfile) return undefined;
+  const lines = Object.entries(userProfile)
+    .filter(([, v]) => v && v.trim())
+    .map(([k, v]) => `${USER_PROFILE_LABEL[k] ?? k}: ${v}`);
+  return lines.length > 0 ? lines.join('\n') : undefined;
 }
 
 function json(payload: unknown, status: number) {
