@@ -90,6 +90,7 @@ export async function POST(req: Request) {
       .from('osarai_sessions')
       .select('id, messages, customer_id, status')
       .eq('id', sessionId)
+      .eq('user_id', user.id)
       .maybeSingle();
     if (error || !sess) return json({ error: 'session not found' }, 404);
     if (sess.status === 'done') return json({ error: 'session already done' }, 409);
@@ -163,8 +164,9 @@ export async function POST(req: Request) {
     resultingInteractionId = persisted.interactionId;
   }
 
-  // セッション更新
-  await supabase
+  // セッション更新（interaction/customerは既に確定保存済み。ここが失敗してもユーザーの
+  // データは失われないが、セッションの進行状況が古いまま残るためログには残す）
+  const { error: sessionUpdateError } = await supabase
     .from('osarai_sessions')
     .update({
       messages: messages as unknown as never,
@@ -173,6 +175,9 @@ export async function POST(req: Request) {
       resulting_interaction_id: resultingInteractionId,
     })
     .eq('id', sessionId);
+  if (sessionUpdateError) {
+    console.error('osarai_sessions update failed', sessionId, sessionUpdateError);
+  }
 
   return json(
     {
