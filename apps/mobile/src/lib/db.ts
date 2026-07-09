@@ -91,3 +91,40 @@ export async function deleteCustomer(id: string): Promise<void> {
   const { error } = await supabase.from('customers').delete().eq('id', id);
   if (error) throw error;
 }
+
+export interface SummaryEdit {
+  points: string[];
+  needs: string[];
+  next_actions: string[];
+  temperature: Temperature | null;
+}
+
+/**
+ * おさらい対話完了時にAIが生成したサマリを、ユーザーの確認・修正後に保存する（F-02 AC）。
+ * turn API側で自動保存済みの interaction/customer を、編集内容で上書きする。
+ * RLS(interactions_cud: author_id=auth.uid() / customers_cud: owner_id=auth.uid())が
+ * 本人分のみ更新可能であることを担保する。
+ */
+export async function updateInteractionSummary(
+  interactionId: string,
+  customerId: string,
+  edit: SummaryEdit,
+): Promise<void> {
+  const { error: ixError } = await supabase
+    .from('interactions')
+    .update({
+      ai_summary: { points: edit.points, needs: edit.needs, next_actions: edit.next_actions } as never,
+    })
+    .eq('id', interactionId);
+  if (ixError) throw ixError;
+
+  const { error: custError } = await supabase
+    .from('customers')
+    .update({
+      temperature: edit.temperature,
+      needs: edit.needs.length ? edit.needs.join(' / ') : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customerId);
+  if (custError) throw custError;
+}
