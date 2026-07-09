@@ -12,6 +12,7 @@ async function signUpAndReachSubscribe(page: import('@playwright/test').Page, co
   await page.getByPlaceholder('お名前').fill('E2E Tester');
   await page.getByPlaceholder('メールアドレス').fill(email);
   await page.getByPlaceholder('パスワード（8文字以上）').fill('testpassword123');
+  await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '登録する' }).click();
   await page.waitForURL(/\/subscribe/, { timeout: 15000 });
 }

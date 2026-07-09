@@ -17,12 +17,17 @@ function SignupForm() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!agreed) {
+      setError('利用規約への同意が必要です。');
+      return;
+    }
     setLoading(true);
     setError(null);
     const supabase = createBrowserSupabase();
@@ -87,8 +92,20 @@ function SignupForm() {
           required
           style={{ padding: 10, fontSize: 16 }}
         />
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            style={{ width: 'auto' }}
+          />
+          <Link href="/terms" target="_blank">
+            利用規約
+          </Link>
+          に同意する
+        </label>
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
-        <button type="submit" disabled={loading} style={{ padding: 12, fontSize: 16 }}>
+        <button type="submit" disabled={loading || !agreed} style={{ padding: 12, fontSize: 16 }}>
           {loading ? '...' : '登録する'}
         </button>
       </form>
