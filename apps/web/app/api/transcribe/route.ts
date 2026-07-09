@@ -14,6 +14,10 @@ export const maxDuration = 120;
 
 const BUCKET = 'recordings';
 
+// 1録音あたりの上限（要件定義書§6/§10「録音乱用に備え1録音あたりの上限のみ設定」）。
+// コスト暴走防止が目的（長尺音声を無制限に文字起こしさせない）。実測を見て調整可。
+const MAX_RECORDING_BYTES = 25 * 1024 * 1024; // 25MB（目安: 圧縮音声で概ね25〜40分程度）
+
 // 録音は対面/Zoomの2種（§6 interactions.source）。UI から来た値を検証。
 const REC_SOURCES: InteractionSource[] = ['in_person_rec', 'zoom_rec'];
 
@@ -52,6 +56,17 @@ export async function POST(req: Request) {
   if (!customerId) return json({ error: 'customerId required' }, 400);
   if (!audioBase64) return json({ error: 'audioBase64 required' }, 400);
 
+  const bytes = Buffer.from(audioBase64, 'base64');
+  if (bytes.length > MAX_RECORDING_BYTES) {
+    return json(
+      {
+        error: 'recording_too_large',
+        message: `録音が大きすぎます（上限${Math.floor(MAX_RECORDING_BYTES / 1024 / 1024)}MB）。短く分けて取り込んでください。`,
+      },
+      413,
+    );
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('org_id')
@@ -85,7 +100,6 @@ export async function POST(req: Request) {
   await ensureBucket(admin);
   const ext = extForMime(mimeType);
   const path = `${user.id}/${customerId}/${cryptoRandom()}.${ext}`;
-  const bytes = Buffer.from(audioBase64, 'base64');
   const { error: upErr } = await admin.storage
     .from(BUCKET)
     .upload(path, bytes, { contentType: mimeType, upsert: false });
