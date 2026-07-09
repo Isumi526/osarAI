@@ -1,5 +1,5 @@
 // 顧客の新規作成／編集フォーム。/customers/new と /customers/:id/edit。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   createCustomer,
@@ -8,6 +8,7 @@ import {
   getMyProfile,
   type CustomerInput,
 } from '../lib/db.js';
+import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
 
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
@@ -25,6 +26,45 @@ export function CustomerForm() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // AI解析（紹介文/自己紹介シート画像→顧客カード初期値）。新規登録時のみ。
+  const [analyzeText, setAnalyzeText] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const analyzeFileRef = useRef<HTMLInputElement>(null);
+
+  async function onAnalyzeText() {
+    if (!analyzeText.trim() || analyzing) return;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const r = await analyzeCustomerText(analyzeText);
+      if (r.name) setName(r.name);
+      if (r.needs) setNeeds(r.needs);
+      if (r.temperature) setTemperature(r.temperature);
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function onAnalyzeImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (analyzeFileRef.current) analyzeFileRef.current.value = '';
+    if (!file || analyzing) return;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const r = await analyzeCustomerImage(file);
+      if (r.name) setName(r.name);
+      if (r.needs) setNeeds(r.needs);
+      if (r.temperature) setTemperature(r.temperature);
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -66,6 +106,59 @@ export function CustomerForm() {
   return (
     <main className="screen">
       <h1>{isEdit ? '顧客を編集' : '新しい顧客'}</h1>
+
+      {!isEdit && (
+        <section
+          style={{
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary-border)',
+            borderRadius: 12,
+            padding: 14,
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 14 }}>
+            AIで解析して入力（任意）
+          </p>
+          <textarea
+            value={analyzeText}
+            onChange={(e) => setAnalyzeText(e.target.value)}
+            placeholder="紹介文や自己紹介の文面を貼り付け…"
+            rows={3}
+            disabled={analyzing}
+            style={{ width: '100%', padding: 10, fontSize: 14 }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={onAnalyzeText}
+              disabled={analyzing || !analyzeText.trim()}
+              style={{ flex: 1, padding: 10, fontSize: 14 }}
+            >
+              {analyzing ? '解析中…' : 'テキストから解析'}
+            </button>
+            <button
+              type="button"
+              onClick={() => analyzeFileRef.current?.click()}
+              disabled={analyzing}
+              style={{ flex: 1, padding: 10, fontSize: 14 }}
+            >
+              自己紹介シート画像から解析
+            </button>
+          </div>
+          <input
+            ref={analyzeFileRef}
+            type="file"
+            accept="image/*"
+            onChange={onAnalyzeImage}
+            style={{ display: 'none' }}
+          />
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+            解析結果は下のフォームに反映されます。内容を確認・修正のうえ保存してください。
+          </p>
+        </section>
+      )}
+
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
         <label>
           名前

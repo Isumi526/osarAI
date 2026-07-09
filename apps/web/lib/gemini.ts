@@ -129,6 +129,61 @@ export async function geminiJson<T>(prompt: string, schema: GeminiSchema, opts: 
 }
 
 /**
+ * 画像＋指示からJSON抽出（顧客登録AI解析・自己紹介シート画像等）。inline_data で画像を渡す。
+ * 短尺の画像向け（inline は ~20MB まで）。
+ */
+export async function geminiJsonFromImage<T>(
+  imageBase64: string,
+  mimeType: string,
+  instruction: string,
+  schema: GeminiSchema,
+  opts: { model?: string } = {},
+): Promise<T> {
+  const primaryModel = opts.model ?? GEMINI_MODEL_LITE;
+
+  const runOnce = async (model: string): Promise<string> => {
+    const res = await fetchWithTimeout(
+      `${API_BASE}/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey() },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: instruction }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: 'application/json',
+            responseSchema: schema,
+          },
+        }),
+      },
+      30_000,
+    );
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new GeminiApiError(res.status, `Gemini image ${res.status}: ${detail.slice(0, 300)}`);
+    }
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    return (data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '').trim();
+  };
+
+  const raw = await withRetryAndFallback(runOnce, primaryModel, GEMINI_MODEL_LITE);
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]) as T;
+    throw new Error(`Gemini 画像JSON パース失敗: ${raw.slice(0, 200)}`);
+  }
+}
+
+/**
  * 音声の文字起こし（§8-1 音声入力 / §8-2）。inline_data で音声を渡す。
  * 短尺の発話向け（inline は ~20MB まで）。長尺は将来 Files API + 非同期に。
  * コスト優先で Flash-Lite を既定に。
