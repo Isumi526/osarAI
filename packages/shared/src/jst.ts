@@ -10,3 +10,9 @@ export function jstMonthStartUtc(now: Date = new Date()): Date {
   const monthStartJstShifted = Date.UTC(jstShifted.getUTCFullYear(), jstShifted.getUTCMonth(), 1, 0, 0, 0, 0);
   return new Date(monthStartJstShifted - JST_OFFSET_MS);
 }
+
+/** 指定時刻(既定=現在)のJSTでの日付を `YYYY-MM-DD` で返す（cron等の「1日1回」判定用）。 */
+export function jstDateString(now: Date = new Date()): string {
+  const jstShifted = new Date(now.getTime() + JST_OFFSET_MS);
+  return jstShifted.toISOString().slice(0, 10);
+}

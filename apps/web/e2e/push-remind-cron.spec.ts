@@ -6,7 +6,15 @@ import { test, expect } from '@playwright/test';
 
 const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321';
 const LOCAL_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
+const LOCAL_SERVICE_ROLE_KEY = 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz';
 const CRON_SECRET = process.env.E2E_CRON_SECRET;
+
+async function clearTodaysCronRun(request: import('@playwright/test').APIRequestContext) {
+  // 前回の同日テスト実行の cron_runs 行を消し、dedupガードの影響を受けないようにする
+  await request.delete(`${LOCAL_SUPABASE_URL}/rest/v1/cron_runs?job=eq.osarai_remind`, {
+    headers: { apikey: LOCAL_SERVICE_ROLE_KEY, Authorization: `Bearer ${LOCAL_SERVICE_ROLE_KEY}` },
+  });
+}
 
 test.describe('cron/remind: おさらい促し自動配信', () => {
   test('CRON_SECRETが無い/違うと拒否される', async ({ request }) => {
@@ -20,8 +28,11 @@ test.describe('cron/remind: おさらい促し自動配信', () => {
     expect(wrongAuth.status()).toBe(401);
   });
 
-  test('正しいシークレットなら契約中ユーザーのpush_tokenを集計して送信を試みる', async ({ request }) => {
+  test('正しいシークレットなら契約中ユーザーのpush_tokenを集計して送信を試み、同日2回目はスキップされる', async ({
+    request,
+  }) => {
     test.skip(!CRON_SECRET, 'E2E_CRON_SECRET 未設定のためスキップ');
+    await clearTodaysCronRun(request);
 
     // テストユーザー(契約中=active)+push_tokenを用意
     const email = `e2e-cron-${Date.now()}@example.com`;
@@ -62,5 +73,13 @@ test.describe('cron/remind: おさらい促し自動配信', () => {
     expect(body.targeted).toBeGreaterThanOrEqual(1);
     // ローカルE2EインスタンスにはFCM_SERVICE_ACCOUNTを設定していないため未設定応答になる
     expect(body.configured).toBe(false);
+
+    // 同日2回目(Vercel Cronのat-least-once実行やリトライを模す)はdedupガードでスキップされる
+    const res2 = await request.get('/api/cron/remind', {
+      headers: { authorization: `Bearer ${CRON_SECRET}` },
+    });
+    expect(res2.ok()).toBeTruthy();
+    const body2 = (await res2.json()) as { skipped?: boolean };
+    expect(body2.skipped).toBe(true);
   });
 });

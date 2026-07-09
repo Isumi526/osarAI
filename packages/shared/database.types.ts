@@ -118,6 +118,24 @@ export type Database = {
           },
         ]
       }
+      cron_runs: {
+        Row: {
+          created_at: string
+          job: string
+          run_date: string
+        }
+        Insert: {
+          created_at?: string
+          job: string
+          run_date: string
+        }
+        Update: {
+          created_at?: string
+          job?: string
+          run_date?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           created_at: string
