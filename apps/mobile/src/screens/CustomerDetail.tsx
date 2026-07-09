@@ -47,6 +47,16 @@ export function CustomerDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  function onRequestPickRecording() {
+    // 録音同意の注意喚起（要件定義書§6/§10）。商談録音は相手の会話を含むため、
+    // アップロード前に必ず確認を挟む（フォーム化はしない＝1タップの確認のみ）。
+    const ok = confirm(
+      'この録音には相手（お客様）の会話が含まれます。\n事前に録音の同意を得ていることを確認してください。\n\nよろしければ「OK」でファイルを選択します。',
+    );
+    if (!ok) return;
+    fileRef.current?.click();
+  }
+
   async function onPickRecording(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = ''; // 同じファイルを再選択できるように
@@ -138,7 +148,7 @@ export function CustomerDetail() {
             <option value="in_person_rec">対面録音</option>
             <option value="zoom_rec">Zoom録画</option>
           </select>
-          <button onClick={() => fileRef.current?.click()} disabled={importing} style={{ flex: 1, padding: 10 }}>
+          <button onClick={onRequestPickRecording} disabled={importing} style={{ flex: 1, padding: 10 }}>
             {importing ? '取り込み中…（文字起こし）' : '🎧 録音を取り込む'}
           </button>
         </div>
@@ -151,6 +161,9 @@ export function CustomerDetail() {
         />
         <p style={{ margin: '8px 0 0', color: '#9a9183', fontSize: 12 }}>
           録れた時だけの任意導線。音声から自動で要約・タイムライン化します。
+        </p>
+        <p style={{ margin: '4px 0 0', color: '#9a9183', fontSize: 12 }}>
+          ※相手の会話が含まれる録音です。事前に同意を得た上でご利用ください。
         </p>
       </section>
 
