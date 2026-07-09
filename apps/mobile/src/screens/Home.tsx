@@ -108,7 +108,7 @@ export function Home() {
                   justifyContent: 'space-between',
                   padding: '12px 14px',
                   background: '#fff',
-                  border: '1px solid #e7e1d6',
+                  border: '1px solid var(--color-border)',
                   borderRadius: 10,
                   textDecoration: 'none',
                   color: 'inherit',

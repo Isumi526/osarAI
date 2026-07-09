@@ -20,7 +20,7 @@ export default async function SubscribePage({
     <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
       <h1>プランを選ぶ</h1>
       <p style={{ color: '#6b6358' }}>14日間無料。トライアル終了後に自動課金されます。</p>
-      {code && <p style={{ color: '#2d7d46' }}>割引コード適用中: {code}</p>}
+      {code && <p style={{ color: 'var(--color-primary)' }}>割引コード適用中: {code}</p>}
       <PlanPicker code={code ?? null} />
     </main>
   );

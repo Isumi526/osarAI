@@ -92,7 +92,7 @@ export function CustomerDetail() {
 
       {/* 顧客カード */}
       <section
-        style={{ background: '#fff', border: '1px solid #e7e1d6', borderRadius: 12, padding: 16, marginTop: 12 }}
+        style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16, marginTop: 12 }}
       >
         <h1 style={{ margin: '0 0 8px' }}>{customer.name}</h1>
         <p style={{ margin: '4px 0' }}>
@@ -133,7 +133,7 @@ export function CustomerDetail() {
       <section
         style={{
           background: '#fff',
-          border: '1px solid #e7e1d6',
+          border: '1px solid var(--color-border)',
           borderRadius: 12,
           padding: 12,
           marginTop: 8,
@@ -182,7 +182,7 @@ export function CustomerDetail() {
             return (
               <li
                 key={ix.id}
-                style={{ background: '#fff', border: '1px solid #e7e1d6', borderRadius: 10, padding: 12 }}
+                style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 10, padding: 12 }}
               >
                 <div style={{ fontSize: 12, color: '#9a9183' }}>
                   {new Date(when).toLocaleString('ja-JP')} ・ {SOURCE_LABEL[ix.source] ?? ix.source}
@@ -197,7 +197,7 @@ export function CustomerDetail() {
                   <p style={{ margin: '6px 0 0' }}>{ix.transcript ?? ix.raw_text ?? '（内容なし）'}</p>
                 )}
                 {summary?.next_actions?.length ? (
-                  <p style={{ margin: '6px 0 0', color: '#2d7d46', fontSize: 13 }}>
+                  <p style={{ margin: '6px 0 0', color: 'var(--color-primary)', fontSize: 13 }}>
                     次アクション: {summary.next_actions.join(' / ')}
                   </p>
                 ) : null}

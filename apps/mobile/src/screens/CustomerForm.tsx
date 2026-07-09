@@ -88,8 +88,8 @@ export function CustomerForm() {
                 style={{
                   flex: 1,
                   padding: 10,
-                  border: temperature === t ? '2px solid #c9a24b' : '1px solid #d9d3c8',
-                  background: temperature === t ? '#fdf6e6' : '#fff',
+                  border: temperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  background: temperature === t ? 'var(--color-primary-light)' : '#fff',
                   borderRadius: 8,
                 }}
               >

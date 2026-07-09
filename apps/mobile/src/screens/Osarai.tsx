@@ -132,7 +132,7 @@ export function Osarai() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#2d7d46' }}>← 戻る</button>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>おさらい</strong>
         <span style={{ width: 48 }} />
       </header>
@@ -145,9 +145,9 @@ export function Osarai() {
             style={{
               justifySelf: m.role === 'user' ? 'end' : 'start',
               maxWidth: '80%',
-              background: m.role === 'user' ? '#2d7d46' : '#fff',
+              background: m.role === 'user' ? '#fd780f' : '#fff',
               color: m.role === 'user' ? '#fff' : 'inherit',
-              border: m.role === 'user' ? 'none' : '1px solid #e7e1d6',
+              border: m.role === 'user' ? 'none' : '1px solid var(--color-border)',
               borderRadius: 14,
               padding: '10px 14px',
               whiteSpace: 'pre-wrap',
@@ -172,7 +172,7 @@ export function Osarai() {
       {done ? (
         confirmed ? (
           <section
-            style={{ background: '#eef7f0', border: '1px solid #cfe6d6', borderRadius: 12, padding: 16 }}
+            style={{ background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 12, padding: 16 }}
           >
             <p style={{ margin: '0 0 12px' }}>✅ おさらい完了。顧客カードに整理しました。</p>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -191,7 +191,7 @@ export function Osarai() {
           </section>
         ) : (
           <section
-            style={{ background: '#fff', border: '1px solid #e7e1d6', borderRadius: 12, padding: 16 }}
+            style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16 }}
           >
             <p style={{ margin: '0 0 12px', fontWeight: 600 }}>
               AIが整理しました。内容を確認・修正してください。
@@ -208,8 +208,8 @@ export function Osarai() {
                     style={{
                       flex: 1,
                       padding: 10,
-                      border: editTemperature === t ? '2px solid #c9a24b' : '1px solid #d9d3c8',
-                      background: editTemperature === t ? '#fdf6e6' : '#fff',
+                      border: editTemperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      background: editTemperature === t ? 'var(--color-primary-light)' : '#fff',
                       borderRadius: 8,
                     }}
                   >
@@ -270,7 +270,7 @@ export function Osarai() {
                 minHeight: 44,
                 background: recorder.recording ? '#c0392b' : '#fff',
                 color: recorder.recording ? '#fff' : 'inherit',
-                border: '1px solid #e7e1d6',
+                border: '1px solid var(--color-border)',
                 borderRadius: 10,
               }}
             >
@@ -288,7 +288,7 @@ export function Osarai() {
               flex: 1,
               padding: 12,
               borderRadius: 10,
-              border: '1px solid #e7e1d6',
+              border: '1px solid var(--color-border)',
               resize: 'none',
               fontFamily: 'inherit',
               fontSize: 15,

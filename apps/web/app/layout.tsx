@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'osarAI 〜おさらい〜',
@@ -13,8 +14,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         style={{
           margin: 0,
           fontFamily: "system-ui, -apple-system, 'Hiragino Sans', sans-serif",
-          background: '#faf9f7',
-          color: '#2a2622',
+          background: 'var(--color-bg)',
+          color: 'var(--color-text)',
         }}
       >
         {children}

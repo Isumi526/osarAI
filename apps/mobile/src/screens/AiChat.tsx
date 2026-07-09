@@ -86,7 +86,7 @@ export function AiChat() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#2d7d46' }}>← 戻る</button>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>AIに相談</strong>
         <span style={{ width: 48 }} />
       </header>
@@ -128,9 +128,9 @@ export function AiChat() {
             style={{
               justifySelf: m.role === 'user' ? 'end' : 'start',
               maxWidth: '85%',
-              background: m.role === 'user' ? '#2d7d46' : '#fff',
+              background: m.role === 'user' ? '#fd780f' : '#fff',
               color: m.role === 'user' ? '#fff' : 'inherit',
-              border: m.role === 'user' ? 'none' : '1px solid #e7e1d6',
+              border: m.role === 'user' ? 'none' : '1px solid var(--color-border)',
               borderRadius: 14,
               padding: '10px 14px',
               whiteSpace: 'pre-wrap',
@@ -162,7 +162,7 @@ export function AiChat() {
             flex: 1,
             padding: 12,
             borderRadius: 10,
-            border: '1px solid #e7e1d6',
+            border: '1px solid var(--color-border)',
             resize: 'none',
             fontFamily: 'inherit',
             fontSize: 15,

@@ -35,14 +35,14 @@ export function PlanPicker({ code }: { code: string | null }) {
           <div
             key={id}
             style={{
-              border: recommended ? '2px solid #c9a24b' : '1px solid #d9d3c8',
+              border: recommended ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
               borderRadius: 12,
               padding: 20,
               background: '#fff',
             }}
           >
             <h2 style={{ margin: '0 0 4px' }}>{p.name}</h2>
-            {recommended && <p style={{ color: '#c9a24b', margin: '0 0 8px' }}>おすすめ</p>}
+            {recommended && <p style={{ color: 'var(--color-primary)', margin: '0 0 8px' }}>おすすめ</p>}
             <p style={{ fontSize: 24, margin: '0 0 12px' }}>¥{p.listPrice.toLocaleString()}/月</p>
             <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358' }}>
               <li>AI相談: {p.aiAdviceLimit === null ? '無制限' : `月${p.aiAdviceLimit}回`}</li>

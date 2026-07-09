@@ -93,7 +93,7 @@ export default async function DashboardPage() {
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 24 }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '2px solid #e7e1d6' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--color-border)' }}>
             <th style={th}>メンバー</th>
             <th style={th}>役割</th>
             <th style={{ ...th, textAlign: 'right' }}>顧客数</th>
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
             rows.map((r) => (
               <tr key={r.id} style={{ borderBottom: '1px solid #efeae0' }}>
                 <td style={td}>
-                  <Link href={`/dashboard/${r.id}`} style={{ color: '#2d7d46', fontWeight: 600 }}>
+                  <Link href={`/dashboard/${r.id}`} style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
                     {r.name}
                   </Link>
                 </td>
