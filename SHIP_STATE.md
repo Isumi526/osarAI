@@ -346,7 +346,35 @@ F-05リーダー閲覧・F-06認証/テナント分離/課金/IAP回避、全て
 
 ---
 
+---
+
+## Phase 6: ローカル実動作テスト中に発見・対応した不具合（2026-07-09）
+
+人が実際にローカルでモバイルアプリを操作してテストする中で2件、コード外/コード内それぞれの問題を発見・対応。
+
+### 1. ローカル開発時、本物のStripe Webhookがlocalhostに届かない
+- 症状: 決済(Checkout)自体は完了するが、`subscriptions`テーブルが更新されず「契約が必要です」のまま。
+- 原因: Stripeの実サーバーからは`localhost`へ直接webhookを送れないため（ローカル開発の一般的な制約）。
+- 応急対応: 該当のcheckout.session.completedイベントを取得し、署名付きで手動リプレイして解消。
+- 恒久対応: **Stripe CLIをインストールし`stripe listen --forward-to localhost:3060/api/stripe/webhook`をバックグラウンド起動**。`--print-secret`で取得した安定した`whsec_...`をローカルdevインスタンスの`STRIPE_WEBHOOK_SECRET`に設定。`stripe trigger`で転送が実際に機能することを確認済み。以後はローカルでの決済テストのたびにwebhookが自動反映される。
+
+### 2. Gemini API混雑時のエラーハンドリングが無かった（実際に本番相当の障害を再現）
+- 症状: ローカルテスト中、おさらい対話(`gemini-flash-latest`使用)が「Failed to fetch」で失敗。
+- 根本原因（2段階で判明）:
+  1. Gemini側が実際に「high demand」で503を返していた（Google側の一時的な混雑・こちらのバグではない）。
+  2. **さらに深刻**: `lib/gemini.ts`の呼び出しにリトライもタイムアウトも一切無く、単発失敗がそのままユーザーエラーになっていた。加えてGeminiはエラーを返さずリクエストを掴んだまま長時間（実測40〜100秒）応答しないことがあり、fetch自体にタイムアウトが無いためVercelのサーバーレス関数タイムアウトを超えて丸ごと落ちるリスクがあった。
+- 対策（コミット `2a4538e`）:
+  - `fetchWithTimeout()`: 各Gemini呼び出し試行にAbortControllerでタイムアウト（テキスト/JSON=15秒、音声文字起こし=45秒）。
+  - `withRetryAndFallback()`: 429/500/503/タイムアウトの一時的エラーのみ短い間隔(800ms)で1回リトライ→それでも駄目なら`GEMINI_MODEL_LITE`へ1回だけフォールバック（対話の質より可用性を優先する最終手段）。
+  - `osarai/turn`・`advice`routeに`maxDuration=60`を設定（リトライ+フォールバックの最悪ケースでも余裕を持たせる）。
+- **検証**: 実際に混雑中の`gemini-flash-latest`に対して動作確認。修正前は単発呼び出しが40〜100秒かかった末に成功/失敗が不安定だったが、修正後は最悪でも約33〜45秒以内に確実に決着することを実機（ローカルサーバー）で確認済み。
+- Gemini独立レビュー: findings 2件（medium・turn/adviceの送信ボタン自体の冪等性。今回のリトライ修正とは別問題・以前から存在。UI側でボタン無効化により連打は既に抑止済み）。verdict=pass、対応不要と判断（既知パターン）。
+- 自動テスト: Gemini混雑は再現性が無く決定的なテストが書けないため、E2E自動化はせず実機（実際に混雑していたAPI）での動作確認で担保（DECISIONS T11の趣旨に沿い、ユニットテスト/モックでの疑似再現はしない）。
+
+---
+
 ## ローカル環境メモ（再開時用）
 - `supabase start`済み（API 54321 / DB 54322 / Studio 54323）。作業完了後 `supabase stop` すること（sidoと同一ポートのため）。
 - `pnpm dev:web`をバックグラウンドPID起動中（ログ: `/tmp/osarai-web-dev.log`）。
 - 作業ブランチ: `dev`（このまま継続）。
+- ローカル実機テスト用インスタンス: web(3060・local Supabase接続) + mobile(5173) + `stripe listen`(バックグラウンド・webhook自動転送)。テストアカウント: `tester@example.com` / `testpassword123`（Standard・trialing）。
