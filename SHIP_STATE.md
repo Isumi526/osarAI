@@ -241,9 +241,43 @@ npx playwright test
 
 ---
 
-## Phase 3: 停止ポイント（人の判断待ち・未到達）
+## Phase 3: 完了（本セクションは古い記述・下部の「デプロイ完了ログ」「Stripe live mode切替」が正）
 
-デプロイ経路確定（Vercelでよいか／本番Supabaseプロジェクト作成／独自ドメイン／Stripe本番鍵の扱い）に人の判断が必要になった時点でバッチ質問して停止予定。まだ到達していない。
+---
+
+## Phase 4: MVP DoD棚卸し + プッシュ通知自動配信の実装（2026-07-09）
+
+CLAUDE.md §16 DoDを全項目チェック。9/10項目は既にコード完成済み（AI対話おさらい・録音取り込み・
+AI相談・リーダーダッシュボード・RLS・IAP回避・entitlement gating・custom_fields・billing、すべて
+実装済み確認）。唯一の欠落: **プッシュ通知の自動配信トリガー**（送信の仕組み自体はあったが「いつ
+送るか」を決めるcronが無く手動送信のみだった）。
+
+### 実装内容
+- `apps/web/app/api/cron/remind/route.ts`（新規）: Vercel Cronから1日1回(20:00 JST)呼ばれ、
+  契約中(trialing/active)全ユーザーへリマインドpush。`CRON_SECRET`共有シークレット必須・
+  未設定はfail-closed(T10#4)。
+- `apps/web/vercel.json`（新規）: cron設定 `0 11 * * *`（UTC=20:00 JST）。
+- `supabase/migrations/0006_cron_dedup.sql`（新規）: `cron_runs`テーブル（job+日付一意制約・
+  RLS ON+ポリシー0件）。Gemini独立レビューで「Vercel Cronのat-least-once実行による二重送信」
+  指摘を受けて追加（A2のstripe_webhook_eventsと同じ冪等化パターン）。
+- `packages/shared/src/jst.ts` に `jstDateString()` 追加（JST日付判定の共通化）。
+
+### 検証
+- Playwright(`push-remind-cron.spec.ts`): 認証ガード・対象ユーザー集計・同日2回目スキップを確認。
+- typecheck/build green・rls-audit verdict=pass（`cron_runs`もRLS ON+ポリシー0件を確認）。
+- Gemini独立レビュー(T5・`--runs 3`→冪等化指摘→修正→`--runs 2`再レビュー): 最終verdict=pass。
+
+### 本番反映（人の明示指示により実施）
+- migration 0006を本番Supabaseへpsql適用済み・確認済み。
+- `CRON_SECRET`をVercel環境変数に追加・Vercel Cron Job登録確認済み（`vercel cron ls`で`/api/cron/remind`が`0 11 * * *`で表示）。
+- 本番デプロイ済み・エンドポイントの認証ガード(401)と実行(`{targeted,configured,sent,failed}`)を確認。
+  テスト実行で作られた`cron_runs`行は削除済み（本日の実スケジュール実行を妨げないように）。
+
+### 残課題（このセッションのスコープ外）
+- **`FCM_SERVICE_ACCOUNT`が本番未設定のため、cronは正しく動くが実際のプッシュ送信はできない**
+  （`configured:false`で応答）。Firebaseコンソールでサービスアカウントを発行し人から共有してもらう
+  必要がある（Stripe/DB資格情報と同様、人が取得してCCに渡す運用）。
+- 実機でのプッシュ到達確認は未実施（モバイルアプリがまだ実機にインストールされていないため）。
 
 ---
 
