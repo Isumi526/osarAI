@@ -4,13 +4,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { osaraiTurn, transcribeAudio } from '../lib/osarai.js';
-import { updateInteractionSummary } from '../lib/db.js';
+import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const OPENING = '今日はどんな方と会いましたか？どんな話をしたか、覚えていることを教えてください。';
+const OPENING_NEW = '今日はどんな方と会いましたか？どんな話をしたか、覚えていることを教えてください。';
+const openingForExisting = (name: string) => `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`;
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥 hot', warm: '☀️ warm', cold: '❄️ cold' };
 
@@ -23,7 +24,7 @@ export function Osarai() {
   const [params] = useSearchParams();
   const customerId = params.get('customerId');
 
-  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING }]);
+  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING_NEW }]);
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
@@ -46,6 +47,19 @@ export function Osarai() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, done]);
+
+  // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）
+  useEffect(() => {
+    if (!customerId) return;
+    getCustomer(customerId)
+      .then((c) => {
+        if (c?.name) {
+          setMessages([{ role: 'assistant', content: openingForExisting(c.name) }]);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   // マイク: 録音中なら停止→文字起こし→入力欄へ、そうでなければ録音開始
   async function toggleMic() {
@@ -136,6 +150,12 @@ export function Osarai() {
         <strong>おさらい</strong>
         <span style={{ width: 48 }} />
       </header>
+
+      {messages.length <= 1 && !done && (
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          思い出したことをそのままの言葉で話してくれるだけでOKです。AIが掘り下げて整理します。
+        </p>
+      )}
 
       {/* 対話 */}
       <div style={{ flex: 1, display: 'grid', gap: 10, padding: '16px 0', alignContent: 'start' }}>
