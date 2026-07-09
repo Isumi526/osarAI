@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/remind",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/action-suggest",
+      "schedule": "0 0 * * 1"
     }
   ]
 }
