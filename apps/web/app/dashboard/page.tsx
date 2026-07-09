@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { WelcomeBanner } from './WelcomeBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default async function DashboardPage() {
   if (profile?.role !== 'leader') {
     return (
       <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px' }}>
+        <WelcomeBanner />
         <h1>ダッシュボード</h1>
         <p style={{ color: '#6b6358' }}>
           リーダー集約ビューは leader ロールのみ閲覧できます（あなたは {profile?.role ?? '—'}）。
@@ -85,6 +87,7 @@ export default async function DashboardPage() {
 
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px' }}>
+      <WelcomeBanner />
       <h1 style={{ marginBottom: 4 }}>リーダーダッシュボード</h1>
       <p style={{ color: '#6b6358', marginTop: 0 }}>
         {profile.display_name ?? user.email} さん ・ メンバー{rows.length}名 ・ 顧客{totalCustomers}件 ・
