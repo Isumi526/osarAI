@@ -290,6 +290,38 @@ Vercel環境変数 `FCM_SERVICE_ACCOUNT` に設定→再デプロイ。
 
 ---
 
+---
+
+## Phase 5: requirements_mvp.md（正本）再読み合わせで見つかったギャップ対応（2026-07-09）
+
+CLAUDE.mdのDoDだけでなく`requirements_mvp.md`（正本）まで読み直し、2件のギャップを発見・対応。
+
+### 1. 録音の同意・注意喚起（完了 ✅）
+- `apps/mobile/src/screens/CustomerDetail.tsx`: 録音取り込みボタン押下時に確認ダイアログ
+  （相手の会話が含まれる旨・事前同意の確認）を挟む。常設の注意書きテキストも追加。
+- コミット: `cd3b9ad`。typecheck/build green（この作業中に発覚した node_modules 破損
+  ＝`vite/client.d.ts`欠損を機に `node_modules` を完全クリーンインストールし直して解消）。
+- Gemini独立レビュー: 対象外（UI/文言のみの🟢変更のためT5非該当）。
+
+### 2. 録音1件あたりの上限（完了 ✅）
+- `apps/web/app/api/transcribe/route.ts`: 25MB(生データ)超で413 `recording_too_large`。
+- `apps/web/next.config.mjs`: Next.jsの`middlewareClientMaxBodySize`既定10MBだと
+  base64化(約1.33倍)で数分の録音でも本文が切り詰められ`req.json()`が壊れたJSONとして
+  例外→500になり、意図した413チェックより先に落ちることが判明（実装中に発見）。
+  40MBに引き上げてアプリ側の413チェックが正しく先に効くようにした。
+- Playwright(`transcribe-size-cap.spec.ts`)で26MB送信が413+recording_too_largeになることを確認。
+- Gemini独立レビュー: findings 1件（medium・アップロードの冪等性。連打/再送で二重文字起こしの
+  可能性）。verdict=pass。**既にUI側で`disabled={importing}`によりボタン連打はブロック済み**
+  （Explore調査で確認済み）のため残存リスクは低頻度のネットワーク再送のみと判断、今回は
+  対応保留（将来チケット化候補）。
+- コミット: `a7494ca`。
+
+### 残り
+- F-01〜F-06 のAC細目を`requirements_mvp.md`と照合（次タスク）。
+- FCM実機確認・モバイルFirebase設定（実機が要るため保留継続）。
+
+---
+
 ## ローカル環境メモ（再開時用）
 - `supabase start`済み（API 54321 / DB 54322 / Studio 54323）。作業完了後 `supabase stop` すること（sidoと同一ポートのため）。
 - `pnpm dev:web`をバックグラウンドPID起動中（ログ: `/tmp/osarai-web-dev.log`）。
