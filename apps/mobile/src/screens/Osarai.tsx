@@ -235,7 +235,7 @@ export function Osarai() {
   }
 
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>おさらい</strong>

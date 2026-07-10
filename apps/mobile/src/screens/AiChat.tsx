@@ -84,7 +84,7 @@ export function AiChat() {
     scope === 'all' ? '例: 今週フォローすべき人は？（Cmd/Ctrl+Enterで送信）' : '例: この人に次どう連絡するのがいい？（Cmd/Ctrl+Enterで送信）';
 
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>AIに相談</strong>

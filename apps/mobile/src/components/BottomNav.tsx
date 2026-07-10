@@ -1,6 +1,7 @@
-// 画面下部固定のナビゲーションバー。主要画面(ホーム/相談/設定)間の切り替え用。
-// Osarai(おさらい対話)やCustomerDetail/CustomerForm等のドリルダウン画面には表示しない
-// (それぞれのヘッダー内「戻る」導線と衝突しないため)。
+// 画面下部固定のナビゲーションバー。全画面で常時表示する。
+// アクティブ判定は「現在地に最も近いタブ」（例: /customers/:id ではどのタブも非アクティブ、
+// /schedule 配下は予定タブ）。対話画面(Osarai/AiChat/SelfOsarai)は main の高さを
+// ナビ分減らしているため入力欄がナビと干渉しない。
 import { Link, useLocation } from 'react-router-dom';
 
 export const BOTTOM_NAV_HEIGHT = 56;
@@ -14,7 +15,6 @@ const TABS = [
 
 export function BottomNav() {
   const { pathname } = useLocation();
-  if (!TABS.some((t) => t.path === pathname)) return null;
 
   return (
     <nav
@@ -55,6 +55,5 @@ export function BottomNav() {
 }
 
 export function useBottomNavVisible() {
-  const { pathname } = useLocation();
-  return TABS.some((t) => t.path === pathname);
+  return true; // 全画面で常時表示
 }
