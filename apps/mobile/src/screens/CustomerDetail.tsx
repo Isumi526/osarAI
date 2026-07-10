@@ -13,6 +13,10 @@ import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
 
+// 録音取り込み機能はphase2に見送り（議事録『review』・回答A）。UIを非表示にする。
+// 実装本体(importRecording/onPickRecording)は残し、フラグ切替でphase2に復帰できるようにする。
+const SHOW_RECORDING_IMPORT = false;
+
 const SOURCE_LABEL: Record<string, string> = {
   ai_dialogue: 'AIおさらい',
   in_person_rec: '対面録音',
@@ -139,42 +143,44 @@ export function CustomerDetail() {
           相談
         </button>
       </div>
-      <section
-        style={{
-          background: '#fff',
-          border: '1px solid var(--color-border)',
-          borderRadius: 12,
-          padding: 12,
-          marginTop: 8,
-        }}
-      >
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <select
-            value={recSource}
-            onChange={(e) => setRecSource(e.target.value as InteractionSource)}
-            disabled={importing}
-          >
-            <option value="in_person_rec">対面録音</option>
-            <option value="zoom_rec">Zoom録画</option>
-          </select>
-          <button onClick={onRequestPickRecording} disabled={importing} style={{ flex: 1, padding: 10 }}>
-            {importing ? '取り込み中…（文字起こし）' : '録音を取り込む'}
-          </button>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="audio/*"
-          onChange={onPickRecording}
-          style={{ display: 'none' }}
-        />
-        <p style={{ margin: '8px 0 0', color: '#9a9183', fontSize: 12 }}>
-          録れた時だけの任意導線。音声から自動で要約・タイムライン化します。
-        </p>
-        <p style={{ margin: '4px 0 0', color: '#9a9183', fontSize: 12 }}>
-          ※相手の会話が含まれる録音です。事前に同意を得た上でご利用ください。
-        </p>
-      </section>
+      {SHOW_RECORDING_IMPORT && (
+        <section
+          style={{
+            background: '#fff',
+            border: '1px solid var(--color-border)',
+            borderRadius: 12,
+            padding: 12,
+            marginTop: 8,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select
+              value={recSource}
+              onChange={(e) => setRecSource(e.target.value as InteractionSource)}
+              disabled={importing}
+            >
+              <option value="in_person_rec">対面録音</option>
+              <option value="zoom_rec">Zoom録画</option>
+            </select>
+            <button onClick={onRequestPickRecording} disabled={importing} style={{ flex: 1, padding: 10 }}>
+              {importing ? '取り込み中…（文字起こし）' : '録音を取り込む'}
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="audio/*"
+            onChange={onPickRecording}
+            style={{ display: 'none' }}
+          />
+          <p style={{ margin: '8px 0 0', color: '#9a9183', fontSize: 12 }}>
+            録れた時だけの任意導線。音声から自動で要約・タイムライン化します。
+          </p>
+          <p style={{ margin: '4px 0 0', color: '#9a9183', fontSize: 12 }}>
+            ※相手の会話が含まれる録音です。事前に同意を得た上でご利用ください。
+          </p>
+        </section>
+      )}
 
       {/* タイムライン */}
       <h2 style={{ fontSize: 16, marginTop: 24 }}>タイムライン</h2>
