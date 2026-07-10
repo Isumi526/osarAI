@@ -1,11 +1,13 @@
 // Home（顧客リスト＋フィルタ＋おさらい導線）。§10。
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listCustomers, type Customer } from '../lib/db.js';
+import { listCustomers, getMyProfile, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { TempIcon } from '../components/TempIcon.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
+
+const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
 
 export function Home() {
   const navigate = useNavigate();
@@ -21,6 +23,21 @@ export function Home() {
     getPersonalStats()
       .then(setStats)
       .catch(() => undefined); // 集計失敗はダッシュボード非表示に留め、画面全体は壊さない
+  }, []);
+
+  // 初回ログイン(この端末で未案内 かつ プロフィール未登録)なら「自分をおさらいする」へ誘導。
+  // localStorageフラグで一度きり。スキップは self-osarai の戻るで可能。
+  useEffect(() => {
+    if (localStorage.getItem(SELF_INTRO_PROMPTED_KEY)) return;
+    getMyProfile()
+      .then((p) => {
+        const up = (p?.user_profile as Record<string, unknown> | null) ?? {};
+        const empty = Object.keys(up).length === 0;
+        localStorage.setItem(SELF_INTRO_PROMPTED_KEY, '1');
+        if (empty) navigate('/self-osarai');
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
