@@ -60,6 +60,25 @@ export async function GET(req: Request) {
 
   for (const ap of appointments) {
     if (!ap.customer_id) continue;
+
+    // service_roleはRLSをバイパスするため、顧客がこのスケジュールの所有者に
+    // 属することを明示的に検証してから参照する（Gemini独立レビュー指摘・
+    // テナント分離の防御的徹底。通常はUI側で自分の顧客しか選べないが、
+    // データ不整合が起きた場合に他ユーザーの顧客情報を参照しないためのガード）。
+    const { data: customerRow } = await db
+      .from('customers')
+      .select('owner_id')
+      .eq('id', ap.customer_id)
+      .maybeSingle();
+    if (!customerRow || customerRow.owner_id !== ap.owner_id) {
+      console.error('apo-strategy: schedule/customer owner mismatch, skipping', {
+        scheduleId: ap.id,
+        scheduleOwnerId: ap.owner_id,
+        customerId: ap.customer_id,
+      });
+      continue;
+    }
+
     const context = await buildContext(db, 'customer', ap.customer_id);
     let advice: string;
     try {
@@ -67,7 +86,8 @@ export async function GET(req: Request) {
         `次のアポを控えた営業担当者向けに、顧客データを踏まえた事前の戦略提案を3行以内・具体的に。\n\n${context}`,
         { model: GEMINI_MODEL_LITE, temperature: 0.5 },
       );
-    } catch {
+    } catch (e) {
+      console.error('apo-strategy: gemini call failed, skipping this appointment', ap.id, e);
       continue; // このアポだけスキップ（他のアポ処理は継続）
     }
 
