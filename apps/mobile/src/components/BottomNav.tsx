@@ -7,6 +7,7 @@ export const BOTTOM_NAV_HEIGHT = 56;
 
 const TABS = [
   { path: '/', label: 'ホーム' },
+  { path: '/schedule', label: '予定' },
   { path: '/chat', label: '相談' },
   { path: '/settings', label: '設定' },
 ];

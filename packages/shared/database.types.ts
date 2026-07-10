@@ -410,6 +410,67 @@ export type Database = {
           },
         ]
       }
+      schedules: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          end_at: string
+          id: string
+          org_id: string
+          owner_id: string
+          reminded_at: string | null
+          start_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          end_at: string
+          id?: string
+          org_id: string
+          owner_id: string
+          reminded_at?: string | null
+          start_at: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          end_at?: string
+          id?: string
+          org_id?: string
+          owner_id?: string
+          reminded_at?: string | null
+          start_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stripe_webhook_events: {
         Row: {
           created_at: string
