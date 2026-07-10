@@ -10,6 +10,7 @@ import {
 } from '../lib/db.js';
 import { importRecording } from '../lib/recordings.js';
 import { TempIcon } from '../components/TempIcon.js';
+import { useConfirm } from '../components/ConfirmDialog.js';
 import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -29,6 +30,7 @@ export function CustomerDetail() {
   const [recSource, setRecSource] = useState<InteractionSource>('in_person_rec');
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   function reload() {
     if (!id) return;
@@ -47,10 +49,10 @@ export function CustomerDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  function onRequestPickRecording() {
+  async function onRequestPickRecording() {
     // 録音同意の注意喚起（要件定義書§6/§10）。商談録音は相手の会話を含むため、
     // アップロード前に必ず確認を挟む（フォーム化はしない＝1タップの確認のみ）。
-    const ok = confirm(
+    const ok = await confirm(
       'この録音には相手（お客様）の会話が含まれます。\n事前に録音の同意を得ていることを確認してください。\n\nよろしければ「OK」でファイルを選択します。',
     );
     if (!ok) return;
@@ -74,7 +76,7 @@ export function CustomerDetail() {
   }
 
   async function onDelete() {
-    if (!id || !confirm('この顧客を削除しますか？（履歴も消えます）')) return;
+    if (!id || !(await confirm('この顧客を削除しますか？（履歴も消えます）'))) return;
     try {
       await deleteCustomer(id);
       navigate('/');
@@ -213,6 +215,7 @@ export function CustomerDetail() {
           })}
         </ul>
       )}
+      {confirmDialog}
     </main>
   );
 }

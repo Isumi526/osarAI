@@ -8,6 +8,7 @@ import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
 import { TempIcon } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
+import { useConfirm } from '../components/ConfirmDialog.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -44,6 +45,7 @@ export function Osarai() {
   const [confirming, setConfirming] = useState(false);
   const recorder = useRecorder();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   // 時間指定の深掘りセッション（既定5分・延長可）。最初の発話が送られてから計測開始。
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
@@ -66,9 +68,9 @@ export function Osarai() {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  function onBack() {
+  async function onBack() {
     if (!done && messages.length > 1) {
-      const ok = confirm(
+      const ok = await confirm(
         'ここまでの内容はまだ保存されていません。\n「ここまでで終える」で保存してから戻ることをおすすめします。\nこのまま戻りますか？（内容は失われます）',
       );
       if (!ok) return;
@@ -432,6 +434,7 @@ export function Osarai() {
           </div>
         </div>
       )}
+      {confirmDialog}
     </main>
   );
 }
