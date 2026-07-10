@@ -32,7 +32,7 @@ export function Settings() {
       .then((p) => {
         const up = (p?.user_profile as Record<string, string> | null) ?? {};
         setUserProfile(up);
-        if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 8));
+        if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 12));
       })
       .catch(() => {});
   }, []);
