@@ -60,7 +60,7 @@ export function Home() {
 
   return (
     <main className="screen">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header className="screen-header">
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
         <Link to="/settings">設定</Link>
       </header>

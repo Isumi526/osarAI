@@ -81,7 +81,7 @@ export function Settings() {
 
   return (
     <main className="screen">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header className="screen-header">
         <Link to="/">← ホーム</Link>
         <strong>設定</strong>
         <span style={{ width: 48 }} />

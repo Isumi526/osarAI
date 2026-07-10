@@ -108,7 +108,7 @@ export function SchedulePage() {
 
   return (
     <main className="screen">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header className="screen-header">
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
         <button onClick={() => setEditing('new')} style={{ padding: '0 14px' }}>
           + 予定

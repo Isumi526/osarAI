@@ -44,6 +44,21 @@ body {
   margin: 0 auto;
 }
 
+/* 画面ヘッダーを固定表示（現在地が常に分かるように）。.screen の左右padding分を
+   ネガティブマージンでフルブリードにし、スクロール時に横に隙間が出ないようにする。 */
+.screen-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--color-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -24px -20px 0;
+  padding: calc(24px + env(safe-area-inset-top)) 20px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
 /* 共通ボタン基底スタイル（インラインスタイルと併用） */
 button {
   border-radius: var(--btn-radius);
