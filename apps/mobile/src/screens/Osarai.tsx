@@ -16,6 +16,9 @@ type Msg = { role: 'user' | 'assistant'; content: string };
 const OPENING_NEW = '今日はどんな方と会いましたか？どんな話をしたか、覚えていることを教えてください。';
 const openingForExisting = (name: string) => `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`;
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
+// APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
+const prefillName = (isNew: boolean, name: string | null) =>
+  isNew && name && name !== '新しく会った人' ? name : '';
 
 // 配列⇔複数行テキストの相互変換（サマリ編集フォーム用）
 const toLines = (v?: string[]) => (v ?? []).join('\n');
@@ -157,7 +160,7 @@ export function Osarai() {
         setSavedCustomerId(res.customerId);
         setSavedInteractionId(res.interactionId);
         setIsNewCustomer(res.isNewCustomer);
-        setEditName(res.isNewCustomer ? (res.customerName ?? '') : '');
+        setEditName(prefillName(res.isNewCustomer, res.customerName));
         const ext: OsaraiExtracted = res.extracted ?? {};
         setEditPoints(toLines(ext.points));
         setEditNeeds(toLines(ext.needs));
@@ -185,7 +188,7 @@ export function Osarai() {
       setSavedCustomerId(res.customerId);
       setSavedInteractionId(res.interactionId);
       setIsNewCustomer(res.isNewCustomer);
-      setEditName(res.isNewCustomer ? (res.customerName ?? '') : '');
+      setEditName(prefillName(res.isNewCustomer, res.customerName));
       const ext: OsaraiExtracted = res.extracted ?? {};
       setEditPoints(toLines(ext.points));
       setEditNeeds(toLines(ext.needs));
@@ -200,6 +203,11 @@ export function Osarai() {
 
   async function onConfirmSummary() {
     if (!savedInteractionId || !savedCustomerId) return;
+    // 新規顧客の場合は名前を必須にする（「新しく会った人」の仮名放置を防ぐ・見分けがつかなくなるため）
+    if (isNewCustomer && !editName.trim()) {
+      setError('お名前を入力してください（あとで見分けがつかなくなるため）。');
+      return;
+    }
     setConfirming(true);
     setError(null);
     try {
@@ -208,7 +216,7 @@ export function Osarai() {
         needs: fromLines(editNeeds),
         next_actions: fromLines(editNextActions),
         temperature: editTemperature,
-        ...(isNewCustomer ? { name: editName } : {}),
+        ...(isNewCustomer ? { name: editName.trim() } : {}),
       });
       setConfirmed(true);
     } catch (e) {
@@ -352,11 +360,11 @@ export function Osarai() {
 
             {isNewCustomer && (
               <label style={{ display: 'block', marginBottom: 10 }}>
-                お名前（未入力でも保存できます）
+                お名前（必須）
                 <input
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="新しく会った人"
+                  placeholder="例: 田中太郎"
                   style={{ width: '100%', padding: 10, fontSize: 16, marginTop: 4 }}
                 />
               </label>
