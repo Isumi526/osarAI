@@ -6,6 +6,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { osaraiTurn, transcribeAudio } from '../lib/osarai.js';
 import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
+import { TempIcon } from '../components/TempIcon.js';
+import { MicIcon } from '../components/MicIcon.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -13,7 +15,6 @@ type Msg = { role: 'user' | 'assistant'; content: string };
 const OPENING_NEW = '今日はどんな方と会いましたか？どんな話をしたか、覚えていることを教えてください。';
 const openingForExisting = (name: string) => `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`;
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
-const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥 hot', warm: '☀️ warm', cold: '❄️ cold' };
 
 // 配列⇔複数行テキストの相互変換（サマリ編集フォーム用）
 const toLines = (v?: string[]) => (v ?? []).join('\n');
@@ -315,7 +316,7 @@ export function Osarai() {
                       borderRadius: 8,
                     }}
                   >
-                    {TEMP_LABEL[t]}
+                    <TempIcon value={t} /> {t}
                   </button>
                 ))}
               </div>
@@ -395,7 +396,13 @@ export function Osarai() {
                 borderRadius: 10,
               }}
             >
-              {recorder.recording ? '■ 停止' : '🎙'}
+              {recorder.recording ? (
+                <>
+                  <MicIcon recording /> 停止
+                </>
+              ) : (
+                <MicIcon recording={false} />
+              )}
             </button>
           )}
           <textarea

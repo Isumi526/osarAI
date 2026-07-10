@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
+import { TempIcon } from '../components/TempIcon.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
-
-const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥', warm: '☀️', cold: '❄️' };
 
 export function Home() {
   const navigate = useNavigate();
@@ -81,9 +80,9 @@ export function Home() {
         </select>
         <select value={temp} onChange={(e) => setTemp(e.target.value as Temperature | '')}>
           <option value="">温度感: 全部</option>
-          <option value="hot">🔥 hot</option>
-          <option value="warm">☀️ warm</option>
-          <option value="cold">❄️ cold</option>
+          <option value="hot">hot</option>
+          <option value="warm">warm</option>
+          <option value="cold">cold</option>
         </select>
         <button onClick={() => navigate('/customers/new')} style={{ marginLeft: 'auto' }}>
           ＋顧客
@@ -115,7 +114,7 @@ export function Home() {
                 }}
               >
                 <span>
-                  {c.temperature ? TEMP_LABEL[c.temperature as Temperature] : '　'} {c.name}
+                  {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null} {c.name}
                 </span>
                 {c.needs && (
                   <span style={{ color: '#9a9183', fontSize: 13, maxWidth: '50%' }}>{c.needs}</span>

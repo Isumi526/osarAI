@@ -9,10 +9,10 @@ import {
   type CustomerInput,
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
+import { TempIcon } from '../components/TempIcon.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
 
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
-const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥 hot', warm: '☀️ warm', cold: '❄️ cold' };
 
 export function CustomerForm() {
   const { id } = useParams();
@@ -186,7 +186,7 @@ export function CustomerForm() {
                   borderRadius: 8,
                 }}
               >
-                {TEMP_LABEL[t]}
+                <TempIcon value={t} /> {t}
               </button>
             ))}
           </div>

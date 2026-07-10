@@ -9,9 +9,9 @@ import {
   type Interaction,
 } from '../lib/db.js';
 import { importRecording } from '../lib/recordings.js';
+import { TempIcon } from '../components/TempIcon.js';
 import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
 
-const TEMP_LABEL: Record<Temperature, string> = { hot: '🔥 hot', warm: '☀️ warm', cold: '❄️ cold' };
 const SOURCE_LABEL: Record<string, string> = {
   ai_dialogue: 'AIおさらい',
   in_person_rec: '対面録音',
@@ -96,7 +96,11 @@ export function CustomerDetail() {
       >
         <h1 style={{ margin: '0 0 8px' }}>{customer.name}</h1>
         <p style={{ margin: '4px 0' }}>
-          温度感: {customer.temperature ? TEMP_LABEL[customer.temperature as Temperature] : '—'}
+          温度感: {customer.temperature ? (
+            <>
+              <TempIcon value={customer.temperature as Temperature} /> {customer.temperature}
+            </>
+          ) : '—'}
           {'　'}/ {customer.status === 'active' ? '対応中' : 'アーカイブ'}
         </p>
         {customer.needs && <p style={{ margin: '4px 0' }}>ニーズ: {customer.needs}</p>}
@@ -152,7 +156,7 @@ export function CustomerDetail() {
             <option value="zoom_rec">Zoom録画</option>
           </select>
           <button onClick={onRequestPickRecording} disabled={importing} style={{ flex: 1, padding: 10 }}>
-            {importing ? '取り込み中…（文字起こし）' : '🎧 録音を取り込む'}
+            {importing ? '取り込み中…（文字起こし）' : '録音を取り込む'}
           </button>
         </div>
         <input
