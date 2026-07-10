@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
+import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { TempIcon } from '../components/TempIcon.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
 
@@ -14,6 +15,13 @@ export function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subActive, setSubActive] = useState(true); // 判定前は制限を出さない
+  const [stats, setStats] = useState<PersonalStats | null>(null);
+
+  useEffect(() => {
+    getPersonalStats()
+      .then(setStats)
+      .catch(() => undefined); // 集計失敗はダッシュボード非表示に留め、画面全体は壊さない
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +61,38 @@ export function Home() {
           }}
         >
           ご利用にはお申し込みが必要です。登録・プラン変更はWebから行えます（14日無料トライアル）。
+        </div>
+      )}
+
+      {stats && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: 8,
+            margin: '12px 0',
+          }}
+        >
+          {[
+            { label: '今月のアポ', value: stats.monthAppointments },
+            { label: '今月のおさらい', value: stats.monthOsarai },
+            { label: '累計アポ', value: stats.totalAppointments },
+            { label: '累計おさらい', value: stats.totalOsarai },
+          ].map((s) => (
+            <div
+              key={s.label}
+              style={{
+                background: '#fff',
+                border: '1px solid var(--color-border)',
+                borderRadius: 10,
+                padding: 10,
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-primary)' }}>{s.value}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{s.label}</div>
+            </div>
+          ))}
         </div>
       )}
 
