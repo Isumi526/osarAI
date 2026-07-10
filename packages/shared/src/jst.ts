@@ -16,3 +16,18 @@ export function jstDateString(now: Date = new Date()): string {
   const jstShifted = new Date(now.getTime() + JST_OFFSET_MS);
   return jstShifted.toISOString().slice(0, 10);
 }
+
+/** 指定時刻(既定=現在)を含む「JSTでの日」の0:00(JST)を、実時刻(UTC基準のDate)として返す。 */
+export function jstDayStartUtc(now: Date = new Date()): Date {
+  const jstShifted = new Date(now.getTime() + JST_OFFSET_MS);
+  const dayStartJstShifted = Date.UTC(
+    jstShifted.getUTCFullYear(),
+    jstShifted.getUTCMonth(),
+    jstShifted.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+  return new Date(dayStartJstShifted - JST_OFFSET_MS);
+}
