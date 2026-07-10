@@ -23,6 +23,7 @@ export function AiChat() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // 顧客指定モード用に一覧を読み込む
   useEffect(() => {
@@ -59,17 +60,31 @@ export function AiChat() {
     setInput('');
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setSending(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const res = await askAdvice({ message: text, scope, customerId, chatId });
+      const res = await askAdvice({ message: text, scope, customerId, chatId }, controller.signal);
       setChatId(res.chatId);
       setMessages((m) => [...m, { role: 'assistant', content: res.reply }]);
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      setInput(text);
-      setMessages((m) => m.slice(0, -1));
+      // 停止(abort)は正常な中断としてエラー表示しない。直近の発話を入力欄に戻して編集可能にする。
+      if (controller.signal.aborted) {
+        setInput(text);
+        setMessages((m) => m.slice(0, -1));
+      } else {
+        setError(String(e instanceof Error ? e.message : e));
+        setInput(text);
+        setMessages((m) => m.slice(0, -1));
+      }
     } finally {
+      abortRef.current = null;
       setSending(false);
     }
+  }
+
+  // 生成中の停止: 進行中リクエストをabortし、直近の発話を入力欄に戻す(sendのcatchで処理)。
+  function stopGenerating() {
+    abortRef.current?.abort();
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -168,13 +183,19 @@ export function AiChat() {
             fontSize: 15,
           }}
         />
-        <button
-          onClick={send}
-          disabled={sending || !input.trim()}
-          style={{ padding: '0 18px', minHeight: 44 }}
-        >
-          送信
-        </button>
+        {sending ? (
+          <button
+            onClick={stopGenerating}
+            aria-label="生成を停止"
+            style={{ padding: '0 18px', minHeight: 44, background: '#c0392b' }}
+          >
+            ■ 停止
+          </button>
+        ) : (
+          <button onClick={send} disabled={!input.trim()} style={{ padding: '0 18px', minHeight: 44 }}>
+            送信
+          </button>
+        )}
       </div>
     </main>
   );
