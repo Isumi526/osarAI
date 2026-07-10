@@ -38,6 +38,8 @@ export function Osarai() {
   const [savedInteractionId, setSavedInteractionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  const [transcribeError, setTranscribeError] = useState<string | null>(null);
+  const lastAudioRef = useRef<Blob | null>(null);
 
   // サマリ確認・修正フォーム（F-02 AC: 生成されたサマリをユーザーが確認・修正できる）
   const [editPoints, setEditPoints] = useState('');
@@ -119,22 +121,32 @@ export function Osarai() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
+  // 文字起こしを実行（録音blobを保持し、失敗時は再試行できるようにする）
+  async function runTranscribe(blob: Blob) {
+    setTranscribing(true);
+    setTranscribeError(null);
+    try {
+      const text = await transcribeAudio(blob);
+      setInput((prev) => (prev ? `${prev} ${text}` : text));
+      lastAudioRef.current = null;
+    } catch {
+      // 生の(英語)エラーをそのまま出さず、再試行を促す日本語メッセージにする。録音は保持。
+      lastAudioRef.current = blob;
+      setTranscribeError('文字起こしに失敗しました。通信状況を確認して、もう一度お試しください。');
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
   // マイク: 録音中なら停止→文字起こし→入力欄へ、そうでなければ録音開始
   async function toggleMic() {
     if (sending || transcribing || done) return;
     setError(null);
+    setTranscribeError(null);
     if (recorder.recording) {
       const blob = await recorder.stop();
       if (!blob) return;
-      setTranscribing(true);
-      try {
-        const text = await transcribeAudio(blob);
-        setInput((prev) => (prev ? `${prev} ${text}` : text));
-      } catch (e) {
-        setError(String(e instanceof Error ? e.message : e));
-      } finally {
-        setTranscribing(false);
-      }
+      await runTranscribe(blob);
     } else {
       await recorder.start();
       if (recorder.error) setError(recorder.error);
@@ -299,7 +311,22 @@ export function Osarai() {
           <div style={{ justifySelf: 'start', color: '#9a9183', fontSize: 13 }}>AIが考えています…</div>
         )}
         {transcribing && (
-          <div style={{ justifySelf: 'end', color: '#9a9183', fontSize: 13 }}>文字起こし中…</div>
+          <div style={{ justifySelf: 'end', color: '#9a9183', fontSize: 13 }}>文字起こし中…（少し時間がかかる場合があります）</div>
+        )}
+        {transcribeError && (
+          <div style={{ justifySelf: 'end', textAlign: 'right' }}>
+            <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>{transcribeError}</div>
+            {lastAudioRef.current && (
+              <button
+                type="button"
+                onClick={() => lastAudioRef.current && runTranscribe(lastAudioRef.current)}
+                disabled={transcribing}
+                style={{ marginTop: 4, padding: '4px 12px', fontSize: 13 }}
+              >
+                もう一度文字起こし
+              </button>
+            )}
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
