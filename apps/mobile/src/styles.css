@@ -49,6 +49,13 @@ button {
   border-radius: var(--btn-radius);
   font-family: inherit;
   cursor: pointer;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* インプット/テキストエリア基底 */

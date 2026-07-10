@@ -109,7 +109,10 @@ export function CustomerDetail() {
           <button onClick={() => navigate(`/customers/${customer.id}/edit`)} style={{ flex: 1, padding: 10 }}>
             編集
           </button>
-          <button onClick={onDelete} style={{ padding: 10, color: '#c0392b' }}>
+          <button
+            onClick={onDelete}
+            style={{ padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b' }}
+          >
             削除
           </button>
         </div>
