@@ -37,13 +37,22 @@ export function Settings() {
       .catch(() => {});
   }, []);
 
+  // 紹介リンクのベースURL。独自ドメイン確定後はVITE_LP_ORIGINを差し替えるだけで済む(回答C・env化)。
+  // 未設定時はAPIベース(=Web/LPのオリジン)にフォールバック。
+  const lpOrigin = (
+    (import.meta.env.VITE_LP_ORIGIN as string | undefined) ??
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+    ''
+  ).replace(/\/$/, '');
+  const referralUrl = referralCode ? `${lpOrigin}/?ref=${referralCode}` : '';
+
   async function onCopyReferralCode() {
-    if (!referralCode) return;
+    if (!referralUrl) return;
     try {
-      await navigator.clipboard.writeText(referralCode);
-      setCopyMsg('コピーしました。');
+      await navigator.clipboard.writeText(referralUrl);
+      setCopyMsg('紹介リンクをコピーしました。');
     } catch {
-      setCopyMsg(referralCode); // クリップボードAPI非対応時はコード自体を表示
+      setCopyMsg(referralUrl); // クリップボードAPI非対応時はURL自体を表示
     }
   }
 
@@ -123,8 +132,7 @@ export function Settings() {
         >
           <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>紹介コード</h2>
           <p style={{ margin: '0 0 12px', color: '#6b6358', fontSize: 14 }}>
-            このコードを知り合いに伝えると、そのコード付きのリンク(LP + ?ref=コード)から登録した人が
-            あなたの紹介として記録されます。
+            この紹介リンクを知り合いに送ると、そのリンクから登録した人があなたの紹介として記録されます。
           </p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <code
@@ -133,13 +141,13 @@ export function Settings() {
                 padding: 10,
                 background: 'var(--color-bg)',
                 borderRadius: 8,
-                fontSize: 16,
-                letterSpacing: 1,
+                fontSize: 13,
+                wordBreak: 'break-all',
               }}
             >
-              {referralCode}
+              {referralUrl}
             </code>
-            <button onClick={onCopyReferralCode} style={{ padding: '0 16px' }}>
+            <button onClick={onCopyReferralCode} style={{ padding: '0 16px', whiteSpace: 'nowrap' }}>
               コピー
             </button>
           </div>
