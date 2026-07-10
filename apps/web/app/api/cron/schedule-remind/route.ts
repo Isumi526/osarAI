@@ -3,6 +3,8 @@
 // 未通知(reminded_at is null)スケジュールを検出し、その所有者へpushする。
 // 他のcron(remind/action-suggest)はjob+日付でdedupするが、本ジョブは対象がスケジュール単位で
 // 1日に何度も終わるため、schedules.reminded_at 自体を冪等化マーカーとして使う。
+// 送信成功を確認してから既読化する(送信前クレームだと送信失敗時に通知が失われるため)。
+// at-least-once実行による稀な重複送信より、通知の取りこぼしを避けることを優先している。
 import { NextResponse } from 'next/server';
 import { sendPush } from '@/lib/push-fcm';
 import { createServiceRoleClient } from '@/lib/supabase/server';
@@ -44,16 +46,6 @@ export async function GET(req: Request) {
   let configured = true;
 
   for (const s of due) {
-    // 冪等化: 自分がreminded_atをnull→now()に更新できた(=まだ誰にも処理されていない)分だけ送る。
-    const { data: claimed } = await db
-      .from('schedules')
-      .update({ reminded_at: now.toISOString() })
-      .eq('id', s.id)
-      .is('reminded_at', null)
-      .select('id')
-      .maybeSingle();
-    if (!claimed) continue; // 別リクエストが既に処理済み
-
     const { data: tokenRows } = await db.from('push_tokens').select('token').eq('user_id', s.owner_id);
     const tokens = (tokenRows ?? []).map((t) => t.token);
     const result = await sendPush(tokens, {
@@ -64,6 +56,14 @@ export async function GET(req: Request) {
     configured = result.configured;
     sent += result.sent;
     failed += result.failed;
+
+    // 送信の成功(または配信対象自体が無い)を確認できた時だけ既読化する。
+    // configured=false(FCM未設定)や failed>0(実送信エラー)の場合はreminded_atを
+    // 更新しない＝次回cron実行でも再度対象になり、通知の取りこぼしを防ぐ
+    // （Gemini独立レビュー指摘: 送信前クレームだと送信失敗時に通知が失われるため）。
+    if (result.configured && result.failed === 0) {
+      await db.from('schedules').update({ reminded_at: now.toISOString() }).eq('id', s.id).is('reminded_at', null);
+    }
   }
 
   return NextResponse.json({ targeted: due.length, sent, failed, configured });
