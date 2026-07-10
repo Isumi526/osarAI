@@ -50,6 +50,7 @@ export function Osarai() {
   // 時間指定の深掘りセッション（既定5分・延長可）。最初の発話が送られてから計測開始。
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
   const [ending, setEnding] = useState(false);
+  const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -230,11 +231,6 @@ export function Osarai() {
         )}
       </header>
 
-      {messages.length <= 1 && !done && (
-        <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
-          思い出したことをそのままの言葉で話してくれるだけでOKです。AIが掘り下げて整理します。
-        </p>
-      )}
 
       {remainingSec === 0 && !done && (
         <div
@@ -408,6 +404,47 @@ export function Osarai() {
         )
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
+          <div style={{ position: 'relative', alignSelf: 'flex-start' }}>
+            <button
+              type="button"
+              onClick={() => setShowHint((v) => !v)}
+              aria-label="ヒントを見る"
+              style={{
+                width: 28,
+                height: 28,
+                minHeight: 28,
+                padding: 0,
+                borderRadius: '50%',
+                background: 'var(--color-primary-light)',
+                color: 'var(--color-primary)',
+                border: '1px solid var(--color-primary-border)',
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              ?
+            </button>
+            {showHint && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '120%',
+                  left: 0,
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 12,
+                  padding: 12,
+                  width: 240,
+                  fontSize: 13,
+                  color: 'var(--color-text)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  zIndex: 10,
+                }}
+              >
+                思い出したことをそのままの言葉で話してくれるだけでOKです。AIが掘り下げて整理します。
+              </div>
+            )}
+          </div>
           {sessionId && (
             <button
               type="button"
