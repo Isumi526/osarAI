@@ -68,6 +68,26 @@ export function Osarai() {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  // 「続けておさらいする」: 完了状態から次の対話へ、状態を初期化して再開する。
+  function startNewSession() {
+    setMessages([{ role: 'assistant', content: OPENING_NEW }]);
+    setInput('');
+    setSessionId(undefined);
+    setDone(false);
+    setSavedCustomerId(null);
+    setSavedInteractionId(null);
+    setError(null);
+    setEditPoints('');
+    setEditNeeds('');
+    setEditNextActions('');
+    setEditTemperature(null);
+    setConfirmed(false);
+    setConfirming(false);
+    setRemainingSec(null);
+    setEnding(false);
+    navigate('/osarai');
+  }
+
   async function onBack() {
     if (!done && messages.length > 1) {
       const ok = await confirm(
@@ -277,22 +297,45 @@ export function Osarai() {
       {done ? (
         confirmed ? (
           <section
-            style={{ background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 12, padding: 16 }}
+            style={{
+              background: 'var(--color-primary-light)',
+              border: '1px solid var(--color-primary-border)',
+              borderRadius: 16,
+              padding: '32px 20px',
+              textAlign: 'center',
+            }}
           >
-            <p style={{ margin: '0 0 12px' }}>✅ おさらい完了。顧客カードに整理しました。</p>
+            <svg width="56" height="56" viewBox="0 0 56 56" style={{ margin: '0 auto 16px' }} aria-hidden="true">
+              <circle cx="28" cy="28" r="28" fill="var(--color-primary)" />
+              <path
+                d="M17 29l7 7 15-15"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700 }}>おさらいが完了しました</p>
+            <p style={{ margin: '0 0 24px', color: 'var(--color-text-muted)', fontSize: 14 }}>
+              顧客カードに整理しました。
+            </p>
             <div style={{ display: 'flex', gap: 8 }}>
-              {savedCustomerId && (
-                <button
-                  onClick={() => navigate(`/customers/${savedCustomerId}`)}
-                  style={{ flex: 1, padding: 12 }}
-                >
-                  カードを見る
-                </button>
-              )}
+              <button onClick={startNewSession} style={{ flex: 1, padding: 12 }}>
+                続けておさらいする
+              </button>
               <button onClick={() => navigate('/')} style={{ flex: 1, padding: 12 }}>
-                ホームへ
+                ホームに戻る
               </button>
             </div>
+            {savedCustomerId && (
+              <button
+                onClick={() => navigate(`/customers/${savedCustomerId}`)}
+                style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--color-primary)', padding: 0 }}
+              >
+                カードを見る
+              </button>
+            )}
           </section>
         ) : (
           <section
