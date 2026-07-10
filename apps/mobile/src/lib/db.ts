@@ -32,24 +32,11 @@ export async function updateMyUserProfile(userProfile: Record<string, string>): 
 
 // 「自分をおさらいする」対話の抽出結果(notes)を既存user_profileに追記蓄積する
 // (上書きではなく既存のnotes配列の末尾に追加)。他の項目(age/gender等)は変更しない。
+// アトミックなRPC(append_user_profile_notes・migration 0011)を使う。クライアント側の
+// fetch→マージ→updateは読み取りと書き込みの間に競合状態があったため避けた。
 export async function appendUserProfileNotes(newNotes: string[]): Promise<void> {
   if (newNotes.length === 0) return;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('not authenticated');
-  const { data: current, error: fetchError } = await supabase
-    .from('profiles')
-    .select('user_profile')
-    .eq('id', user.id)
-    .maybeSingle();
-  if (fetchError) throw fetchError;
-  const existing = (current?.user_profile as { notes?: string[] } | null) ?? {};
-  const notes = [...(existing.notes ?? []), ...newNotes];
-  const { error } = await supabase
-    .from('profiles')
-    .update({ user_profile: { ...existing, notes } as never })
-    .eq('id', user.id);
+  const { error } = await supabase.rpc('append_user_profile_notes', { new_notes: newNotes });
   if (error) throw error;
 }
 

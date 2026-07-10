@@ -551,6 +551,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      append_user_profile_notes: {
+        Args: { new_notes: string[] }
+        Returns: undefined
+      }
       current_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
     }
