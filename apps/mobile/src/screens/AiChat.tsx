@@ -113,8 +113,8 @@ export function AiChat() {
         )}
       </div>
 
-      {/* 会話 */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, padding: '8px 0', alignContent: 'start' }}>
+      {/* 会話（内部スクロール。入力欄が隠れないよう会話エリアだけスクロールさせる） */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'grid', gap: 10, padding: '8px 0', alignContent: 'start' }}>
         {messages.length === 0 && (
           <p style={{ color: '#6b6358' }}>
             {scope === 'all'
@@ -150,7 +150,7 @@ export function AiChat() {
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8, paddingBottom: 8, alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 8, paddingBottom: 8, paddingTop: 8, alignItems: 'flex-end', position: 'sticky', bottom: 0, background: 'var(--color-bg)' }}>
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
