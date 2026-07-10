@@ -110,6 +110,7 @@ export interface SummaryEdit {
   needs: string[];
   next_actions: string[];
   temperature: Temperature | null;
+  name?: string;
 }
 
 /**
@@ -137,6 +138,7 @@ export async function updateInteractionSummary(
       temperature: edit.temperature,
       needs: edit.needs.length ? edit.needs.join(' / ') : null,
       updated_at: new Date().toISOString(),
+      ...(edit.name && edit.name.trim() ? { name: edit.name.trim() } : {}),
     })
     .eq('id', customerId);
   if (custError) throw custError;

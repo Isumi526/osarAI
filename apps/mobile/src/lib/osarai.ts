@@ -9,6 +9,8 @@ export interface OsaraiTurnResponse {
   done: boolean;
   extracted: OsaraiExtracted;
   interactionId: string | null;
+  customerName: string | null;
+  isNewCustomer: boolean;
 }
 
 export async function osaraiTurn(input: {

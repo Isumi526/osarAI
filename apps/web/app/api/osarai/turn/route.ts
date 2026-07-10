@@ -150,6 +150,8 @@ export async function POST(req: Request) {
 
   // --- 完了処理 ---
   let resultingInteractionId: string | null = null;
+  let customerName: string | null = null;
+  let isNewCustomer = false;
   if (result.done) {
     const persisted = await persistOnDone({
       supabase,
@@ -162,6 +164,8 @@ export async function POST(req: Request) {
     if ('error' in persisted) return json(persisted, 500);
     customerId = persisted.customerId;
     resultingInteractionId = persisted.interactionId;
+    customerName = persisted.customerName;
+    isNewCustomer = persisted.isNewCustomer;
   }
 
   // セッション更新（interaction/customerは既に確定保存済み。ここが失敗してもユーザーの
@@ -188,6 +192,8 @@ export async function POST(req: Request) {
       done: result.done,
       extracted: result.extracted,
       interactionId: resultingInteractionId,
+      customerName,
+      isNewCustomer,
     },
     200,
   );
@@ -206,20 +212,25 @@ interface PersistArgs {
 
 async function persistOnDone(
   args: PersistArgs,
-): Promise<{ customerId: string; interactionId: string } | { error: string }> {
+): Promise<
+  | { customerId: string; interactionId: string; customerName: string; isNewCustomer: boolean }
+  | { error: string }
+> {
   const { supabase, orgId, authorId, extracted } = args;
   const now = new Date().toISOString();
 
   // 顧客が未指定なら抽出名で新規カード作成（おさらいからカード自動生成・§8-1）
   let customerId = args.customerId;
+  let customerName = '新しく会った人';
+  const isNewCustomer = !customerId;
   if (!customerId) {
-    const inferredName = inferName(extracted) ?? '新しく会った人';
+    customerName = inferName(extracted) ?? '新しく会った人';
     const { data: c, error } = await supabase
       .from('customers')
       .insert({
         org_id: orgId,
         owner_id: authorId,
-        name: inferredName,
+        name: customerName,
         needs: joinList(extracted.needs),
         temperature: extracted.temperature ?? null,
         custom_fields: (extracted.custom_fields ?? {}) as never,
@@ -266,7 +277,7 @@ async function persistOnDone(
     .single();
   if (error || !interaction) return { error: 'interaction create failed' };
 
-  return { customerId, interactionId: interaction.id };
+  return { customerId, interactionId: interaction.id, customerName, isNewCustomer };
 }
 
 function joinList(v?: string[]): string | null {

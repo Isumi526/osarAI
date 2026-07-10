@@ -41,6 +41,8 @@ export function Osarai() {
   const [editNeeds, setEditNeeds] = useState('');
   const [editNextActions, setEditNextActions] = useState('');
   const [editTemperature, setEditTemperature] = useState<Temperature | null>(null);
+  const [editName, setEditName] = useState('');
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const recorder = useRecorder();
@@ -82,6 +84,8 @@ export function Osarai() {
     setEditNeeds('');
     setEditNextActions('');
     setEditTemperature(null);
+    setEditName('');
+    setIsNewCustomer(false);
     setConfirmed(false);
     setConfirming(false);
     setRemainingSec(null);
@@ -152,6 +156,8 @@ export function Osarai() {
         setDone(true);
         setSavedCustomerId(res.customerId);
         setSavedInteractionId(res.interactionId);
+        setIsNewCustomer(res.isNewCustomer);
+        setEditName(res.isNewCustomer ? (res.customerName ?? '') : '');
         const ext: OsaraiExtracted = res.extracted ?? {};
         setEditPoints(toLines(ext.points));
         setEditNeeds(toLines(ext.needs));
@@ -178,6 +184,8 @@ export function Osarai() {
       setDone(true);
       setSavedCustomerId(res.customerId);
       setSavedInteractionId(res.interactionId);
+      setIsNewCustomer(res.isNewCustomer);
+      setEditName(res.isNewCustomer ? (res.customerName ?? '') : '');
       const ext: OsaraiExtracted = res.extracted ?? {};
       setEditPoints(toLines(ext.points));
       setEditNeeds(toLines(ext.needs));
@@ -200,6 +208,7 @@ export function Osarai() {
         needs: fromLines(editNeeds),
         next_actions: fromLines(editNextActions),
         temperature: editTemperature,
+        ...(isNewCustomer ? { name: editName } : {}),
       });
       setConfirmed(true);
     } catch (e) {
@@ -340,6 +349,18 @@ export function Osarai() {
             <p style={{ margin: '0 0 12px', fontWeight: 600 }}>
               AIが整理しました。内容を確認・修正してください。
             </p>
+
+            {isNewCustomer && (
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                お名前（未入力でも保存できます）
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="新しく会った人"
+                  style={{ width: '100%', padding: 10, fontSize: 16, marginTop: 4 }}
+                />
+              </label>
+            )}
 
             <div style={{ marginBottom: 10 }}>
               温度感
