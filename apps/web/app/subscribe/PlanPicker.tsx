@@ -46,7 +46,10 @@ export function PlanPicker({ code }: { code: string | null }) {
           >
             <h2 style={{ margin: '0 0 4px' }}>{p.name}</h2>
             {recommended && <p style={{ color: 'var(--color-primary)', margin: '0 0 8px' }}>おすすめ</p>}
-            <p style={{ fontSize: 24, margin: '0 0 12px' }}>¥{p.listPrice.toLocaleString()}/月</p>
+            <p style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px' }}>無料/14日間</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
+              15日目以降 ¥{p.listPrice.toLocaleString()}/月。14日以内にキャンセルすれば料金はかかりません。
+            </p>
             <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358' }}>
               <li>AI相談: {p.aiAdviceLimit === null ? '無制限' : `月${p.aiAdviceLimit}回`}</li>
               <li>録音取り込み: {p.recordingImport ? '○' : '×'}</li>
@@ -59,9 +62,6 @@ export function PlanPicker({ code }: { code: string | null }) {
             >
               {loading === id ? <Spinner /> : '14日無料で始める'}
             </button>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-              トライアル期間中にキャンセルすれば料金はかかりません。
-            </p>
           </div>
         );
       })}
