@@ -202,17 +202,19 @@ export function CustomerForm() {
           />
         </label>
 
-        <label>
-          ステータス
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as CustomerStatus)}
-            style={{ width: '100%', padding: 10, fontSize: 16 }}
-          >
-            <option value="active">対応中</option>
-            <option value="archived">アーカイブ</option>
-          </select>
-        </label>
+        {isEdit && (
+          <label>
+            ステータス
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as CustomerStatus)}
+              style={{ width: '100%', padding: 10, fontSize: 16 }}
+            >
+              <option value="active">対応中</option>
+              <option value="archived">アーカイブ</option>
+            </select>
+          </label>
+        )}
 
         {error && <p style={{ color: '#c0392b' }}>{error}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
