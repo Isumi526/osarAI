@@ -52,6 +52,8 @@ button {
   background: var(--color-primary);
   color: #fff;
   border: none;
+  min-height: 44px; /* タップ想定の最低サイズ */
+  padding: 0 12px;
 }
 button:disabled {
   opacity: 0.5;
@@ -59,6 +61,9 @@ button:disabled {
 }
 
 /* インプット/テキストエリア基底 */
+input, select {
+  min-height: 44px; /* タップ想定の最低サイズ（textareaは複数行入力のため対象外） */
+}
 input, textarea, select {
   border-radius: var(--radius-md);
   border: 1.5px solid var(--color-border);
