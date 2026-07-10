@@ -23,14 +23,29 @@ export function Settings() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
+  // 紹介コード（自分のprofiles.idから決定的に導出。別テーブル管理なし）
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
   useEffect(() => {
     getMyProfile()
       .then((p) => {
         const up = (p?.user_profile as Record<string, string> | null) ?? {};
         setUserProfile(up);
+        if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 8));
       })
       .catch(() => {});
   }, []);
+
+  async function onCopyReferralCode() {
+    if (!referralCode) return;
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setCopyMsg('コピーしました。');
+    } catch {
+      setCopyMsg(referralCode); // クリップボードAPI非対応時はコード自体を表示
+    }
+  }
 
   async function onSaveProfile() {
     setProfileSaving(true);
@@ -95,6 +110,42 @@ export function Settings() {
         )}
         {pushMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{pushMsg}</p>}
       </section>
+
+      {referralCode && (
+        <section
+          style={{
+            background: '#fff',
+            border: '1px solid var(--color-border)',
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 16,
+          }}
+        >
+          <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>紹介コード</h2>
+          <p style={{ margin: '0 0 12px', color: '#6b6358', fontSize: 14 }}>
+            このコードを知り合いに伝えると、そのコード付きのリンク(LP + ?ref=コード)から登録した人が
+            あなたの紹介として記録されます。
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <code
+              style={{
+                flex: 1,
+                padding: 10,
+                background: 'var(--color-bg)',
+                borderRadius: 8,
+                fontSize: 16,
+                letterSpacing: 1,
+              }}
+            >
+              {referralCode}
+            </code>
+            <button onClick={onCopyReferralCode} style={{ padding: '0 16px' }}>
+              コピー
+            </button>
+          </div>
+          {copyMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{copyMsg}</p>}
+        </section>
+      )}
 
       <section
         style={{

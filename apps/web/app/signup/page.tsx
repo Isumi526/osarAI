@@ -15,6 +15,9 @@ function SignupForm() {
   // チャネル割引コード（LL案内リンクに ?code=LL2026 で埋め込まれる）を引き継ぐ
   const code = searchParams.get('code');
   const subscribeHref = code ? `/subscribe?code=${encodeURIComponent(code)}` : '/subscribe';
+  // 紹介コード（LP等から ?ref=CODE で引き継がれる）。signUpのメタデータに乗せ、
+  // handle_new_user()トリガーがreferred_byを解決する（不正/存在しないコードは無視される）。
+  const ref = searchParams.get('ref');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,7 +38,7 @@ function SignupForm() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: name } },
+      options: { data: { display_name: name, ...(ref ? { ref } : {}) } },
     });
     setLoading(false);
     if (error) {

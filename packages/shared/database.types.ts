@@ -347,6 +347,7 @@ export type Database = {
           id: string
           industry: string | null
           org_id: string
+          referred_by: string | null
           role: string
           user_profile: Json
         }
@@ -356,6 +357,7 @@ export type Database = {
           id: string
           industry?: string | null
           org_id: string
+          referred_by?: string | null
           role?: string
           user_profile?: Json
         }
@@ -365,6 +367,7 @@ export type Database = {
           id?: string
           industry?: string | null
           org_id?: string
+          referred_by?: string | null
           role?: string
           user_profile?: Json
         }
@@ -374,6 +377,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
