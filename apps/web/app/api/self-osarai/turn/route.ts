@@ -56,8 +56,23 @@ export async function POST(req: Request) {
     return json({ error: 'nothing to summarize yet' }, 400);
   }
 
+  // これまでに蓄積された自己おさらいの気づき(notes)を取得し、プロンプトに含める
+  // （AC④: 何度でも実行でき過去の蓄積の上に積み増す。同じことを聞き直さず差分を深掘りするため）。
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('user_profile')
+    .eq('id', user.id)
+    .maybeSingle();
+  const existingNotes = ((profile?.user_profile as { notes?: string[] } | null)?.notes ?? []).filter(
+    (n) => typeof n === 'string' && n.trim(),
+  );
+  const notesBlock =
+    existingNotes.length > 0
+      ? `\n\nこれまでに蓄積された、この人についての気づき:\n${existingNotes.map((n) => `- ${n}`).join('\n')}`
+      : '\n\nこれまでに蓄積された気づき: なし（初回）';
+
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
-  const prompt = `${SELF_OSARAI_SYSTEM_PROMPT}\n\n対話履歴:\n${history}`;
+  const prompt = `${SELF_OSARAI_SYSTEM_PROMPT}${notesBlock}\n\n対話履歴:\n${history}`;
 
   let result: SelfOsaraiTurnResult;
   try {
