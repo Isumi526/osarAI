@@ -4,13 +4,12 @@
 // profiles を LL組織・member で自動生成（migration 0003）。
 // ※フェーズ4でこの後段に Stripe Checkout（14日トライアル）を挿入する。
 import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
 
 function SignupForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   // チャネル割引コード（LL案内リンクに ?code=LL2026 で埋め込まれる）を引き継ぐ
   const code = searchParams.get('code');
@@ -40,19 +39,21 @@ function SignupForm() {
       password,
       options: { data: { display_name: name, ...(ref ? { ref } : {}) } },
     });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
     // メール確認が有効な場合は session が無い。確認導線を表示。
     if (!data.session) {
+      setLoading(false);
       setDone(true);
       return;
     }
-    // 登録完了 → プラン選択（Stripe Checkout）へ
-    router.push(subscribeHref);
-    router.refresh();
+    // 登録完了 → プラン選択へ。ハードナビゲーションで遷移する（router.push だと
+    // 初回はサーバーが新しい認証クッキーを認識できず戻される場合があるため。
+    // login と同じ @supabase/ssr のクッキー伝播レース対策）。loading は解除しない。
+    window.location.assign(subscribeHref);
   }
 
   if (done) {
