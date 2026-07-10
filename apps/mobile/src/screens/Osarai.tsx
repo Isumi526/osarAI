@@ -186,8 +186,8 @@ export function Osarai() {
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    // Shift+Enter または Ctrl+Enter のみ送信。Enter単独は誤送信防止のため無視。
-    if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+    // Cmd/Ctrl+Enter のみ送信。Enter単独・Shift+Enterは改行（誤送信防止のため送信トリガーから除外）。
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       send();
     }
@@ -402,7 +402,7 @@ export function Osarai() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…（Shift+Enterで送信）'}
+            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…（Cmd/Ctrl+Enterで送信）'}
             rows={1}
             disabled={sending || recorder.recording}
             style={{
