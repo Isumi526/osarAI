@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
+import { toJaAuthError } from '@/lib/auth-errors';
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -41,7 +42,7 @@ function SignupForm() {
     });
     if (error) {
       setLoading(false);
-      setError(error.message);
+      setError(toJaAuthError(error.message));
       return;
     }
     // メール確認が有効な場合は session が無い。確認導線を表示。

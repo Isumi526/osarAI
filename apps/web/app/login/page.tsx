@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
+import { toJaAuthError } from '@/lib/auth-errors';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
-      setError(error.message);
+      setError(toJaAuthError(error.message));
       return;
     }
     // ハードナビゲーションで遷移する。router.push だと初回はサーバー側が
