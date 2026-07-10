@@ -9,7 +9,7 @@ import {
   type Interaction,
 } from '../lib/db.js';
 import { importRecording } from '../lib/recordings.js';
-import { TempIcon } from '../components/TempIcon.js';
+import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
 
@@ -100,7 +100,7 @@ export function CustomerDetail() {
         <p style={{ margin: '4px 0' }}>
           温度感: {customer.temperature ? (
             <>
-              <TempIcon value={customer.temperature as Temperature} /> {customer.temperature}
+              <TempIcon value={customer.temperature as Temperature} /> {TEMP_JA[customer.temperature as Temperature]}
             </>
           ) : '—'}
           {'　'}/ {customer.status === 'active' ? '対応中' : 'アーカイブ'}

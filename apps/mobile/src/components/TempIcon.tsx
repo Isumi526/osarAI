@@ -7,6 +7,9 @@ const COLOR: Record<Temperature, string> = {
   cold: '#3a6ea5',
 };
 
+// 温度感の日本語ラベル（hot=高 / warm=中 / cold=低）
+export const TEMP_JA: Record<Temperature, string> = { hot: '高', warm: '中', cold: '低' };
+
 export function TempIcon({ value }: { value: Temperature }) {
   return (
     <span

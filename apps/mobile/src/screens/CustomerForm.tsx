@@ -9,7 +9,7 @@ import {
   type CustomerInput,
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
-import { TempIcon } from '../components/TempIcon.js';
+import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
 
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
@@ -186,7 +186,7 @@ export function CustomerForm() {
                   borderRadius: 8,
                 }}
               >
-                <TempIcon value={t} /> {t}
+                <TempIcon value={t} /> {TEMP_JA[t]}
               </button>
             ))}
           </div>

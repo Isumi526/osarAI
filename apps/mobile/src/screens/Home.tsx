@@ -137,9 +137,9 @@ export function Home() {
         </select>
         <select value={temp} onChange={(e) => setTemp(e.target.value as Temperature | '')}>
           <option value="">温度感: 全部</option>
-          <option value="hot">hot</option>
-          <option value="warm">warm</option>
-          <option value="cold">cold</option>
+          <option value="hot">高</option>
+          <option value="warm">中</option>
+          <option value="cold">低</option>
         </select>
         <button onClick={() => navigate('/customers/new')} style={{ marginLeft: 'auto' }}>
           ＋顧客

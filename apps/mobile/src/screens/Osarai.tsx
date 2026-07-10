@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { osaraiTurn, transcribeAudio } from '../lib/osarai.js';
 import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
-import { TempIcon } from '../components/TempIcon.js';
+import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
@@ -413,7 +413,7 @@ export function Osarai() {
                       borderRadius: 8,
                     }}
                   >
-                    <TempIcon value={t} /> {t}
+                    <TempIcon value={t} /> {TEMP_JA[t]}
                   </button>
                 ))}
               </div>
