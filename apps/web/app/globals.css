@@ -51,3 +51,9 @@ input:focus, textarea:focus, select:focus {
 a {
   color: var(--color-primary);
 }
+
+@keyframes osarai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -7,6 +7,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
+import { Spinner } from '@/components/Spinner';
 
 function SignupForm() {
   const router = useRouter();
@@ -106,7 +107,7 @@ function SignupForm() {
         </label>
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
         <button type="submit" disabled={loading || !agreed} style={{ padding: 12, fontSize: 16 }}>
-          {loading ? '...' : '登録する'}
+          {loading ? <Spinner /> : '登録する'}
         </button>
       </form>
       <p style={{ marginTop: 16 }}>

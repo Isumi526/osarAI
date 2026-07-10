@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { PLANS, type PlanId } from '@osarai/shared';
+import { Spinner } from '@/components/Spinner';
 
 const ORDER: PlanId[] = ['light', 'standard', 'pro'];
 
@@ -54,7 +55,7 @@ export function PlanPicker({ code }: { code: string | null }) {
               disabled={loading !== null}
               style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 8 }}
             >
-              {loading === id ? '...' : '14日無料で始める'}
+              {loading === id ? <Spinner /> : '14日無料で始める'}
             </button>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
               トライアル期間中にキャンセルすれば料金はかかりません。

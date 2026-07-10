@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Spinner } from '@/components/Spinner';
 
 export function BillingPortalButton() {
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ export function BillingPortalButton() {
   return (
     <div>
       <button onClick={openPortal} disabled={loading} style={{ padding: 12, fontSize: 16 }}>
-        {loading ? '...' : 'お支払い方法を更新する'}
+        {loading ? <Spinner /> : 'お支払い方法を更新する'}
       </button>
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
     </div>

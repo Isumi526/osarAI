@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
+import { Spinner } from '@/components/Spinner';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,7 +50,7 @@ export default function LoginPage() {
         />
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
         <button type="submit" disabled={loading} style={{ padding: 12, fontSize: 16 }}>
-          {loading ? '...' : 'ログイン'}
+          {loading ? <Spinner /> : 'ログイン'}
         </button>
       </form>
       <p style={{ marginTop: 16 }}>
