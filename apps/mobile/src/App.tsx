@@ -10,6 +10,7 @@ import { CustomerForm } from './screens/CustomerForm.js';
 import { AiChat } from './screens/AiChat.js';
 import { Settings } from './screens/Settings.js';
 import { SchedulePage } from './screens/Schedule.js';
+import { SelfOsarai } from './screens/SelfOsarai.js';
 import { BottomNav, BOTTOM_NAV_HEIGHT, useBottomNavVisible } from './components/BottomNav.js';
 
 function AppRoutes() {
@@ -26,6 +27,7 @@ function AppRoutes() {
           <Route path="/chat" element={<AiChat />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/self-osarai" element={<SelfOsarai />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

@@ -103,7 +103,7 @@ export async function POST(req: Request) {
 
   // --- 顧客データをコンテキスト化 ---
   const data = await buildContext(supabase, scope, customerId);
-  const userProfile = formatUserProfile(profile.user_profile as Record<string, string> | null);
+  const userProfile = formatUserProfile(profile.user_profile as Record<string, unknown> | null);
   const systemAndData = buildAdvicePrompt({ scope, data, userProfile });
   const convo = (history ?? [])
     .map((m) => `${m.role === 'user' ? 'ユーザー' : 'コーチ'}: ${m.content}`)

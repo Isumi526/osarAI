@@ -30,6 +30,29 @@ export async function updateMyUserProfile(userProfile: Record<string, string>): 
   if (error) throw error;
 }
 
+// 「自分をおさらいする」対話の抽出結果(notes)を既存user_profileに追記蓄積する
+// (上書きではなく既存のnotes配列の末尾に追加)。他の項目(age/gender等)は変更しない。
+export async function appendUserProfileNotes(newNotes: string[]): Promise<void> {
+  if (newNotes.length === 0) return;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { data: current, error: fetchError } = await supabase
+    .from('profiles')
+    .select('user_profile')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (fetchError) throw fetchError;
+  const existing = (current?.user_profile as { notes?: string[] } | null) ?? {};
+  const notes = [...(existing.notes ?? []), ...newNotes];
+  const { error } = await supabase
+    .from('profiles')
+    .update({ user_profile: { ...existing, notes } as never })
+    .eq('id', user.id);
+  if (error) throw error;
+}
+
 export async function listCustomers(opts: {
   status?: CustomerStatus;
   temperature?: Temperature;
