@@ -131,10 +131,6 @@ export function Settings() {
         {profileMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{profileMsg}</p>}
       </section>
 
-      <p style={{ marginTop: 16, color: '#9a9183', fontSize: 13 }}>
-        課金・プランの管理はWebから行います（アプリ内に決済導線はありません）。
-      </p>
-
       <button
         onClick={() => supabase.auth.signOut()}
         style={{ marginTop: 16, padding: 12, fontSize: 16 }}
