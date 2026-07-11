@@ -8,6 +8,9 @@ export type Schedule = Database['public']['Tables']['schedules']['Row'];
 // カテゴリは汎用の固定リスト(select)から選ぶ想定だが、DBはtext(自由記述可)。
 export const SCHEDULE_CATEGORIES = ['アポ', '会議', '私用', 'その他'] as const;
 
+// 対面/オンラインの区分。category同様、将来の選択肢追加を考慮しCHECK制約は設けずtext。
+export const SCHEDULE_MODES = ['対面', 'オンライン'] as const;
+
 export interface ScheduleInput {
   title: string;
   customerId: string | null;
@@ -15,6 +18,7 @@ export interface ScheduleInput {
   startAt: string; // ISO
   endAt: string; // ISO
   notes: string | null;
+  mode: string | null;
 }
 
 export async function listSchedules(range: { from: string; to: string }): Promise<Schedule[]> {
@@ -43,6 +47,7 @@ export async function createSchedule(
       start_at: input.startAt,
       end_at: input.endAt,
       notes: input.notes,
+      mode: input.mode,
     })
     .select()
     .single();
@@ -60,6 +65,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
       start_at: input.startAt,
       end_at: input.endAt,
       notes: input.notes,
+      mode: input.mode,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);

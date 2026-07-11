@@ -10,6 +10,7 @@ import {
   findFreeSlots,
   formatScheduleProposalText,
   SCHEDULE_CATEGORIES,
+  SCHEDULE_MODES,
   type Schedule,
   type ScheduleInput,
 } from '../lib/schedules.js';
@@ -542,6 +543,7 @@ function ScheduleForm({
   const [customerSearch, setCustomerSearch] = useState('');
   const [category, setCategory] = useState(initial?.category ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [mode, setMode] = useState(initial?.mode ?? '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -575,6 +577,7 @@ function ScheduleForm({
       startAt: new Date(startAt).toISOString(),
       endAt: new Date(endAt).toISOString(),
       notes: notes.trim() || null,
+      mode: mode || null,
     };
     try {
       if (initial) await updateSchedule(initial.id, input);
@@ -650,6 +653,17 @@ function ScheduleForm({
             {SCHEDULE_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          対面/オンライン（任意）
+          <select value={mode} onChange={(e) => setMode(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4 }}>
+            <option value="">指定しない</option>
+            {SCHEDULE_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m}
               </option>
             ))}
           </select>

@@ -427,6 +427,7 @@ export type Database = {
           customer_id: string | null
           end_at: string
           id: string
+          mode: string | null
           notes: string | null
           org_id: string
           owner_id: string
@@ -441,6 +442,7 @@ export type Database = {
           customer_id?: string | null
           end_at: string
           id?: string
+          mode?: string | null
           notes?: string | null
           org_id: string
           owner_id: string
@@ -455,6 +457,7 @@ export type Database = {
           customer_id?: string | null
           end_at?: string
           id?: string
+          mode?: string | null
           notes?: string | null
           org_id?: string
           owner_id?: string
