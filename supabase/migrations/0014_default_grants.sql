@@ -8,10 +8,17 @@
 -- 見られる)。RLS(0002)が実質的なアクセス境界であり、GRANTは「そのロールがテーブルに触れる
 -- 前提資格」を与えるだけなのでRLSの安全性は変わらない。今後作成されるテーブルにも及ぶよう
 -- default privileges も設定する(Supabaseの標準ブートストラップと同内容)。
+-- 【Gemini二重レビュー指摘・修正済み】TRUNCATEはRLSポリシーの対象外(WHERE句で絞れず
+-- テーブル全体を無条件に消せる)のため、`grant all`ではなくDML(SELECT/INSERT/UPDATE/DELETE)
+-- のみを個別に付与する。TRUNCATE/REFERENCES/TRIGGERはservice_role(RLSバイパス)のみに残す。
 grant usage on schema public to anon, authenticated, service_role;
-grant all on all tables in schema public to anon, authenticated, service_role;
-grant all on all sequences in schema public to anon, authenticated, service_role;
-grant all on all routines in schema public to anon, authenticated, service_role;
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
-alter default privileges in schema public grant all on routines to anon, authenticated, service_role;
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+grant all on all tables in schema public to service_role;
+grant usage on all sequences in schema public to anon, authenticated;
+grant all on all sequences in schema public to service_role;
+grant execute on all routines in schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant select, insert, update, delete on tables to anon, authenticated;
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant usage on sequences to anon, authenticated;
+alter default privileges in schema public grant all on sequences to service_role;
+alter default privileges in schema public grant execute on routines to anon, authenticated, service_role;
