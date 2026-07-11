@@ -127,15 +127,9 @@ export function Welcome() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* 「早速使ってみる」ボタンは削除し導線を1つに絞った(議事録要望・バグ修正) */}
           <button type="button" onClick={() => navigate('/self-osarai?from=welcome')} style={{ padding: 14, fontSize: 16 }}>
-            まずは自分のことを5分おさらいしてみる
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            style={{ padding: 14, fontSize: 16, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-          >
-            早速使ってみる
+            まずはあなた自身のことを教えてください
           </button>
           <button
             type="button"
