@@ -16,6 +16,7 @@ import {
   type ScheduleInput,
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { useNavigate } from 'react-router-dom';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -108,6 +109,9 @@ export function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Schedule | 'new' | null>(null);
   const [presetSlot, setPresetSlot] = useState<Date | null>(null);
+  // 予定作成中にその場で登録した新規つながりに対し、詳しい登録を提案するモーダル。
+  const [proposeCustomer, setProposeCustomer] = useState<Customer | null>(null);
+  const navigate = useNavigate();
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
   // 月表示の無限スクロール(回答A): 縦に連続表示する月のリスト。上下端で前後の月を継ぎ足す。
@@ -337,12 +341,46 @@ export function SchedulePage() {
             setEditing(null);
           }}
           onDelete={editing !== 'new' ? () => onDelete((editing as Schedule).id).then(() => setEditing(null)) : undefined}
-          onSaved={() => {
+          onSaved={(newCustomer) => {
             setPresetSlot(null);
             setEditing(null);
             reload();
+            // その場で新規登録したつながりがあれば、詳しい登録を提案する(議事録要望)。
+            if (newCustomer) setProposeCustomer(newCustomer);
           }}
         />
+      )}
+
+      {proposeCustomer && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(42,38,34,0.4)', display: 'flex', alignItems: 'flex-end', zIndex: 200 }}>
+          <div style={{ background: 'var(--color-surface)', borderRadius: '16px 16px 0 0', padding: 20, width: '100%', display: 'grid', gap: 10 }}>
+            <strong>{proposeCustomer.name}さんのことを登録しましょう</strong>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
+              どんな方か記録しておくと、後からのおさらいやAI相談に役立ちます。
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(`/customers/${proposeCustomer.id}/edit`)}
+              style={{ padding: 12 }}
+            >
+              テキストで登録する
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/osarai')}
+              style={{ padding: 12, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              AIと対話して登録する
+            </button>
+            <button
+              type="button"
+              onClick={() => setProposeCustomer(null)}
+              style={{ padding: 8, background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: 13 }}
+            >
+              今はしない
+            </button>
+          </div>
+        </div>
       )}
       {proposal && (
         <div
@@ -691,7 +729,8 @@ function ScheduleForm({
   locationHistory: string[];
   profile: Pick<Profile, 'id' | 'org_id'>;
   onClose: () => void;
-  onSaved: () => void;
+  // 保存成功時、この予定作成中にその場で新規登録した顧客があれば渡す(登録提案モーダル用)。
+  onSaved: (newlyCreatedCustomer?: Customer) => void;
   onDelete?: () => void | Promise<void>;
 }) {
   // カレンダーの空き枠をタップして新規作成した場合は、その日時を選択済みにする
@@ -714,6 +753,8 @@ function ScheduleForm({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // このフォームでその場で新規登録した顧客(保存後に登録提案モーダルを出すかの判定に使う)。
+  const createdCustomerRef = useRef<Customer | null>(null);
 
   // 予定作成のその場で新しい顧客を登録できるようにする(既存顧客一覧に無い相手の場合、
   // 一旦顧客登録画面へ離脱すると入力中の予定内容が失われるため。議事録要望)。
@@ -727,6 +768,7 @@ function ScheduleForm({
     try {
       const created = await createCustomer({ name, temperature: null, needs: null, relationType: null }, profile);
       onCustomerCreated(created);
+      createdCustomerRef.current = created;
       setCustomerId(created.id);
       setAddingCustomer(false);
       setNewCustomerName('');
@@ -772,7 +814,9 @@ function ScheduleForm({
     try {
       if (initial) await updateSchedule(initial.id, input);
       else await createSchedule(input, profile);
-      onSaved();
+      // その場で新規登録した顧客がこの予定に紐付いていれば、登録提案モーダル用に渡す。
+      const created = createdCustomerRef.current;
+      onSaved(created && created.id === customerId ? created : undefined);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
