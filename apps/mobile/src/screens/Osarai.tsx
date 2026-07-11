@@ -17,8 +17,21 @@ import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const OPENING_NEW = '今日はどんな方と会いましたか？どんな話をしたか、覚えていることを教えてください。';
-const openingForExisting = (name: string) => `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`;
+// 初回メッセージが毎回同じ&そっけないという指摘(議事録要望)のため、顧客未指定/
+// 顧客選択それぞれ複数パターン用意し、対話開始のたびにランダムに1つ選ぶ。
+const OPENINGS_NEW = [
+  '今日はどんな方と会いましたか？どんな話をしたか、覚えていることを教えてください。',
+  'おつかれさまです！今日会った方のこと、思い出しながら聞かせてください。',
+  '今日はどんな出会いがありましたか？印象に残っていることから話してもらえますか？',
+];
+const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]!;
+const OPENING_NEW = () => pickRandom(OPENINGS_NEW);
+const openingForExisting = (name: string) =>
+  pickRandom([
+    `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`,
+    `${name}さんとお会いしたんですね。どんな話をしたか教えてください。`,
+    `${name}さんとの時間、おつかれさまでした。印象に残っていることはありますか？`,
+  ]);
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 // APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
 const prefillName = (isNew: boolean, name: string | null) =>
@@ -33,7 +46,7 @@ export function Osarai() {
   const [params] = useSearchParams();
   const customerId = params.get('customerId');
 
-  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING_NEW }]);
+  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING_NEW() }]);
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
@@ -85,7 +98,7 @@ export function Osarai() {
 
   // 「続けておさらいする」: 完了状態から次の対話へ、状態を初期化して再開する。
   function startNewSession() {
-    setMessages([{ role: 'assistant', content: OPENING_NEW }]);
+    setMessages([{ role: 'assistant', content: OPENING_NEW() }]);
     setInput('');
     setSessionId(undefined);
     setDone(false);
