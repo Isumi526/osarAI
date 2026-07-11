@@ -120,7 +120,44 @@ export function Home() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, margin: '16px 0' }}>
+      {/* 新規ユーザー向けのアクション誘導(議事録要望)。今後の予定が無ければ予定登録を、
+          いつでも「つながりAI登録」を勧める。予定登録の誘導があるので、ここでは
+          「おさらいする」ボタンは主要導線から外し、下のAI相談と横並びにする。 */}
+      {stats && stats.upcomingSchedules === 0 && (
+        <button
+          onClick={() => navigate('/schedule')}
+          style={{
+            width: '100%',
+            margin: '16px 0 8px',
+            padding: 14,
+            fontSize: 15,
+            textAlign: 'left',
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary-border)',
+            color: 'var(--color-text)',
+          }}
+        >
+          📅 まずは人と会う予定をカレンダーに登録しましょう
+        </button>
+      )}
+      <button
+        onClick={() => navigate('/customers/new')}
+        disabled={!subActive}
+        style={{
+          width: '100%',
+          marginBottom: 8,
+          padding: 14,
+          fontSize: 15,
+          textAlign: 'left',
+          background: '#fff',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text)',
+        }}
+      >
+        🤝 あの人について、AIとおさらいしてみる（つながりAI登録）
+      </button>
+
+      <div style={{ display: 'flex', gap: 8, margin: '8px 0 16px' }}>
         <button
           onClick={() => navigate('/osarai')}
           disabled={!subActive}
