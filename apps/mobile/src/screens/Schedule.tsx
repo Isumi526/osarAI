@@ -541,6 +541,7 @@ function ScheduleForm({
   const [customerId, setCustomerId] = useState(initial?.customer_id ?? '');
   const [customerSearch, setCustomerSearch] = useState('');
   const [category, setCategory] = useState(initial?.category ?? '');
+  const [notes, setNotes] = useState(initial?.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -573,6 +574,7 @@ function ScheduleForm({
       category: category || null,
       startAt: new Date(startAt).toISOString(),
       endAt: new Date(endAt).toISOString(),
+      notes: notes.trim() || null,
     };
     try {
       if (initial) await updateSchedule(initial.id, input);
@@ -678,6 +680,15 @@ function ScheduleForm({
                 </option>
               ))}
           </select>
+        </label>
+        <label>
+          メモ（任意）
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            style={{ width: '100%', padding: 10, marginTop: 4, resize: 'vertical', fontFamily: 'inherit' }}
+          />
         </label>
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

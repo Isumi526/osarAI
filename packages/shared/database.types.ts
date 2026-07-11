@@ -427,6 +427,7 @@ export type Database = {
           customer_id: string | null
           end_at: string
           id: string
+          notes: string | null
           org_id: string
           owner_id: string
           reminded_at: string | null
@@ -440,6 +441,7 @@ export type Database = {
           customer_id?: string | null
           end_at: string
           id?: string
+          notes?: string | null
           org_id: string
           owner_id: string
           reminded_at?: string | null
@@ -453,6 +455,7 @@ export type Database = {
           customer_id?: string | null
           end_at?: string
           id?: string
+          notes?: string | null
           org_id?: string
           owner_id?: string
           reminded_at?: string | null

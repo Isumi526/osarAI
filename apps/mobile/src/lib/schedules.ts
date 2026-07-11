@@ -14,6 +14,7 @@ export interface ScheduleInput {
   category: string | null;
   startAt: string; // ISO
   endAt: string; // ISO
+  notes: string | null;
 }
 
 export async function listSchedules(range: { from: string; to: string }): Promise<Schedule[]> {
@@ -41,6 +42,7 @@ export async function createSchedule(
       category: input.category,
       start_at: input.startAt,
       end_at: input.endAt,
+      notes: input.notes,
     })
     .select()
     .single();
@@ -57,6 +59,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
       category: input.category,
       start_at: input.startAt,
       end_at: input.endAt,
+      notes: input.notes,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
