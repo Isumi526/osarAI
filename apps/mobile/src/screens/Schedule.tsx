@@ -409,7 +409,7 @@ function ScheduleForm({
   profile: Pick<Profile, 'id' | 'org_id'>;
   onClose: () => void;
   onSaved: () => void;
-  onDelete?: () => void;
+  onDelete?: () => void | Promise<void>;
 }) {
   const now = new Date();
   const inHourLater = new Date(now.getTime() + 60 * 60 * 1000);
@@ -418,7 +418,18 @@ function ScheduleForm({
   const [endAt, setEndAt] = useState(initial ? toDatetimeLocal(initial.end_at) : toDatetimeLocal(inHourLater.toISOString()));
   const [customerId, setCustomerId] = useState(initial?.customer_id ?? '');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!onDelete || deleting) return; // 連打による二重削除リクエストを防止
+    setDeleting(true);
+    try {
+      await onDelete();
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -513,17 +524,18 @@ function ScheduleForm({
           <button type="button" onClick={onClose} style={{ flex: 1, padding: 12, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
             キャンセル
           </button>
-          <button type="submit" disabled={saving} style={{ flex: 1, padding: 12 }}>
+          <button type="submit" disabled={saving || deleting} style={{ flex: 1, padding: 12 }}>
             {saving ? '保存中…' : '保存'}
           </button>
         </div>
         {onDelete && (
           <button
             type="button"
-            onClick={onDelete}
+            onClick={handleDelete}
+            disabled={deleting || saving}
             style={{ padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b' }}
           >
-            この予定を削除
+            {deleting ? '削除中…' : 'この予定を削除'}
           </button>
         )}
       </form>
