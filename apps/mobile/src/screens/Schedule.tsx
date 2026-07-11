@@ -24,6 +24,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_HEIGHT = 56; // 1時間あたりの高さ(px)。0-24時の全日をスクロール表示(Google/Appleカレンダー同様)。
 const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
+// カテゴリ別の予定ブロック色(議事録要望)。未設定/未知のカテゴリは既定色。
+const CATEGORY_COLORS: Record<string, string> = {
+  アポ: '#fd780f', // 既定のオレンジ
+  会議: '#3b82f6', // 青
+  私用: '#8b5cf6', // 紫
+  その他: '#6b7280', // グレー
+};
+function categoryColor(category: string | null): string {
+  return (category && CATEGORY_COLORS[category]) || 'var(--color-primary)';
+}
+
 function startOfDay(d: Date): Date {
   const r = new Date(d);
   r.setHours(0, 0, 0, 0);
@@ -98,8 +109,23 @@ function layoutOverlaps(items: Schedule[]): { schedule: Schedule; col: number; c
   return placed.map((p) => ({ ...p, cols }));
 }
 
+// 最後に選んだ表示区分(月/週/日)を記憶し、再訪・再起動後も同じ区分で開く(議事録要望)。
+const VIEW_STORAGE_KEY = 'osarai_schedule_view';
+function loadInitialView(): ViewMode {
+  const v = typeof localStorage !== 'undefined' ? localStorage.getItem(VIEW_STORAGE_KEY) : null;
+  return v === 'month' || v === 'week' || v === 'day' ? v : 'week';
+}
+
 export function SchedulePage() {
-  const [view, setView] = useState<ViewMode>('week');
+  const [view, setViewRaw] = useState<ViewMode>(loadInitialView);
+  const setView = (v: ViewMode) => {
+    setViewRaw(v);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, v);
+    } catch {
+      /* localStorage不可の環境では記憶を諦める(表示自体は動く) */
+    }
+  };
   const [anchor, setAnchor] = useState(() => new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -680,7 +706,7 @@ function TimeGrid({
                         height,
                         left: `${col * widthPct}%`,
                         width: `${widthPct}%`,
-                        background: 'var(--color-primary)',
+                        background: categoryColor(schedule.category),
                         color: '#fff',
                         // 前後に続きがある側は角丸を付けない(切れている見た目にする)ことで
                         // 日を跨いでいることを視覚的に示す。
@@ -926,8 +952,10 @@ function ScheduleForm({
         </label>
         <label>
           開始
+          {/* step=600秒=10分刻み。スマホのネイティブ日時ピッカーが10分単位になる。 */}
           <input
             type="datetime-local"
+            step={600}
             value={startAt}
             onChange={(e) => setStartAt(e.target.value)}
             required
@@ -938,6 +966,7 @@ function ScheduleForm({
           終了
           <input
             type="datetime-local"
+            step={600}
             value={endAt}
             onChange={(e) => setEndAt(e.target.value)}
             required
