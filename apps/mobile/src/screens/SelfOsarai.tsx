@@ -4,24 +4,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { selfOsaraiTurn } from '../lib/selfOsarai.js';
-import { getMyProfile, saveSelfOsaraiExtraction } from '../lib/db.js';
+import { saveSelfOsaraiExtraction } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const DEFAULT_OPENING = '今日は最近のことでも、ふと考えていることでも、なんでも話してください。';
+// フォーム的に順番に聞くのをやめ、自由に話せる開始メッセージにする(回答C)。
+// 名前はアカウント作成時に登録済みなので聞かない。未登録項目はAIが会話の中で自然に深掘りする。
+const DEFAULT_OPENING =
+  'こんにちは。あなた自身のこと、なんでも自由に話してください。下のヒントから選んで話し始めてもOKです。';
 
-// 議事録『review(2回目)』要望: 初回はまず名前を確認し、仕事・扱っている商品が
-// 未登録なら優先的にヒアリングする。名前は通常signup時のdisplay_nameで既に分かって
-// いることが多いため、未登録の場合のみ聞く(AC①)。
-function decideOpening(displayName: string | null, job: string | undefined, products: string | undefined): string {
-  if (!displayName) return 'はじめまして。まずはお名前を教えてください。';
-  if (!job) return `${displayName}さん、こんにちは。まずはどんなお仕事をされているか教えてください。`;
-  if (!products) return `${displayName}さん、こんにちは。どんな商品・サービスを扱っていますか？`;
-  return DEFAULT_OPENING;
-}
+// 自由入力のきっかけになるヒント(バブルUI)。タップするとその話題で話し始められる。
+const HINTS: { label: string; message: string }[] = [
+  { label: '自分の仕事について話す', message: '自分の仕事について話したいです。' },
+  { label: '扱っている商品について話す', message: '扱っている商品について話したいです。' },
+  { label: '今後の夢や目標について話す', message: '今後の夢や目標について話したいです。' },
+];
 
 export function SelfOsarai() {
   const navigate = useNavigate();
@@ -58,19 +58,6 @@ export function SelfOsarai() {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  // まだ何もやり取りしていない(初回ターン前)なら、名前・未登録項目に応じた挨拶に差し替える。
-  useEffect(() => {
-    getMyProfile()
-      .then((p) => {
-        if (!p) return;
-        const up = (p.user_profile as { job?: string; products?: string } | null) ?? {};
-        const opening = decideOpening(p.display_name, up.job, up.products);
-        setMessages((m) => (m.length === 1 && m[0]!.role === 'assistant' ? [{ role: 'assistant', content: opening }] : m));
-      })
-      .catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, done]);
@@ -87,9 +74,8 @@ export function SelfOsarai() {
     }
   }
 
-  async function send() {
-    const text = input.trim();
-    if (!text || sending || done) return;
+  async function sendMessage(text: string) {
+    if (!text.trim() || sending || done) return;
     setError(null);
     setInput('');
     setRemainingSec((s) => (s === null ? 300 : s));
@@ -112,6 +98,10 @@ export function SelfOsarai() {
     } finally {
       setSending(false);
     }
+  }
+
+  function send() {
+    void sendMessage(input.trim());
   }
 
   async function endEarly() {
@@ -221,6 +211,28 @@ export function SelfOsarai() {
         </section>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
+          {/* まだ話し始めていない時だけヒント(バブル)を出す。タップでその話題から始める。 */}
+          {messages.length === 1 && !sending && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {HINTS.map((h) => (
+                <button
+                  key={h.label}
+                  type="button"
+                  onClick={() => void sendMessage(h.message)}
+                  style={{
+                    padding: '8px 14px',
+                    background: 'var(--color-primary-light)',
+                    border: '1px solid var(--color-primary-border)',
+                    borderRadius: 999,
+                    color: 'var(--color-primary)',
+                    fontSize: 13,
+                  }}
+                >
+                  {h.label}
+                </button>
+              ))}
+            </div>
+          )}
           {messages.length > 1 && (
             <button
               type="button"
