@@ -402,7 +402,7 @@ export function Osarai() {
             </svg>
             <p style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700 }}>おさらいが完了しました</p>
             <p style={{ margin: '0 0 24px', color: 'var(--color-text-muted)', fontSize: 14 }}>
-              顧客カードに整理しました。
+              つながりカードに整理しました。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={startNewSession} style={{ flex: 1, padding: 12 }}>

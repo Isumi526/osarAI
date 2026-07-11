@@ -74,7 +74,7 @@ export function AiChat() {
     const text = input.trim();
     if (!text) return;
     if (scope === 'customer' && !customerId) {
-      setError('相談する顧客を選んでください。');
+      setError('相談するつながりを選んでください。');
       return;
     }
     setError(null);
@@ -142,7 +142,7 @@ export function AiChat() {
       <div style={{ display: 'flex', gap: 8, margin: '12px 0', alignItems: 'center' }}>
         <select value={scope} onChange={(e) => switchScope(e.target.value as ChatScope)}>
           <option value="all">全体で相談</option>
-          <option value="customer">顧客を指定</option>
+          <option value="customer">つながりを指定</option>
         </select>
         {scope === 'customer' && (
           <select
@@ -150,7 +150,7 @@ export function AiChat() {
             onChange={(e) => switchCustomer(e.target.value)}
             style={{ flex: 1 }}
           >
-            <option value="">顧客を選択…</option>
+            <option value="">つながりを選択…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -165,8 +165,8 @@ export function AiChat() {
         {messages.length === 0 && (
           <p style={{ color: '#6b6358' }}>
             {scope === 'all'
-              ? '担当している顧客全体を踏まえて、次の一手を相談できます。'
-              : '選んだ顧客の履歴を踏まえて、次の連絡や提案を相談できます。'}
+              ? '担当しているつながり全体を踏まえて、次の一手を相談できます。'
+              : '選んだつながりの履歴を踏まえて、次の連絡や提案を相談できます。'}
           </p>
         )}
         {messages.map((m, i) => (

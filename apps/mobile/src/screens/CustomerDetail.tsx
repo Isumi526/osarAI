@@ -82,7 +82,7 @@ export function CustomerDetail() {
   // 「削除」は論理削除(アーカイブ)。一覧に表示されなくなるが、履歴を含むデータは保持される
   // (ステータス概念自体はユーザーに意識させない・議事録『review』人力回答A)。
   async function onDelete() {
-    if (!id || !(await confirm('この顧客をアーカイブしますか？（一覧に表示されなくなります。データは保持されます）'))) return;
+    if (!id || !(await confirm('このつながりをアーカイブしますか？（一覧に表示されなくなります。データは保持されます）'))) return;
     try {
       await archiveCustomer(id);
       navigate('/');
@@ -92,7 +92,7 @@ export function CustomerDetail() {
   }
 
   if (loading) return <main className="screen">読み込み中…</main>;
-  if (!customer) return <main className="screen">顧客が見つかりません。<Link to="/">戻る</Link></main>;
+  if (!customer) return <main className="screen">つながりが見つかりません。<Link to="/">戻る</Link></main>;
 
   return (
     <main className="screen">

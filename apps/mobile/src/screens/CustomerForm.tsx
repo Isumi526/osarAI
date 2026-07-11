@@ -108,7 +108,7 @@ export function CustomerForm() {
 
   return (
     <main className="screen">
-      <h1>{isEdit ? '顧客を編集' : '新しい顧客'}</h1>
+      <h1>{isEdit ? 'つながりを編集' : '新しいつながり'}</h1>
 
       {!isEdit && (
         <section

@@ -56,7 +56,7 @@ const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX
     Illustration: ChatClockIllustration,
   },
   {
-    titleLines: ['顧客カード＋', 'タイムライン'],
+    titleLines: ['つながりカード＋', 'タイムライン'],
     body: '会った人の情報や会話の履歴が、いつでも見返せる形で残っていきます。',
     Illustration: CardTimelineIllustration,
   },

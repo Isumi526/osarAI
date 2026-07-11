@@ -796,7 +796,7 @@ function ScheduleForm({
     // 顧客未選択の場合はタイトル必須(議事録『review(2回目)』要望)。
     const selectedCustomerName = customers.find((c) => c.id === customerId)?.name;
     if (!title.trim() && !customerId) {
-      setError('タイトルを入力するか、顧客を選択してください。');
+      setError('タイトルを入力するか、つながりを選択してください。');
       return;
     }
     setSaving(true);
@@ -849,7 +849,7 @@ function ScheduleForm({
         <strong>{initial ? '予定を編集' : '予定を追加'}</strong>
         {/* 顧客プルダウンを最上部に移動(議事録要望・タイトルより先に選べるように) */}
         <label>
-          顧客（任意）
+          つながり（任意）
           <input
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
@@ -880,7 +880,7 @@ function ScheduleForm({
             <input
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
-              placeholder="新しい顧客の名前"
+              placeholder="新しいつながりの名前"
               style={{ width: '100%', padding: 10 }}
             />
             {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
@@ -912,11 +912,11 @@ function ScheduleForm({
             onClick={() => setAddingCustomer(true)}
             style={{ padding: 10, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)' }}
           >
-            + 新しい顧客を登録
+            + 新しいつながりを登録
           </button>
         )}
         <label>
-          タイトル{customerId ? '（任意・空欄なら顧客名を使用）' : ''}
+          タイトル{customerId ? '（任意・空欄ならつながり名を使用）' : ''}
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}

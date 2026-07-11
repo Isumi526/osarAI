@@ -98,8 +98,8 @@ export function Home() {
             { label: '今月のおさらい', value: stats.monthOsarai },
             { label: '累計アポ', value: stats.totalAppointments },
             { label: '累計おさらい', value: stats.totalOsarai },
-            { label: '今月の新規顧客', value: stats.monthNewCustomers },
-            { label: '累計顧客', value: stats.totalCustomers },
+            { label: '今月の新規つながり', value: stats.monthNewCustomers },
+            { label: '累計つながり', value: stats.totalCustomers },
             { label: '今月の会議', value: stats.monthMeetings },
             { label: '今後の会議', value: stats.upcomingMeetings },
           ].map((s) => (
@@ -182,7 +182,7 @@ export function Home() {
           <option value="cold">低</option>
         </select>
         <button onClick={() => navigate('/customers/new')} style={{ marginLeft: 'auto' }}>
-          ＋顧客
+          ＋つながり
         </button>
       </div>
 
@@ -191,7 +191,7 @@ export function Home() {
         <p>読み込み中…</p>
       ) : customers.length === 0 ? (
         <p style={{ color: '#6b6358' }}>
-          まだ顧客がいません。「＋顧客」または「おさらいする」から追加できます。
+          まだつながりがいません。「＋つながり」または「おさらいする」から追加できます。
         </p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
