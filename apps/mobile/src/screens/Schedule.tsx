@@ -166,8 +166,12 @@ export function SchedulePage() {
     }
   }
 
+  // 日を跨ぐ予定(例: 前日23:00〜当日1:00)もその日の分として拾えるよう、
+  // start_atが当日かどうかではなく「その日と重なるか」で判定する(バグ修正)。
   function schedulesOnDay(day: Date): Schedule[] {
-    return schedules.filter((s) => isSameDay(new Date(s.start_at), day));
+    const dayStart = startOfDay(day);
+    const dayEnd = addDays(dayStart, 1);
+    return schedules.filter((s) => new Date(s.start_at) < dayEnd && new Date(s.end_at) > dayStart);
   }
 
   const weekDays =
@@ -480,16 +484,25 @@ function TimeGrid({
                 {layout.map(({ schedule, col, cols }) => {
                   const start = new Date(schedule.start_at);
                   const end = new Date(schedule.end_at);
-                  const startMin = start.getHours() * 60 + start.getMinutes();
-                  const durMin = Math.max(20, (+end - +start) / 60000);
-                  const top = (startMin / 60) * HOUR_HEIGHT;
+                  const dayStart = startOfDay(day);
+                  const dayEnd = addDays(dayStart, 1);
+                  // 日を跨ぐ予定は、この日の枠(0:00〜24:00)にクリップして表示する
+                  // (バグ修正: 従来はクリップせず実際の長さで高さを取っていたため、
+                  // 24時を越える分がこの日の列からはみ出して描画されていた)。
+                  const continuesBefore = start < dayStart;
+                  const continuesAfter = end > dayEnd;
+                  const segStartMin = continuesBefore ? 0 : start.getHours() * 60 + start.getMinutes();
+                  const segEndMin = continuesAfter ? 24 * 60 : (+end - +dayStart) / 60000;
+                  const durMin = Math.max(20, segEndMin - segStartMin);
+                  const top = (segStartMin / 60) * HOUR_HEIGHT;
                   const height = (durMin / 60) * HOUR_HEIGHT;
                   const widthPct = 100 / cols;
                   const customer = customers.find((c) => c.id === schedule.customer_id);
                   return (
                     <button
-                      key={schedule.id}
+                      key={`${schedule.id}-${day.toDateString()}`}
                       onClick={() => onSelectSchedule(schedule)}
+                      title={continuesBefore || continuesAfter ? '日をまたぐ予定' : undefined}
                       style={{
                         position: 'absolute',
                         top,
@@ -498,8 +511,10 @@ function TimeGrid({
                         width: `${widthPct}%`,
                         background: 'var(--color-primary)',
                         color: '#fff',
+                        // 前後に続きがある側は角丸を付けない(切れている見た目にする)ことで
+                        // 日を跨いでいることを視覚的に示す。
                         border: '1px solid #fff',
-                        borderRadius: 4,
+                        borderRadius: `${continuesBefore ? 0 : 4}px ${continuesBefore ? 0 : 4}px ${continuesAfter ? 0 : 4}px ${continuesAfter ? 0 : 4}px`,
                         padding: 3,
                         fontSize: 10,
                         textAlign: 'left',
@@ -508,8 +523,10 @@ function TimeGrid({
                       }}
                     >
                       <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {continuesBefore && '⇡ '}
                         {schedule.category && `[${schedule.category}] `}
                         {schedule.title}
+                        {continuesAfter && ' ⇣'}
                       </div>
                       {customer && <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customer.name}</div>}
                     </button>

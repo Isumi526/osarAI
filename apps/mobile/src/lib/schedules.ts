@@ -23,11 +23,15 @@ export interface ScheduleInput {
 }
 
 export async function listSchedules(range: { from: string; to: string }): Promise<Schedule[]> {
+  // 日を跨ぐ予定(例: 前日23:00〜当日1:00)は開始時刻がrange.fromより前になり得るため、
+  // start_atだけでなく「期間と重なるか」(overlap: start_at < to && end_at > from)で
+  // 絞り込む(バグ修正: 従来はstart_atのみで絞っており、日を跨いで開始した予定が
+  // 表示範囲から丸ごと欠落していた)。
   const { data, error } = await supabase
     .from('schedules')
     .select('*')
-    .gte('start_at', range.from)
     .lt('start_at', range.to)
+    .gt('end_at', range.from)
     .order('start_at', { ascending: true });
   if (error) throw error;
   return (data as Schedule[]) ?? [];
