@@ -13,11 +13,12 @@ import { SchedulePage } from './screens/Schedule.js';
 import { SelfOsarai } from './screens/SelfOsarai.js';
 import { Welcome } from './screens/Welcome.js';
 import { BottomNav, BOTTOM_NAV_HEIGHT, useBottomNavVisible } from './components/BottomNav.js';
+import { NavGuardProvider } from './components/NavGuard.js';
 
 function AppRoutes() {
   const navVisible = useBottomNavVisible();
   return (
-    <>
+    <NavGuardProvider>
       <div style={{ paddingBottom: navVisible ? BOTTOM_NAV_HEIGHT : 0 }}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -34,7 +35,7 @@ function AppRoutes() {
         </Routes>
       </div>
       {navVisible && <BottomNav />}
-    </>
+    </NavGuardProvider>
   );
 }
 

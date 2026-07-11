@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { selfOsaraiTurn } from '../lib/selfOsarai.js';
 import { getMyProfile, saveSelfOsaraiExtraction } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -37,6 +38,8 @@ export function SelfOsarai() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  // ← 戻るボタンの確認条件(未保存の対話中)と同じ基準で、下部ナビタップ時も確認を挟む。
+  useRegisterNavGuard(!done && messages.length > 1);
 
   // 顧客向けおさらいと同じ、時間指定の深掘りセッション（既定5分・延長可）。
   // 最初の発話が送られてから計測開始。

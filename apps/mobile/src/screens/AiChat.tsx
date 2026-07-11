@@ -6,6 +6,8 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { askAdvice } from '../lib/advice.js';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { useConfirm } from '../components/ConfirmDialog.js';
+import { useRegisterNavGuard } from '../components/NavGuard.js';
 import type { ChatScope } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -25,6 +27,20 @@ export function AiChat() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
+  // 送信済みメッセージはその都度サーバーに保存されるため失われないが、
+  // まだ送信していない入力中のテキストは離脱すると失われる。「編集中」として
+  // 下部ナビ/戻るボタンの両方に確認ダイアログを挟む(議事録要望)。
+  useRegisterNavGuard(input.trim().length > 0);
+
+  async function onBack() {
+    if (input.trim()) {
+      const ok = await confirm('入力中の内容はまだ送信されていません。このまま戻りますか？（内容は失われます）');
+      if (!ok) return;
+    }
+    navigate(-1);
+  }
 
   // 顧客指定モード用に一覧を読み込む
   useEffect(() => {
@@ -102,7 +118,7 @@ export function AiChat() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
       <header className="screen-header">
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>AIに相談</strong>
         <span style={{ width: 48 }} />
       </header>
@@ -198,6 +214,7 @@ export function AiChat() {
           </button>
         )}
       </div>
+      {confirmDialog}
     </main>
   );
 }

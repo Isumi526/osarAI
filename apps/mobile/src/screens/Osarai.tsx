@@ -10,6 +10,7 @@ import { useLiveSpeech } from '../hooks/useLiveSpeech.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
@@ -57,6 +58,8 @@ export function Osarai() {
   const liveSpeech = useLiveSpeech();
   const bottomRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
+  // ← 戻るボタンの確認条件(未保存の対話中)と同じ基準で、下部ナビタップ時も確認を挟む。
+  useRegisterNavGuard(!done && messages.length > 1);
 
   // 時間指定の深掘りセッション（既定5分・延長可）。最初の発話が送られてから計測開始。
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
