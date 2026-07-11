@@ -114,13 +114,7 @@ export function Welcome() {
               戻る
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            style={{ flex: 1, padding: 12, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
-          >
-            スキップ
-          </button>
+          {/* スキップボタンは削除(離脱を防ぐため最後まで進めないと先に行けないようにする・議事録要望) */}
           <button type="button" onClick={() => setStep((s) => s + 1)} style={{ flex: 2, padding: 12 }}>
             次へ
           </button>
