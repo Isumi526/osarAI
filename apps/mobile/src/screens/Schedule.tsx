@@ -433,6 +433,7 @@ function ScheduleForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (saving || deleting) return; // 連打による二重送信を防止(ボタンのdisabledに加えて関数内でもガード)
     setSaving(true);
     setError(null);
     const input: ScheduleInput = {
