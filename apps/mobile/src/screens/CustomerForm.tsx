@@ -13,6 +13,7 @@ import {
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { RequiredMark } from '../components/RequiredMark.js';
 import type { Temperature } from '@osarai/shared';
 
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
@@ -193,7 +194,7 @@ export function CustomerForm() {
 
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
         <label>
-          名前
+          名前 <RequiredMark />
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
