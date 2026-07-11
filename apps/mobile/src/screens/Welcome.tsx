@@ -42,24 +42,26 @@ function LightbulbIllustration() {
   );
 }
 
-const STEPS: { title: string; body: string; Illustration: () => React.JSX.Element }[] = [
+// titleは自動改行に任せると中途半端な位置で折り返されるため、キリのいい語句の
+// 区切りで改行できるよう行の配列にする(バグ修正)。
+const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX.Element }[] = [
   {
-    title: '忙しくても、人を大切にできる自分に。',
+    titleLines: ['忙しくても、', '人を大切にできる自分に。'],
     body: 'osarAIは、人と会ったあとの「おさらい」を通じて、大切な人との関係を忘れずに育てるための相棒です。',
     Illustration: HeartIllustration,
   },
   {
-    title: '会ったあと5分の「AI対話おさらい」',
+    titleLines: ['会ったあと5分の', '「AI対話おさらい」'],
     body: 'AIが1問ずつ自然に聞いてくれるので、話すだけで顧客カードが自動で整理されます。',
     Illustration: ChatClockIllustration,
   },
   {
-    title: '顧客カード＋タイムライン',
+    titleLines: ['顧客カード＋', 'タイムライン'],
     body: '会った人の情報や会話の履歴が、いつでも見返せる形で残っていきます。',
     Illustration: CardTimelineIllustration,
   },
   {
-    title: 'AIに戦略を相談できる',
+    titleLines: ['AIに', '戦略を相談できる'],
     body: '「次に誰にどう連絡すればいいか」など、あなたの状況を踏まえてAIが一緒に考えます。',
     Illustration: LightbulbIllustration,
   },
@@ -76,7 +78,14 @@ export function Welcome() {
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
         <current.Illustration />
-        <h1 style={{ fontSize: 22, margin: '20px 0 16px' }}>{current.title}</h1>
+        <h1 style={{ fontSize: 22, margin: '20px 0 16px' }}>
+          {current.titleLines.map((line, i) => (
+            <span key={i}>
+              {i > 0 && <br />}
+              {line}
+            </span>
+          ))}
+        </h1>
         <p style={{ fontSize: 16, color: 'var(--color-text-muted)', lineHeight: 1.7 }}>{current.body}</p>
       </div>
 
