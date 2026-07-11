@@ -5,9 +5,13 @@ import type { Profile } from './db.js';
 
 export type Schedule = Database['public']['Tables']['schedules']['Row'];
 
+// カテゴリは汎用の固定リスト(select)から選ぶ想定だが、DBはtext(自由記述可)。
+export const SCHEDULE_CATEGORIES = ['アポ', '会議', '私用', 'その他'] as const;
+
 export interface ScheduleInput {
   title: string;
   customerId: string | null;
+  category: string | null;
   startAt: string; // ISO
   endAt: string; // ISO
 }
@@ -34,6 +38,7 @@ export async function createSchedule(
       owner_id: profile.id,
       customer_id: input.customerId,
       title: input.title,
+      category: input.category,
       start_at: input.startAt,
       end_at: input.endAt,
     })
@@ -49,6 +54,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
     .update({
       customer_id: input.customerId,
       title: input.title,
+      category: input.category,
       start_at: input.startAt,
       end_at: input.endAt,
       updated_at: new Date().toISOString(),

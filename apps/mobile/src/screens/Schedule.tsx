@@ -7,6 +7,7 @@ import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  SCHEDULE_CATEGORIES,
   type Schedule,
   type ScheduleInput,
 } from '../lib/schedules.js';
@@ -382,7 +383,10 @@ function TimeGrid({
                         display: 'block',
                       }}
                     >
-                      <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{schedule.title}</div>
+                      <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {schedule.category && `[${schedule.category}] `}
+                        {schedule.title}
+                      </div>
                       {customer && <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{customer.name}</div>}
                     </button>
                   );
@@ -417,6 +421,7 @@ function ScheduleForm({
   const [startAt, setStartAt] = useState(initial ? toDatetimeLocal(initial.start_at) : toDatetimeLocal(now.toISOString()));
   const [endAt, setEndAt] = useState(initial ? toDatetimeLocal(initial.end_at) : toDatetimeLocal(inHourLater.toISOString()));
   const [customerId, setCustomerId] = useState(initial?.customer_id ?? '');
+  const [category, setCategory] = useState(initial?.category ?? '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -439,6 +444,7 @@ function ScheduleForm({
     const input: ScheduleInput = {
       title: title.trim(),
       customerId: customerId || null,
+      category: category || null,
       startAt: new Date(startAt).toISOString(),
       endAt: new Date(endAt).toISOString(),
     };
@@ -504,6 +510,21 @@ function ScheduleForm({
             required
             style={{ width: '100%', padding: 10, marginTop: 4 }}
           />
+        </label>
+        <label>
+          カテゴリ（任意）
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            style={{ width: '100%', padding: 10, marginTop: 4 }}
+          >
+            <option value="">指定しない</option>
+            {SCHEDULE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           顧客（任意）

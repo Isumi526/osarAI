@@ -422,6 +422,7 @@ export type Database = {
       }
       schedules: {
         Row: {
+          category: string | null
           created_at: string
           customer_id: string | null
           end_at: string
@@ -434,6 +435,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           customer_id?: string | null
           end_at: string
@@ -446,6 +448,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           customer_id?: string | null
           end_at?: string
