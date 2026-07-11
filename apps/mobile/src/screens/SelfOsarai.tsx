@@ -38,6 +38,23 @@ export function SelfOsarai() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
+  // 顧客向けおさらいと同じ、時間指定の深掘りセッション（既定5分・延長可）。
+  // 最初の発話が送られてから計測開始。
+  const [remainingSec, setRemainingSec] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (remainingSec === null || done) return;
+    if (remainingSec <= 0) return;
+    const t = setInterval(() => setRemainingSec((s) => (s === null ? null : Math.max(0, s - 1))), 1000);
+    return () => clearInterval(t);
+  }, [remainingSec === null, done]);
+
+  function formatMMSS(sec: number) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
   // まだ何もやり取りしていない(初回ターン前)なら、名前・未登録項目に応じた挨拶に差し替える。
   useEffect(() => {
     getMyProfile()
@@ -69,6 +86,7 @@ export function SelfOsarai() {
     if (!text || sending || done) return;
     setError(null);
     setInput('');
+    setRemainingSec((s) => (s === null ? 300 : s));
     const history = messages;
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setSending(true);
@@ -120,8 +138,36 @@ export function SelfOsarai() {
           ← 戻る
         </button>
         <strong>自分をおさらい</strong>
-        <span style={{ width: 48 }} />
+        {remainingSec !== null && !done ? (
+          <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+            {formatMMSS(remainingSec)}
+          </span>
+        ) : (
+          <span style={{ width: 48 }} />
+        )}
       </header>
+
+      {remainingSec === 0 && !done && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary-border)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            marginTop: 8,
+            fontSize: 13,
+          }}
+        >
+          <span>予定の5分になりました。続けても、ここで終えても大丈夫です。</span>
+          <button type="button" onClick={() => setRemainingSec(300)} style={{ padding: '6px 10px', fontSize: 13, whiteSpace: 'nowrap' }}>
+            +5分延長
+          </button>
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto', margin: '12px 0' }}>
         {messages.map((m, i) => (
