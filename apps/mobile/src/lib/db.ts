@@ -17,8 +17,9 @@ export async function getMyProfile(): Promise<Profile | null> {
   return (data as Profile | null) ?? null;
 }
 
-// AI戦略相談のコンテキストに使う自由記述プロフィール（年齢/性別/経歴/仕事/扱い商品/目標）
-export async function updateMyUserProfile(userProfile: Record<string, string>): Promise<void> {
+// AI戦略相談のコンテキストに使う自由記述プロフィール（年齢/性別/経歴/仕事/扱い商品/目標）。
+// 目標(goals)は構造化配列を持つため値はstring以外(配列)も許容する。
+export async function updateMyUserProfile(userProfile: Record<string, unknown>): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser();

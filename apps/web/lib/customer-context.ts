@@ -70,8 +70,17 @@ const USER_PROFILE_LABEL: Record<string, string> = {
 export function formatUserProfile(userProfile: Record<string, unknown> | null): string | undefined {
   if (!userProfile) return undefined;
   const lines = Object.entries(userProfile)
-    .filter(([k, v]) => k !== 'notes' && typeof v === 'string' && v.trim())
+    .filter(([k, v]) => k !== 'notes' && k !== 'goals' && typeof v === 'string' && v.trim())
     .map(([k, v]) => `${USER_PROFILE_LABEL[k] ?? k}: ${v as string}`);
+
+  // 目標（goals: {text, by}[]）は「目標内容（いつまでに）」の形で複数行に整形する。
+  const goals = userProfile.goals;
+  if (Array.isArray(goals)) {
+    const goalLines = goals
+      .filter((g): g is { text: string; by?: string } => !!g && typeof g.text === 'string' && g.text.trim())
+      .map((g) => (g.by?.trim() ? `- ${g.text}（${g.by}）` : `- ${g.text}`));
+    if (goalLines.length > 0) lines.push(`目標:\n${goalLines.join('\n')}`);
+  }
 
   // 「自分をおさらいする」対話で蓄積した自由記述の気づき（notes: string[]）
   const notes = userProfile.notes;

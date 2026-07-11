@@ -5,14 +5,16 @@ import { supabase } from '../lib/supabase.js';
 import { enablePush, isPushSupported } from '../lib/push.js';
 import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
 
+// 目標は「目標内容+いつまでに」を複数登録できるよう別UI(goals)で扱うため、ここには含めない。
 const PROFILE_FIELDS: { key: string; label: string }[] = [
   { key: 'age', label: '年齢' },
   { key: 'gender', label: '性別' },
   { key: 'background', label: '経歴' },
   { key: 'job', label: '仕事' },
   { key: 'products', label: '扱っている商品' },
-  { key: 'goal', label: '目標' },
 ];
+
+type Goal = { text: string; by: string };
 
 export function Settings() {
   const [pushMsg, setPushMsg] = useState<string | null>(null);
@@ -20,6 +22,7 @@ export function Settings() {
 
   // AI戦略相談のコンテキストに使う自分のプロフィール
   const [userProfile, setUserProfile] = useState<Record<string, string>>({});
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
@@ -30,8 +33,19 @@ export function Settings() {
   useEffect(() => {
     getMyProfile()
       .then((p) => {
-        const up = (p?.user_profile as Record<string, string> | null) ?? {};
-        setUserProfile(up);
+        const raw = (p?.user_profile as Record<string, unknown> | null) ?? {};
+        // goals(構造化)以外の自由記述フィールドだけを文字列マップとして取り出す。
+        const { goals: rawGoals, goal: legacyGoal, ...rest } = raw as {
+          goals?: Goal[];
+          goal?: string;
+          [k: string]: unknown;
+        };
+        const strFields: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rest)) if (typeof v === 'string') strFields[k] = v;
+        setUserProfile(strFields);
+        // 旧: 単一のgoal(文字列) → 新: goals配列へ移行。
+        if (Array.isArray(rawGoals)) setGoals(rawGoals.filter((g) => g && typeof g.text === 'string'));
+        else if (legacyGoal) setGoals([{ text: legacyGoal, by: '' }]);
         if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 12));
       })
       .catch(() => {});
@@ -60,7 +74,9 @@ export function Settings() {
     setProfileSaving(true);
     setProfileMsg(null);
     try {
-      await updateMyUserProfile(userProfile);
+      // 空の目標行は保存しない。旧単一goalキーは残さない(goals配列へ一本化)。
+      const cleanGoals = goals.filter((g) => g.text.trim());
+      await updateMyUserProfile({ ...userProfile, goals: cleanGoals });
       setProfileMsg('保存しました。');
     } catch (e) {
       setProfileMsg(String(e instanceof Error ? e.message : e));
@@ -179,6 +195,45 @@ export function Settings() {
               />
             </label>
           ))}
+
+          {/* 目標は「目標内容+いつまでに」を複数登録できる(議事録要望) */}
+          <div style={{ fontSize: 13 }}>
+            目標
+            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+              {goals.map((g, i) => (
+                <div key={i} style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 8, padding: 8 }}>
+                  <input
+                    value={g.text}
+                    onChange={(e) => setGoals((gs) => gs.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
+                    placeholder="目標（例: 月間契約10件）"
+                    style={{ width: '100%', padding: 8, fontSize: 15 }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      value={g.by}
+                      onChange={(e) => setGoals((gs) => gs.map((x, j) => (j === i ? { ...x, by: e.target.value } : x)))}
+                      placeholder="いつまでに（例: 2026年内）"
+                      style={{ flex: 1, padding: 8, fontSize: 14 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setGoals((gs) => gs.filter((_, j) => j !== i))}
+                      style={{ padding: '8px 10px', background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b', fontSize: 13 }}
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setGoals((gs) => [...gs, { text: '', by: '' }])}
+                style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', fontSize: 13 }}
+              >
+                + 目標を追加
+              </button>
+            </div>
+          </div>
         </div>
         <button
           onClick={onSaveProfile}
