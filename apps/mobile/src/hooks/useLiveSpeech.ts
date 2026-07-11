@@ -53,8 +53,12 @@ export function useLiveSpeech(): LiveSpeech {
       rec.continuous = true;
       rec.interimResults = true;
       rec.onresult = (e) => {
+        // バグ修正: e.resultIndexから連結すると、そのイベントで新規に追加された
+        // 区間しか表示されず、既に確定済み(isFinal)の前半部分が表示から消えてしまい
+        // 実際の(全区間を対象にサーバーSTTする)確定後の文字起こし結果と食い違っていた。
+        // 常に0番目から全区間を連結し、これまで話した内容の累積を表示する。
         let text = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
+        for (let i = 0; i < e.results.length; i++) {
           text += e.results[i]?.[0]?.transcript ?? '';
         }
         setInterimText(text);
