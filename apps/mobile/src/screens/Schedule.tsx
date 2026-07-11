@@ -42,9 +42,12 @@ function startOfMonth(d: Date): Date {
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
+// 「週」タブは横幅が足りないモバイル画面向けに3日表示にする(議事録『review(2回目)』要望)。
+const MULTI_DAY_COUNT = 3;
+
 function rangeFor(view: ViewMode, anchor: Date): { from: Date; to: Date } {
   if (view === 'day') return { from: startOfDay(anchor), to: addDays(startOfDay(anchor), 1) };
-  if (view === 'week') return { from: startOfWeek(anchor), to: addDays(startOfWeek(anchor), 7) };
+  if (view === 'week') return { from: startOfDay(anchor), to: addDays(startOfDay(anchor), MULTI_DAY_COUNT) };
   // 月ビューは表示するグリッド(前後月の余白週含む)を丸ごと取得する
   const gridStart = startOfWeek(startOfMonth(anchor));
   return { from: gridStart, to: addDays(gridStart, 42) };
@@ -52,8 +55,8 @@ function rangeFor(view: ViewMode, anchor: Date): { from: Date; to: Date } {
 function fmtRangeLabel(view: ViewMode, anchor: Date): string {
   if (view === 'day') return anchor.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
   if (view === 'week') {
-    const s = startOfWeek(anchor);
-    const e = addDays(s, 6);
+    const s = startOfDay(anchor);
+    const e = addDays(s, MULTI_DAY_COUNT - 1);
     return `${s.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })} 〜 ${e.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}`;
   }
   return anchor.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
@@ -145,7 +148,7 @@ export function SchedulePage() {
 
   function shift(n: number) {
     if (view === 'day') setAnchor((a) => addDays(a, n));
-    else if (view === 'week') setAnchor((a) => addDays(a, n * 7));
+    else if (view === 'week') setAnchor((a) => addDays(a, n * MULTI_DAY_COUNT));
     else setAnchor((a) => new Date(a.getFullYear(), a.getMonth() + n, 1));
   }
 
@@ -164,24 +167,12 @@ export function SchedulePage() {
   }
 
   const weekDays =
-    view === 'week' ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor), i)) : [startOfDay(anchor)];
+    view === 'week' ? Array.from({ length: MULTI_DAY_COUNT }, (_, i) => addDays(startOfDay(anchor), i)) : [startOfDay(anchor)];
 
   return (
-    <main className="screen">
+    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
       <header className="screen-header">
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={openProposal}
-            disabled={proposalLoading}
-            style={{ padding: '0 10px', fontSize: 13, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-          >
-            {proposalLoading ? '作成中…' : '日程調整の文章'}
-          </button>
-          <button onClick={() => setEditing('new')} style={{ padding: '0 14px' }}>
-            + 予定
-          </button>
-        </div>
       </header>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -230,6 +221,7 @@ export function SchedulePage() {
             setAnchor(d);
             setView('day');
           }}
+          onSelectSchedule={(s) => setEditing(s)}
         />
       ) : (
         <TimeGrid
@@ -239,6 +231,20 @@ export function SchedulePage() {
           onSelectSchedule={(s) => setEditing(s)}
         />
       )}
+
+      {/* 操作ボタンを画面下部(親指の届く位置)に配置(議事録『review(2回目)』要望) */}
+      <div style={{ display: 'flex', gap: 8, paddingTop: 12, paddingBottom: 8, position: 'sticky', bottom: 56, background: 'var(--color-bg)' }}>
+        <button
+          onClick={openProposal}
+          disabled={proposalLoading}
+          style={{ flex: 1, padding: 12, fontSize: 14, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+        >
+          {proposalLoading ? '作成中…' : '日程調整の文章'}
+        </button>
+        <button onClick={() => setEditing('new')} style={{ flex: 1, padding: 12, fontSize: 14 }}>
+          + 予定
+        </button>
+      </div>
 
       {editing && profile && (
         <ScheduleForm
@@ -305,75 +311,99 @@ export function SchedulePage() {
   );
 }
 
-// ========== 月ビュー: 日付グリッド。予定が入った日をマークし、タップで日ビューへ ==========
+// ========== 月ビュー: 日付グリッド。予定のタイトル・開始時刻を表示し、タップで日ビュー/編集へ ==========
+// 画面下部に余白ができないよう、グリッド全体をflex:1で画面高さいっぱいにストレッチする
+// (議事録『review(2回目)』要望)。
+const MONTH_MAX_EVENTS_PER_CELL = 2;
+
 function MonthGrid({
   anchor,
   schedules,
   onSelectDay,
+  onSelectSchedule,
 }: {
   anchor: Date;
   schedules: Schedule[];
   onSelectDay: (d: Date) => void;
+  onSelectSchedule: (s: Schedule) => void;
 }) {
   const gridStart = startOfWeek(startOfMonth(anchor));
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const today = new Date();
-  const countByDay = new Map<string, number>();
-  for (const s of schedules) {
+  const itemsByDay = new Map<string, Schedule[]>();
+  for (const s of [...schedules].sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at))) {
     const d = new Date(s.start_at);
     const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    countByDay.set(key, (countByDay.get(key) ?? 0) + 1);
+    if (!itemsByDay.has(key)) itemsByDay.set(key, []);
+    itemsByDay.get(key)!.push(s);
   }
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div style={{ marginTop: 12, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
         {WEEKDAY_JA.map((w) => (
           <div key={w}>{w}</div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: 'repeat(6, 1fr)', gap: 2 }}>
         {days.map((d, i) => {
           const inMonth = d.getMonth() === anchor.getMonth();
           const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-          const count = countByDay.get(key) ?? 0;
+          const items = itemsByDay.get(key) ?? [];
           const isToday = isSameDay(d, today);
           return (
-            <button
+            <div
               key={i}
               onClick={() => onSelectDay(d)}
               style={{
-                aspectRatio: '1',
-                padding: 4,
+                padding: 3,
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
+                alignItems: 'stretch',
                 background: '#fff',
                 border: isToday ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                 borderRadius: 8,
                 opacity: inMonth ? 1 : 0.4,
+                overflow: 'hidden',
+                cursor: 'pointer',
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-primary)' : 'var(--color-text)' }}>
+              <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-primary)' : 'var(--color-text)' }}>
                 {d.getDate()}
               </span>
-              {count > 0 && (
-                <span
+              {items.slice(0, MONTH_MAX_EVENTS_PER_CELL).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectSchedule(s);
+                  }}
                   style={{
-                    marginTop: 2,
-                    fontSize: 10,
-                    color: '#fff',
-                    background: 'var(--color-primary)',
-                    borderRadius: 8,
-                    padding: '0 5px',
-                    lineHeight: '14px',
+                    marginTop: 1,
+                    padding: '1px 3px',
+                    background: 'var(--color-primary-light)',
+                    color: 'var(--color-primary)',
+                    border: 'none',
+                    borderRadius: 3,
+                    fontSize: 9,
+                    lineHeight: 1.3,
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    minHeight: 'auto',
+                    height: 'auto',
                   }}
                 >
-                  {count}
+                  {new Date(s.start_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} {s.title}
+                </button>
+              ))}
+              {items.length > MONTH_MAX_EVENTS_PER_CELL && (
+                <span style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 1 }}>
+                  +{items.length - MONTH_MAX_EVENTS_PER_CELL}件
                 </span>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
@@ -528,10 +558,17 @@ function ScheduleForm({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving || deleting) return; // 連打による二重送信を防止(ボタンのdisabledに加えて関数内でもガード)
+    // 顧客が選択されていればタイトル未入力でも保存できる(顧客名を自動でタイトルにする)。
+    // 顧客未選択の場合はタイトル必須(議事録『review(2回目)』要望)。
+    const selectedCustomerName = customers.find((c) => c.id === customerId)?.name;
+    if (!title.trim() && !customerId) {
+      setError('タイトルを入力するか、顧客を選択してください。');
+      return;
+    }
     setSaving(true);
     setError(null);
     const input: ScheduleInput = {
-      title: title.trim(),
+      title: title.trim() || selectedCustomerName || '',
       customerId: customerId || null,
       category: category || null,
       startAt: new Date(startAt).toISOString(),
@@ -572,11 +609,11 @@ function ScheduleForm({
       >
         <strong>{initial ? '予定を編集' : '予定を追加'}</strong>
         <label>
-          タイトル
+          タイトル{customerId ? '（任意・空欄なら顧客名を使用）' : ''}
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            required
+            required={!customerId}
             style={{ width: '100%', padding: 10, marginTop: 4 }}
           />
         </label>
