@@ -40,6 +40,23 @@ export async function appendUserProfileNotes(newNotes: string[]): Promise<void> 
   if (error) throw error;
 }
 
+// 「自分をおさらいする」対話の抽出結果(notes + job/products等の構造化フィールド)を
+// アトミックに保存する(migration 0013)。job/productsがuser_profileに反映されず、
+// 次回以降も未登録扱いのまま同じ質問を聞き直してしまうバグの修正。
+// notesの追記のみで構造化フィールドが無い場合は既存のappendUserProfileNotesと等価。
+export async function saveSelfOsaraiExtraction(
+  newNotes: string[],
+  fields: { job?: string; products?: string } = {},
+): Promise<void> {
+  const cleanFields = Object.fromEntries(Object.entries(fields).filter(([, v]) => !!v && v.trim()));
+  if (newNotes.length === 0 && Object.keys(cleanFields).length === 0) return;
+  const { error } = await supabase.rpc('merge_user_profile_fields', {
+    new_notes: newNotes,
+    new_fields: cleanFields,
+  });
+  if (error) throw error;
+}
+
 export async function listCustomers(opts: {
   status?: CustomerStatus;
   temperature?: Temperature;

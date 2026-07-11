@@ -18,7 +18,16 @@ const TURN_SCHEMA: GeminiSchema = {
   properties: {
     extracted: {
       type: 'object',
-      properties: { notes: { type: 'array', items: { type: 'string' } } },
+      properties: {
+        notes: { type: 'array', items: { type: 'string' } },
+        fields: {
+          type: 'object',
+          properties: {
+            job: { type: 'string', nullable: true },
+            products: { type: 'string', nullable: true },
+          },
+        },
+      },
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },

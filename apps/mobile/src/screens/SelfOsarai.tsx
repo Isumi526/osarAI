@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { selfOsaraiTurn } from '../lib/selfOsarai.js';
-import { appendUserProfileNotes, getMyProfile } from '../lib/db.js';
+import { getMyProfile, saveSelfOsaraiExtraction } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 
@@ -55,9 +55,9 @@ export function SelfOsarai() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, done]);
 
-  async function persist(notes: string[]) {
+  async function persist(notes: string[], fields?: { job?: string; products?: string }) {
     try {
-      await appendUserProfileNotes(notes);
+      await saveSelfOsaraiExtraction(notes, fields ?? {});
       setSaved(true);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
@@ -79,7 +79,7 @@ export function SelfOsarai() {
       }
       if (res.done) {
         setDone(true);
-        await persist(res.extracted.notes ?? []);
+        await persist(res.extracted.notes ?? [], res.extracted.fields);
       }
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
@@ -97,7 +97,7 @@ export function SelfOsarai() {
     try {
       const res = await selfOsaraiTurn({ message: '', history: messages, forceEnd: true });
       setDone(true);
-      await persist(res.extracted.notes ?? []);
+      await persist(res.extracted.notes ?? [], res.extracted.fields);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {

@@ -7,7 +7,7 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
 export interface SelfOsaraiTurnResponse {
   next_question: string | null;
   done: boolean;
-  extracted: { notes?: string[] };
+  extracted: { notes?: string[]; fields?: { job?: string; products?: string } };
   history: ChatMessage[];
 }
 

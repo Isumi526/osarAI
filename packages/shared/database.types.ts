@@ -560,6 +560,10 @@ export type Database = {
       }
       current_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
+      merge_user_profile_fields: {
+        Args: { new_fields: Json; new_notes: string[] }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
