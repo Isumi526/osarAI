@@ -165,7 +165,7 @@ export function AiChat() {
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8, paddingBottom: 8, paddingTop: 8, alignItems: 'flex-end', position: 'sticky', bottom: 0, background: 'var(--color-bg)' }}>
+      <div style={{ display: 'flex', gap: 8, paddingBottom: 8, paddingTop: 8, alignItems: 'flex-end', position: 'sticky', bottom: 56, background: 'var(--color-bg)' }}>
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
