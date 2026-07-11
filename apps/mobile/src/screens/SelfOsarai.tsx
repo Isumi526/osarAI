@@ -2,7 +2,7 @@
 // 何度でも実行可能。抽出結果(notes)はprofiles.user_profileに蓄積され、AI戦略相談の
 // コンテキストに含まれる。低優先度機能のためテキストのみ(音声入力なし)の軽量実装。
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { selfOsaraiTurn } from '../lib/selfOsarai.js';
 import { appendUserProfileNotes } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
@@ -14,6 +14,10 @@ const OPENING = '今日は最近のことでも、ふと考えていることで
 
 export function SelfOsarai() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // ウェルカム画面経由の初回セッションでは下部固定ナビを非表示にする(離脱防止・BottomNav.tsx
+  // のuseBottomNavVisible()と対応)。その分、画面の高さもフルに使う。
+  const fromWelcome = params.get('from') === 'welcome';
   const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING }]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -87,7 +91,7 @@ export function SelfOsarai() {
   }
 
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
+    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: fromWelcome ? '100dvh' : 'calc(100dvh - 56px)' }}>
       <header className="screen-header">
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
           ← 戻る
@@ -121,8 +125,8 @@ export function SelfOsarai() {
       {done ? (
         <section style={{ background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
           <p style={{ margin: '0 0 12px', fontWeight: 700 }}>{saved ? '記録しました。' : '保存中…'}</p>
-          <button onClick={() => navigate('/settings')} style={{ padding: 12, width: '100%' }}>
-            設定に戻る
+          <button onClick={() => navigate(fromWelcome ? '/' : '/settings')} style={{ padding: 12, width: '100%' }}>
+            {fromWelcome ? 'ホームに戻る' : '設定に戻る'}
           </button>
         </section>
       ) : (
