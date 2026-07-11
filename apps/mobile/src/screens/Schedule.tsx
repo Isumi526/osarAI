@@ -443,10 +443,26 @@ function TimeGrid({
   const today = new Date();
 
   return (
-    <div style={{ marginTop: 12, display: 'flex', border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-      <div ref={scrollRef} style={{ display: 'flex', width: '100%', maxHeight: 520, overflowY: 'auto' }}>
-        {/* 時刻ラベル列 */}
-        <div style={{ width: 36, flexShrink: 0, borderRight: '1px solid var(--color-border)' }}>
+    // バグ修正: 従来は「overflow:hidden の外側div」の中に「overflowY:auto の内側div」を
+    // ネストしており、スクロール中に日付ヘッダー(position:sticky)や縦線(border)が
+    // 消える/崩れることがあった(sticky位置計算の基準となるスクロール祖先が二重に
+    // なっていたため)。スクロールする要素自体にborder/角丸/背景を持たせ、
+    // overflow:hiddenの外側wrapperを廃止して一枚のdivに統合する。
+    <div
+      ref={scrollRef}
+      style={{
+        marginTop: 12,
+        display: 'flex',
+        width: '100%',
+        maxHeight: 520,
+        overflowY: 'auto',
+        border: '1px solid var(--color-border)',
+        borderRadius: 10,
+        background: '#fff',
+      }}
+    >
+      {/* 時刻ラベル列 */}
+      <div style={{ width: 36, flexShrink: 0, borderRight: '1px solid var(--color-border)' }}>
           <div style={{ height: 28 }} />
           {Array.from({ length: 24 }, (_, h) => (
             <div key={h} style={{ height: HOUR_HEIGHT, fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'right', paddingRight: 4, boxSizing: 'border-box', borderTop: '1px solid #f0ece5' }}>
@@ -537,7 +553,6 @@ function TimeGrid({
           );
         })}
       </div>
-    </div>
   );
 }
 
