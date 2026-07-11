@@ -93,6 +93,7 @@ export function Home() {
           }}
         >
           {[
+            { label: '今後の予定', value: stats.upcomingSchedules },
             { label: '今月のアポ', value: stats.monthAppointments },
             { label: '今月のおさらい', value: stats.monthOsarai },
             { label: '累計アポ', value: stats.totalAppointments },

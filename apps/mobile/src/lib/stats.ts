@@ -9,12 +9,14 @@ export interface PersonalStats {
   monthOsarai: number;
   totalAppointments: number;
   totalOsarai: number;
+  upcomingSchedules: number; // 今後(現在時刻以降)の予定件数。議事録『review(2回目)』要望の予定集計。
 }
 
 export async function getPersonalStats(): Promise<PersonalStats> {
   const monthStart = jstMonthStartUtc().toISOString();
+  const now = new Date().toISOString();
 
-  const [monthAppointments, monthOsarai, totalAppointments, totalOsarai] = await Promise.all([
+  const [monthAppointments, monthOsarai, totalAppointments, totalOsarai, upcomingSchedules] = await Promise.all([
     supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', monthStart),
     supabase
       .from('interactions')
@@ -23,6 +25,7 @@ export async function getPersonalStats(): Promise<PersonalStats> {
       .gte('met_at', monthStart),
     supabase.from('schedules').select('id', { count: 'exact', head: true }),
     supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('source', 'ai_dialogue'),
+    supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', now),
   ]);
 
   return {
@@ -30,5 +33,6 @@ export async function getPersonalStats(): Promise<PersonalStats> {
     monthOsarai: monthOsarai.count ?? 0,
     totalAppointments: totalAppointments.count ?? 0,
     totalOsarai: totalOsarai.count ?? 0,
+    upcomingSchedules: upcomingSchedules.count ?? 0,
   };
 }
