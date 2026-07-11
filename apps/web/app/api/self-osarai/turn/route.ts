@@ -25,6 +25,10 @@ const TURN_SCHEMA: GeminiSchema = {
           properties: {
             job: { type: 'string', nullable: true },
             products: { type: 'string', nullable: true },
+            age: { type: 'string', nullable: true },
+            gender: { type: 'string', nullable: true },
+            background: { type: 'string', nullable: true },
+            goal: { type: 'string', nullable: true },
           },
         },
       },

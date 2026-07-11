@@ -46,7 +46,7 @@ export async function appendUserProfileNotes(newNotes: string[]): Promise<void> 
 // notesの追記のみで構造化フィールドが無い場合は既存のappendUserProfileNotesと等価。
 export async function saveSelfOsaraiExtraction(
   newNotes: string[],
-  fields: { job?: string; products?: string } = {},
+  fields: { job?: string; products?: string; age?: string; gender?: string; background?: string; goal?: string } = {},
 ): Promise<void> {
   const cleanFields = Object.fromEntries(Object.entries(fields).filter(([, v]) => !!v && v.trim()));
   if (newNotes.length === 0 && Object.keys(cleanFields).length === 0) return;

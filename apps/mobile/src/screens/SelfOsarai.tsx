@@ -72,7 +72,10 @@ export function SelfOsarai() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, done]);
 
-  async function persist(notes: string[], fields?: { job?: string; products?: string }) {
+  async function persist(
+    notes: string[],
+    fields?: { job?: string; products?: string; age?: string; gender?: string; background?: string; goal?: string },
+  ) {
     try {
       await saveSelfOsaraiExtraction(notes, fields ?? {});
       setSaved(true);
