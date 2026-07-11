@@ -140,6 +140,11 @@ export function SelfOsarai() {
             </div>
           </div>
         ))}
+        {sending && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
+            <div style={{ color: '#9a9183', fontSize: 13 }}>AIが考えています…</div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
