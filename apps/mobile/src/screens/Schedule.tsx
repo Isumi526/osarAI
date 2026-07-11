@@ -682,6 +682,74 @@ function ScheduleForm({
         }}
       >
         <strong>{initial ? '予定を編集' : '予定を追加'}</strong>
+        {/* 顧客プルダウンを最上部に移動(議事録要望・タイトルより先に選べるように) */}
+        <label>
+          顧客（任意）
+          <input
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            placeholder="名前で絞り込み…"
+            style={{ width: '100%', padding: 10, marginTop: 4, marginBottom: 6 }}
+          />
+          <select
+            value={customerId ?? ''}
+            onChange={(e) => setCustomerId(e.target.value)}
+            style={{ width: '100%', padding: 10 }}
+          >
+            <option value="">指定しない</option>
+            {customers
+              .filter(
+                (c) =>
+                  c.id === customerId || // 選択中の顧客は絞り込みで隠れないよう常に残す
+                  c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()),
+              )
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        {addingCustomer ? (
+          <div style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 10, padding: 10 }}>
+            <input
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="新しい顧客の名前"
+              style={{ width: '100%', padding: 10 }}
+            />
+            {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingCustomer(false);
+                  setNewCustomerName('');
+                  setNewCustomerError(null);
+                }}
+                style={{ flex: 1, padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCustomer}
+                disabled={!newCustomerName.trim() || creatingCustomer}
+                style={{ flex: 1, padding: 10 }}
+              >
+                {creatingCustomer ? '登録中…' : '登録して選択'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddingCustomer(true)}
+            style={{ padding: 10, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)' }}
+          >
+            + 新しい顧客を登録
+          </button>
+        )}
         <label>
           タイトル{customerId ? '（任意・空欄なら顧客名を使用）' : ''}
           <input
@@ -752,73 +820,6 @@ function ScheduleForm({
             ))}
           </select>
         </label>
-        <label>
-          顧客（任意）
-          <input
-            value={customerSearch}
-            onChange={(e) => setCustomerSearch(e.target.value)}
-            placeholder="名前で絞り込み…"
-            style={{ width: '100%', padding: 10, marginTop: 4, marginBottom: 6 }}
-          />
-          <select
-            value={customerId ?? ''}
-            onChange={(e) => setCustomerId(e.target.value)}
-            style={{ width: '100%', padding: 10 }}
-          >
-            <option value="">指定しない</option>
-            {customers
-              .filter(
-                (c) =>
-                  c.id === customerId || // 選択中の顧客は絞り込みで隠れないよう常に残す
-                  c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()),
-              )
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        {addingCustomer ? (
-          <div style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 10, padding: 10 }}>
-            <input
-              value={newCustomerName}
-              onChange={(e) => setNewCustomerName(e.target.value)}
-              placeholder="新しい顧客の名前"
-              style={{ width: '100%', padding: 10 }}
-            />
-            {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddingCustomer(false);
-                  setNewCustomerName('');
-                  setNewCustomerError(null);
-                }}
-                style={{ flex: 1, padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateCustomer}
-                disabled={!newCustomerName.trim() || creatingCustomer}
-                style={{ flex: 1, padding: 10 }}
-              >
-                {creatingCustomer ? '登録中…' : '登録して選択'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setAddingCustomer(true)}
-            style={{ padding: 10, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)' }}
-          >
-            + 新しい顧客を登録
-          </button>
-        )}
         <label>
           メモ（任意）
           <textarea
