@@ -175,7 +175,8 @@ export function SelfOsarai() {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', margin: '12px 0' }}>
+      {/* バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上マージンを広げる */}
+      <div style={{ flex: 1, overflowY: 'auto', margin: '20px 0 12px' }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div
