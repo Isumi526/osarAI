@@ -509,6 +509,7 @@ function ScheduleForm({
   const [startAt, setStartAt] = useState(initial ? toDatetimeLocal(initial.start_at) : toDatetimeLocal(now.toISOString()));
   const [endAt, setEndAt] = useState(initial ? toDatetimeLocal(initial.end_at) : toDatetimeLocal(inHourLater.toISOString()));
   const [customerId, setCustomerId] = useState(initial?.customer_id ?? '');
+  const [customerSearch, setCustomerSearch] = useState('');
   const [category, setCategory] = useState(initial?.category ?? '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -616,17 +617,29 @@ function ScheduleForm({
         </label>
         <label>
           顧客（任意）
+          <input
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            placeholder="名前で絞り込み…"
+            style={{ width: '100%', padding: 10, marginTop: 4, marginBottom: 6 }}
+          />
           <select
             value={customerId ?? ''}
             onChange={(e) => setCustomerId(e.target.value)}
-            style={{ width: '100%', padding: 10, marginTop: 4 }}
+            style={{ width: '100%', padding: 10 }}
           >
             <option value="">指定しない</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
+            {customers
+              .filter(
+                (c) =>
+                  c.id === customerId || // 選択中の顧客は絞り込みで隠れないよう常に残す
+                  c.name.toLowerCase().includes(customerSearch.trim().toLowerCase()),
+              )
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
           </select>
         </label>
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
