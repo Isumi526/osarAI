@@ -3,14 +3,15 @@
 // /schedule 配下は予定タブ）。対話画面(Osarai/AiChat/SelfOsarai)は main の高さを
 // ナビ分減らしているため入力欄がナビと干渉しない。
 import { Link, useLocation } from 'react-router-dom';
+import { HomeIcon, ScheduleIcon, ChatIcon, SettingsIcon } from './NavIcons.js';
 
 export const BOTTOM_NAV_HEIGHT = 56;
 
 const TABS = [
-  { path: '/', label: 'ホーム' },
-  { path: '/schedule', label: '予定' },
-  { path: '/chat', label: '相談' },
-  { path: '/settings', label: '設定' },
+  { path: '/', label: 'ホーム', Icon: HomeIcon },
+  { path: '/schedule', label: '予定', Icon: ScheduleIcon },
+  { path: '/chat', label: '相談', Icon: ChatIcon },
+  { path: '/settings', label: '設定', Icon: SettingsIcon },
 ];
 
 export function BottomNav() {
@@ -32,20 +33,26 @@ export function BottomNav() {
     >
       {TABS.map((tab) => {
         const active = pathname === tab.path;
+        const { Icon } = tab;
         return (
           <Link
             key={tab.path}
             to={tab.path}
             style={{
               flex: 1,
-              textAlign: 'center',
-              padding: '10px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              padding: '8px 0',
               minHeight: BOTTOM_NAV_HEIGHT,
               color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
               fontWeight: active ? 700 : 400,
+              fontSize: 12,
               textDecoration: 'none',
             }}
           >
+            <Icon active={active} />
             {tab.label}
           </Link>
         );
