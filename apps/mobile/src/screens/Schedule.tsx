@@ -96,7 +96,7 @@ export function SchedulePage() {
 
   useEffect(() => {
     getMyProfile().then(setProfile);
-    listCustomers({}).then(setCustomers).catch(() => undefined);
+    listCustomers({ status: 'active' }).then(setCustomers).catch(() => undefined);
   }, []);
 
   function reload() {

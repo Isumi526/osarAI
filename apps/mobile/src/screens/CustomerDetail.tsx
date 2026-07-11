@@ -4,7 +4,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   getCustomer,
   listInteractions,
-  deleteCustomer,
+  archiveCustomer,
   type Customer,
   type Interaction,
 } from '../lib/db.js';
@@ -79,10 +79,12 @@ export function CustomerDetail() {
     }
   }
 
+  // 「削除」は論理削除(アーカイブ)。一覧に表示されなくなるが、履歴を含むデータは保持される
+  // (ステータス概念自体はユーザーに意識させない・議事録『review』人力回答A)。
   async function onDelete() {
-    if (!id || !(await confirm('この顧客を削除しますか？（履歴も消えます）'))) return;
+    if (!id || !(await confirm('この顧客をアーカイブしますか？（一覧に表示されなくなります。データは保持されます）'))) return;
     try {
-      await deleteCustomer(id);
+      await archiveCustomer(id);
       navigate('/');
     } catch (e) {
       setError(String(e));
@@ -107,7 +109,6 @@ export function CustomerDetail() {
               <TempIcon value={customer.temperature as Temperature} /> {TEMP_JA[customer.temperature as Temperature]}
             </>
           ) : '—'}
-          {'　'}/ {customer.status === 'active' ? '対応中' : 'アーカイブ'}
         </p>
         {customer.needs && <p style={{ margin: '4px 0' }}>ニーズ: {customer.needs}</p>}
         {customer.last_met_at && (
@@ -123,7 +124,7 @@ export function CustomerDetail() {
             onClick={onDelete}
             style={{ padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b' }}
           >
-            削除
+            アーカイブ
           </button>
         </div>
       </section>

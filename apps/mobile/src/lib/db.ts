@@ -69,11 +69,12 @@ export async function listInteractions(customerId: string): Promise<Interaction[
   return (data as Interaction[]) ?? [];
 }
 
+// ステータス(対応中/アーカイブ)はユーザーには意識させない概念。新規作成は常にactive、
+// 「削除」操作は物理削除ではなくarchivedへの論理削除として扱う(議事録『review』人力回答A)。
 export interface CustomerInput {
   name: string;
   temperature: Temperature | null;
   needs: string | null;
-  status: CustomerStatus;
 }
 
 export async function createCustomer(
@@ -88,7 +89,7 @@ export async function createCustomer(
       name: input.name,
       temperature: input.temperature,
       needs: input.needs,
-      status: input.status,
+      status: 'active' satisfies CustomerStatus,
     })
     .select()
     .single();
@@ -103,15 +104,18 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
       name: input.name,
       temperature: input.temperature,
       needs: input.needs,
-      status: input.status,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
   if (error) throw error;
 }
 
-export async function deleteCustomer(id: string): Promise<void> {
-  const { error } = await supabase.from('customers').delete().eq('id', id);
+// 「削除」は論理削除(status=archived)。一覧・選択肢からは外れるがデータ(履歴含む)は保持される。
+export async function archiveCustomer(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('customers')
+    .update({ status: 'archived' satisfies CustomerStatus, updated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
 }
 

@@ -5,14 +5,13 @@ import { listCustomers, getMyProfile, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { TempIcon } from '../components/TempIcon.js';
-import type { CustomerStatus, Temperature } from '@osarai/shared';
+import type { Temperature } from '@osarai/shared';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
 
 export function Home() {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [status, setStatus] = useState<CustomerStatus>('active');
   const [temp, setTemp] = useState<Temperature | ''>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,14 +44,16 @@ export function Home() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    listCustomers({ status, temperature: temp || undefined })
+    // ステータス(対応中/アーカイブ)概念はユーザーに意識させない。常にactiveのみ表示する
+    // (議事録『review』人力回答A・アーカイブ済みは一覧から外れる)。
+    listCustomers({ status: 'active', temperature: temp || undefined })
       .then((rows) => active && setCustomers(rows))
       .catch((e) => active && setError(String(e)))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [status, temp]);
+  }, [temp]);
 
   useEffect(() => {
     getEntitlement()
@@ -133,10 +134,6 @@ export function Home() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-        <select value={status} onChange={(e) => setStatus(e.target.value as CustomerStatus)}>
-          <option value="active">対応中</option>
-          <option value="archived">アーカイブ</option>
-        </select>
         <select value={temp} onChange={(e) => setTemp(e.target.value as Temperature | '')}>
           <option value="">温度感: 全部</option>
           <option value="hot">高</option>

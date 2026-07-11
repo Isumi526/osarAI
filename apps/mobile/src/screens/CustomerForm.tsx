@@ -10,7 +10,7 @@ import {
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
-import type { CustomerStatus, Temperature } from '@osarai/shared';
+import type { Temperature } from '@osarai/shared';
 
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 
@@ -22,7 +22,6 @@ export function CustomerForm() {
   const [name, setName] = useState('');
   const [temperature, setTemperature] = useState<Temperature | null>(null);
   const [needs, setNeeds] = useState('');
-  const [status, setStatus] = useState<CustomerStatus>('active');
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +73,6 @@ export function CustomerForm() {
         setName(c.name);
         setTemperature((c.temperature as Temperature | null) ?? null);
         setNeeds(c.needs ?? '');
-        setStatus(c.status as CustomerStatus);
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -84,7 +82,7 @@ export function CustomerForm() {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const input: CustomerInput = { name, temperature, needs: needs || null, status };
+    const input: CustomerInput = { name, temperature, needs: needs || null };
     try {
       if (isEdit && id) {
         await updateCustomer(id, input);
@@ -202,20 +200,6 @@ export function CustomerForm() {
             style={{ width: '100%', padding: 10, fontSize: 16 }}
           />
         </label>
-
-        {isEdit && (
-          <label>
-            ステータス
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as CustomerStatus)}
-              style={{ width: '100%', padding: 10, fontSize: 16 }}
-            >
-              <option value="active">対応中</option>
-              <option value="archived">アーカイブ</option>
-            </select>
-          </label>
-        )}
 
         {error && <p style={{ color: '#c0392b' }}>{error}</p>}
         <div style={{ display: 'flex', gap: 8 }}>
