@@ -25,6 +25,9 @@ export function AiChat() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AIが生成中でも続けて送信でき、受け取った順に1件ずつ処理する(議事録要望・Claude風)。
+  const [queue, setQueue] = useState<string[]>([]);
+  const processingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -32,7 +35,7 @@ export function AiChat() {
   // 送信済みメッセージはその都度サーバーに保存されるため失われないが、
   // まだ送信していない入力中のテキストは離脱すると失われる。「編集中」として
   // 下部ナビ/戻るボタンの両方に確認ダイアログを挟む(議事録要望)。
-  useRegisterNavGuard(input.trim().length > 0);
+  useRegisterNavGuard(input.trim().length > 0 || sending);
 
   async function onBack() {
     if (input.trim()) {
@@ -66,9 +69,10 @@ export function AiChat() {
     setMessages([]);
   }
 
-  async function send() {
+  // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
+  function send() {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text) return;
     if (scope === 'customer' && !customerId) {
       setError('相談する顧客を選んでください。');
       return;
@@ -76,32 +80,43 @@ export function AiChat() {
     setError(null);
     setInput('');
     setMessages((m) => [...m, { role: 'user', content: text }]);
-    setSending(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const res = await askAdvice({ message: text, scope, customerId, chatId }, controller.signal);
-      setChatId(res.chatId);
-      setMessages((m) => [...m, { role: 'assistant', content: res.reply }]);
-    } catch (e) {
-      // 停止(abort)は正常な中断としてエラー表示しない。直近の発話を入力欄に戻して編集可能にする。
-      if (controller.signal.aborted) {
-        setInput(text);
-        setMessages((m) => m.slice(0, -1));
-      } else {
-        setError(String(e instanceof Error ? e.message : e));
-        setInput(text);
-        setMessages((m) => m.slice(0, -1));
-      }
-    } finally {
-      abortRef.current = null;
-      setSending(false);
-    }
+    setQueue((q) => [...q, text]);
   }
 
-  // 生成中の停止: 進行中リクエストをabortし、直近の発話を入力欄に戻す(sendのcatchで処理)。
+  // キューを1件ずつ順番に処理するワーカー。chatId更新→再評価で次の1件へ進む。
+  // processingRefで多重起動を防ぐ(処理中のscope/customerId/chatId変化は無視)。
+  useEffect(() => {
+    if (processingRef.current || queue.length === 0) return;
+    processingRef.current = true;
+    const text = queue[0]!;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setSending(true);
+    askAdvice({ message: text, scope, customerId, chatId }, controller.signal)
+      .then((res) => {
+        setChatId(res.chatId);
+        setMessages((m) => [...m, { role: 'assistant', content: res.reply }]);
+        setQueue((q) => q.slice(1));
+      })
+      .catch((e) => {
+        // 停止(abort)はエラー表示しない。停止/エラーともキューを破棄し中断する。
+        if (!controller.signal.aborted) {
+          setError(String(e instanceof Error ? e.message : e));
+        }
+        setQueue([]);
+      })
+      .finally(() => {
+        abortRef.current = null;
+        setSending(false);
+        processingRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, chatId, scope, customerId]);
+
+  // 生成中の停止: 進行中リクエストをabortし、未処理のキューも破棄する。
   function stopGenerating() {
     abortRef.current?.abort();
+    setQueue([]);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -189,7 +204,6 @@ export function AiChat() {
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           rows={1}
-          disabled={sending}
           style={{
             flex: 1,
             padding: 12,
@@ -200,19 +214,19 @@ export function AiChat() {
             fontSize: 15,
           }}
         />
-        {sending ? (
+        {/* 生成中でも送信ボタンは有効(キューに積める)。生成中は停止ボタンも並べる。 */}
+        {sending && (
           <button
             onClick={stopGenerating}
             aria-label="生成を停止"
-            style={{ padding: '0 18px', minHeight: 44, background: '#c0392b' }}
+            style={{ padding: '0 14px', minHeight: 44, background: '#c0392b' }}
           >
-            ■ 停止
-          </button>
-        ) : (
-          <button onClick={send} disabled={!input.trim()} style={{ padding: '0 18px', minHeight: 44 }}>
-            送信
+            ■
           </button>
         )}
+        <button onClick={send} disabled={!input.trim()} style={{ padding: '0 18px', minHeight: 44 }}>
+          送信
+        </button>
       </div>
       {confirmDialog}
     </main>
