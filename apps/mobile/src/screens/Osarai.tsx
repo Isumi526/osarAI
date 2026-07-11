@@ -10,6 +10,7 @@ import { useLiveSpeech } from '../hooks/useLiveSpeech.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -362,6 +363,7 @@ export function Osarai() {
         confirmed ? (
           <section
             style={{
+              position: 'relative',
               background: 'var(--color-primary-light)',
               border: '1px solid var(--color-primary-border)',
               borderRadius: 16,
@@ -369,6 +371,7 @@ export function Osarai() {
               textAlign: 'center',
             }}
           >
+            <ConfettiBurst />
             <svg width="56" height="56" viewBox="0 0 56 56" style={{ margin: '0 auto 16px' }} aria-hidden="true">
               <circle cx="28" cy="28" r="28" fill="var(--color-primary)" />
               <path
