@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { askAdvice } from '../lib/advice.js';
 import { listCustomers, type Customer } from '../lib/db.js';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import type { ChatScope } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -166,7 +167,7 @@ export function AiChat() {
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: 8, paddingBottom: 8, paddingTop: 8, alignItems: 'flex-end', position: 'sticky', bottom: 56, background: 'var(--color-bg)' }}>
-        <textarea
+        <AutoResizeTextarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}

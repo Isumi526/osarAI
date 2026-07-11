@@ -11,6 +11,7 @@ import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -449,7 +450,7 @@ export function Osarai() {
 
             <label style={{ display: 'block', marginBottom: 10 }}>
               要点（1行に1つ）
-              <textarea
+              <AutoResizeTextarea
                 value={editPoints}
                 onChange={(e) => setEditPoints(e.target.value)}
                 rows={3}
@@ -459,7 +460,7 @@ export function Osarai() {
 
             <label style={{ display: 'block', marginBottom: 10 }}>
               ニーズ（1行に1つ）
-              <textarea
+              <AutoResizeTextarea
                 value={editNeeds}
                 onChange={(e) => setEditNeeds(e.target.value)}
                 rows={2}
@@ -469,7 +470,7 @@ export function Osarai() {
 
             <label style={{ display: 'block', marginBottom: 12 }}>
               次アクション（1行に1つ）
-              <textarea
+              <AutoResizeTextarea
                 value={editNextActions}
                 onChange={(e) => setEditNextActions(e.target.value)}
                 rows={2}
@@ -578,7 +579,7 @@ export function Osarai() {
               )}
             </button>
           )}
-          <textarea
+          <AutoResizeTextarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}

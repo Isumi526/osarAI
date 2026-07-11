@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { selfOsaraiTurn } from '../lib/selfOsarai.js';
 import { appendUserProfileNotes } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -137,7 +138,7 @@ export function SelfOsarai() {
             </button>
           )}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-            <textarea
+            <AutoResizeTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {

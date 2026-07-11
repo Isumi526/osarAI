@@ -10,6 +10,7 @@ import {
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import type { Temperature } from '@osarai/shared';
 
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
@@ -118,7 +119,7 @@ export function CustomerForm() {
           <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 14 }}>
             AIで解析して入力（任意）
           </p>
-          <textarea
+          <AutoResizeTextarea
             value={analyzeText}
             onChange={(e) => setAnalyzeText(e.target.value)}
             placeholder="紹介文や自己紹介の文面を貼り付け…"
@@ -193,7 +194,7 @@ export function CustomerForm() {
 
         <label>
           ニーズ・メモ
-          <textarea
+          <AutoResizeTextarea
             value={needs}
             onChange={(e) => setNeeds(e.target.value)}
             rows={3}
