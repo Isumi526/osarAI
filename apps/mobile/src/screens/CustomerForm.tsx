@@ -109,6 +109,32 @@ export function CustomerForm() {
       {!isEdit && (
         <section
           style={{
+            background: '#fff',
+            border: '1px solid var(--color-border)',
+            borderRadius: 12,
+            padding: 14,
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 14 }}>登録方法を選べます</p>
+          {/* つながりAI登録: まだ関係が浅い相手はテキスト、関係がある相手はAI対話がおすすめ。
+              AI対話登録は既存の顧客おさらい(顧客未指定→完了時に新規カード生成)フローを流用する。 */}
+          <button
+            type="button"
+            onClick={() => navigate('/osarai')}
+            style={{ width: '100%', padding: 12, fontSize: 14, marginTop: 4 }}
+          >
+            AIと対話して登録する（つながりAI登録）
+          </button>
+          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+            すでに関係性がある人・何度か話したことがある人におすすめ。AIがどんな人かを深掘って聞いてくれます。
+          </p>
+        </section>
+      )}
+
+      {!isEdit && (
+        <section
+          style={{
             background: 'var(--color-primary-light)',
             border: '1px solid var(--color-primary-border)',
             borderRadius: 12,
@@ -117,7 +143,10 @@ export function CustomerForm() {
           }}
         >
           <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 14 }}>
-            AIで解析して入力（任意）
+            テキスト・画像から登録（つながりテキスト登録・任意）
+          </p>
+          <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+            まだ話したことがない・知り合ったばかりの相手におすすめ。
           </p>
           <AutoResizeTextarea
             value={analyzeText}
