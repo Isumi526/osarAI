@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { osaraiTurn, transcribeAudio } from '../lib/osarai.js';
 import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
+import { useLiveSpeech } from '../hooks/useLiveSpeech.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
@@ -51,6 +52,7 @@ export function Osarai() {
   const [confirmed, setConfirmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const recorder = useRecorder();
+  const liveSpeech = useLiveSpeech();
   const bottomRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -144,12 +146,17 @@ export function Osarai() {
     setError(null);
     setTranscribeError(null);
     if (recorder.recording) {
+      liveSpeech.stop(); // 確定はサーバーSTTが行うため、プレビュー用の認識はここで破棄
       const blob = await recorder.stop();
       if (!blob) return;
       await runTranscribe(blob);
     } else {
       await recorder.start();
-      if (recorder.error) setError(recorder.error);
+      if (recorder.error) {
+        setError(recorder.error);
+        return;
+      }
+      liveSpeech.start(); // 非対応ブラウザではsupported=falseのため何も起きず、従来どおりのフローになる
     }
   }
 
@@ -307,6 +314,23 @@ export function Osarai() {
             {m.content}
           </div>
         ))}
+        {recorder.recording && liveSpeech.supported && (
+          <div
+            style={{
+              justifySelf: 'end',
+              maxWidth: '85%',
+              background: '#fd780f',
+              opacity: 0.6,
+              color: '#fff',
+              borderRadius: 14,
+              padding: '10px 14px',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.6,
+            }}
+          >
+            {liveSpeech.interimText || '（話した内容がここに表示されます…）'}
+          </div>
+        )}
         {sending && (
           <div style={{ justifySelf: 'start', color: '#9a9183', fontSize: 13 }}>AIが考えています…</div>
         )}
