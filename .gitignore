@@ -32,6 +32,9 @@ coverage/
 .vercel
 .claude/scheduled_tasks.lock
 
+# /run dispatcher local dedup state (machine-local, not shared across envs)
+scripts/.dispatcher-state.json
+
 # playwright
 test-results/
 playwright-report/
