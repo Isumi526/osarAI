@@ -210,7 +210,16 @@ export function Settings() {
 
       <button
         onClick={() => supabase.auth.signOut()}
-        style={{ marginTop: 16, padding: 12, fontSize: 16 }}
+        style={{
+          display: 'block',
+          margin: '24px auto 0',
+          padding: '8px 16px',
+          background: 'none',
+          border: 'none',
+          color: 'var(--color-text-muted)',
+          fontSize: 13,
+          textDecoration: 'underline',
+        }}
       >
         ログアウト
       </button>
