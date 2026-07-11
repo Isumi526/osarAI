@@ -1,6 +1,6 @@
 // スケジュール管理（月/週/日 グリッドカレンダー・顧客紐付け任意）。§14フェーズ後追加。
 // Google/Appleカレンダー品質のグリッドUIに刷新（旧: アジェンダ形式のリスト表示）。
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { listCustomers, getMyProfile, createCustomer, type Customer, type Profile } from '../lib/db.js';
 import {
   listSchedules,
@@ -40,6 +40,12 @@ function startOfWeek(d: Date): Date {
 }
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function addMonths(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + n, 1);
+}
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}`;
 }
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -104,7 +110,36 @@ export function SchedulePage() {
   const [presetSlot, setPresetSlot] = useState<Date | null>(null);
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
+  // 月表示の無限スクロール(回答A): 縦に連続表示する月のリスト。上下端で前後の月を継ぎ足す。
+  const [monthList, setMonthList] = useState<Date[]>([]);
+  const monthScrollRef = useRef<HTMLDivElement>(null);
+  const prependAdjustRef = useRef<number | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
+
+  // 月表示に入る/基準日(今日ボタン等)が変わったら、その月を中心に前後1ヶ月で初期化。
+  useEffect(() => {
+    if (view !== 'month') return;
+    const base = startOfMonth(anchor);
+    setMonthList([addMonths(base, -1), base, addMonths(base, 1)]);
+  }, [view, anchor]);
+
+  // prepend(上方向の月追加)後にスクロール位置を補正し、表示のジャンプを防ぐ。
+  useLayoutEffect(() => {
+    if (prependAdjustRef.current == null || !monthScrollRef.current) return;
+    const el = monthScrollRef.current;
+    el.scrollTop += el.scrollHeight - prependAdjustRef.current;
+    prependAdjustRef.current = null;
+  }, [monthList]);
+
+  function onMonthScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (el.scrollTop < 150 && prependAdjustRef.current == null) {
+      prependAdjustRef.current = el.scrollHeight;
+      setMonthList((list) => (list.length ? [addMonths(list[0]!, -1), ...list] : list));
+    } else if (el.scrollHeight - el.scrollTop - el.clientHeight < 150) {
+      setMonthList((list) => (list.length ? [...list, addMonths(list[list.length - 1]!, 1)] : list));
+    }
+  }
 
   useEffect(() => {
     getMyProfile().then(setProfile);
@@ -141,7 +176,15 @@ export function SchedulePage() {
   }
 
   function reload() {
-    const { from, to } = rangeFor(view, anchor);
+    // 月表示の無限スクロール時は、表示中の全月のグリッド範囲をまとめて取得する。
+    let from: Date;
+    let to: Date;
+    if (view === 'month' && monthList.length) {
+      from = startOfWeek(startOfMonth(monthList[0]!));
+      to = addDays(startOfWeek(startOfMonth(monthList[monthList.length - 1]!)), 42);
+    } else {
+      ({ from, to } = rangeFor(view, anchor));
+    }
     setLoading(true);
     listSchedules({ from: from.toISOString(), to: to.toISOString() })
       .then(setSchedules)
@@ -149,7 +192,8 @@ export function SchedulePage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(reload, [view, anchor]);
+  // 月表示は monthList、それ以外は view/anchor でリロード。
+  useEffect(reload, [view, anchor, monthList]);
 
   function shift(n: number) {
     if (view === 'day') setAnchor((a) => addDays(a, n));
@@ -223,15 +267,30 @@ export function SchedulePage() {
       {loading ? (
         <p style={{ marginTop: 16 }}>読み込み中…</p>
       ) : view === 'month' ? (
-        <MonthGrid
-          anchor={anchor}
-          schedules={schedules}
-          onSelectDay={(d) => {
-            setAnchor(d);
-            setView('day');
-          }}
-          onSelectSchedule={(s) => setEditing(s)}
-        />
+        // 月表示は縦に連続表示(無限スクロール)。上下端で前後の月を継ぎ足す(回答A)。
+        <div
+          ref={monthScrollRef}
+          onScroll={onMonthScroll}
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: 12 }}
+        >
+          {monthList.map((m) => (
+            <div key={monthKey(m)}>
+              <div style={{ position: 'sticky', top: 0, background: 'var(--color-bg)', padding: '4px 0', fontSize: 14, fontWeight: 700, zIndex: 1 }}>
+                {m.getFullYear()}年{m.getMonth() + 1}月
+              </div>
+              <MonthGrid
+                anchor={m}
+                schedules={schedules}
+                fixedHeight
+                onSelectDay={(d) => {
+                  setAnchor(d);
+                  setView('day');
+                }}
+                onSelectSchedule={(s) => setEditing(s)}
+              />
+            </div>
+          ))}
+        </div>
       ) : (
         <TimeGrid
           days={weekDays}
@@ -347,11 +406,14 @@ function MonthGrid({
   schedules,
   onSelectDay,
   onSelectSchedule,
+  fixedHeight = false,
 }: {
   anchor: Date;
   schedules: Schedule[];
   onSelectDay: (d: Date) => void;
   onSelectSchedule: (s: Schedule) => void;
+  // 無限スクロール(複数月を縦に積む)時は各月を固定高にする。単月表示時はflex:1で画面いっぱい。
+  fixedHeight?: boolean;
 }) {
   const gridStart = startOfWeek(startOfMonth(anchor));
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
@@ -365,13 +427,21 @@ function MonthGrid({
   }
 
   return (
-    <div style={{ marginTop: 12, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={fixedHeight ? { marginTop: 8 } : { marginTop: 12, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
         {WEEKDAY_JA.map((w) => (
           <div key={w}>{w}</div>
         ))}
       </div>
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: 'repeat(6, 1fr)', gap: 2 }}>
+      <div
+        style={{
+          ...(fixedHeight ? {} : { flex: 1 }),
+          display: 'grid',
+          gridTemplateColumns: 'repeat(7, 1fr)',
+          gridTemplateRows: fixedHeight ? 'repeat(6, 76px)' : 'repeat(6, 1fr)',
+          gap: 2,
+        }}
+      >
         {days.map((d, i) => {
           const inMonth = d.getMonth() === anchor.getMonth();
           const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
