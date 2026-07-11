@@ -15,6 +15,8 @@ export interface AdviceContext {
   scope: 'all' | 'customer';
   /** コンテキスト化した顧客データ（整形済みテキスト）。無ければ 'データなし' */
   data: string;
+  /** 相談者自身のプロフィール（整形済みテキスト）。未登録なら省略可 */
+  userProfile?: string;
 }
 
 export function buildAdvicePrompt(ctx: AdviceContext): string {
@@ -22,5 +24,8 @@ export function buildAdvicePrompt(ctx: AdviceContext): string {
     ctx.scope === 'customer'
       ? '【対象顧客のデータ】'
       : '【あなたの顧客全体のサマリ】';
-  return [ADVICE_SYSTEM_PROMPT, `${header}\n${ctx.data}`].join('\n\n');
+  const parts = [ADVICE_SYSTEM_PROMPT];
+  if (ctx.userProfile) parts.push(`【相談者自身のプロフィール】\n${ctx.userProfile}`);
+  parts.push(`${header}\n${ctx.data}`);
+  return parts.join('\n\n');
 }

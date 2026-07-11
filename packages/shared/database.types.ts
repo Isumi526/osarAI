@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -123,6 +118,24 @@ export type Database = {
           },
         ]
       }
+      cron_runs: {
+        Row: {
+          created_at: string
+          job: string
+          run_date: string
+        }
+        Insert: {
+          created_at?: string
+          job: string
+          run_date: string
+        }
+        Update: {
+          created_at?: string
+          job?: string
+          run_date?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           created_at: string
@@ -133,6 +146,7 @@ export type Database = {
           needs: string | null
           org_id: string
           owner_id: string
+          relation_type: string | null
           status: string
           temperature: string | null
           updated_at: string
@@ -146,6 +160,7 @@ export type Database = {
           needs?: string | null
           org_id: string
           owner_id: string
+          relation_type?: string | null
           status?: string
           temperature?: string | null
           updated_at?: string
@@ -159,6 +174,7 @@ export type Database = {
           needs?: string | null
           org_id?: string
           owner_id?: string
+          relation_type?: string | null
           status?: string
           temperature?: string | null
           updated_at?: string
@@ -334,7 +350,9 @@ export type Database = {
           id: string
           industry: string | null
           org_id: string
+          referred_by: string | null
           role: string
+          user_profile: Json
         }
         Insert: {
           created_at?: string
@@ -342,7 +360,9 @@ export type Database = {
           id: string
           industry?: string | null
           org_id: string
+          referred_by?: string | null
           role?: string
+          user_profile?: Json
         }
         Update: {
           created_at?: string
@@ -350,7 +370,9 @@ export type Database = {
           id?: string
           industry?: string | null
           org_id?: string
+          referred_by?: string | null
           role?: string
+          user_profile?: Json
         }
         Relationships: [
           {
@@ -358,6 +380,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -394,9 +423,101 @@ export type Database = {
           },
         ]
       }
+      schedules: {
+        Row: {
+          category: string | null
+          created_at: string
+          customer_id: string | null
+          end_at: string
+          id: string
+          location: string | null
+          mode: string | null
+          notes: string | null
+          org_id: string
+          owner_id: string
+          reminded_at: string | null
+          start_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          customer_id?: string | null
+          end_at: string
+          id?: string
+          location?: string | null
+          mode?: string | null
+          notes?: string | null
+          org_id: string
+          owner_id: string
+          reminded_at?: string | null
+          start_at: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          customer_id?: string | null
+          end_at?: string
+          id?: string
+          location?: string | null
+          mode?: string | null
+          notes?: string | null
+          org_id?: string
+          owner_id?: string
+          reminded_at?: string | null
+          start_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedules_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stripe_webhook_events: {
+        Row: {
+          created_at: string
+          id: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          type?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           current_period_end: string | null
+          last_stripe_event_at: string | null
           plan: string | null
           promo_code: string | null
           status: string | null
@@ -408,6 +529,7 @@ export type Database = {
         }
         Insert: {
           current_period_end?: string | null
+          last_stripe_event_at?: string | null
           plan?: string | null
           promo_code?: string | null
           status?: string | null
@@ -419,6 +541,7 @@ export type Database = {
         }
         Update: {
           current_period_end?: string | null
+          last_stripe_event_at?: string | null
           plan?: string | null
           promo_code?: string | null
           status?: string | null
@@ -443,8 +566,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      append_user_profile_notes: {
+        Args: { new_notes: string[] }
+        Returns: undefined
+      }
       current_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
+      merge_user_profile_fields: {
+        Args: { new_fields: Json; new_notes: string[] }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
@@ -580,3 +711,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

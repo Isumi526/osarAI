@@ -27,6 +27,21 @@ export function priceIdForPlan(plan: PlanId): string {
   }
 }
 
+// Price ID → プラン（webhook側でStripeの正=price idからplanを同期するための逆引き。A1対策）。
+export function planForPriceId(priceId: string | null | undefined): PlanId | null {
+  if (!priceId) return null;
+  if (priceId === process.env.STRIPE_PRICE_LIGHT) return 'light';
+  if (priceId === process.env.STRIPE_PRICE_STANDARD) return 'standard';
+  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro';
+  return null;
+}
+
+/** Subscriptionオブジェクトから現在のprice idを取り出す（先頭item基準・§11は1商品固定）。 */
+export function priceIdFromSubscription(sub: Stripe.Subscription): string | null {
+  const item = sub.items.data[0];
+  return item?.price?.id ?? null;
+}
+
 /** UNIX秒 → ISO文字列（null安全）。 */
 export function toIso(unixSeconds: number | null | undefined): string | null {
   return unixSeconds ? new Date(unixSeconds * 1000).toISOString() : null;

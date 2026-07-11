@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
 // 開発時は Web の dev サーバー。Capacitor 実機ビルドでは本番 URL を .env で差し込む。
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3000';
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+export async function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -19,6 +19,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };

@@ -10,6 +10,7 @@ node_modules/
 # build outputs
 dist/
 .next/
+.next-*/
 out/
 build/
 *.tsbuildinfo
@@ -28,3 +29,14 @@ supabase/.temp/
 .vscode/
 .idea/
 coverage/
+.vercel
+.claude/scheduled_tasks.lock
+
+# /run dispatcher local dedup state (machine-local, not shared across envs)
+scripts/.dispatcher-state.json
+
+# playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

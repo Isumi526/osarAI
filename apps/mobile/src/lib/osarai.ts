@@ -9,12 +9,15 @@ export interface OsaraiTurnResponse {
   done: boolean;
   extracted: OsaraiExtracted;
   interactionId: string | null;
+  customerName: string | null;
+  isNewCustomer: boolean;
 }
 
 export async function osaraiTurn(input: {
   message: string;
   sessionId?: string;
   customerId?: string | null;
+  forceEnd?: boolean;
 }): Promise<OsaraiTurnResponse> {
   return apiPost<OsaraiTurnResponse>('/api/osarai/turn', input);
 }

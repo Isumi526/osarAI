@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
+import { Spinner } from '@/components/Spinner';
+import { toJaAuthError } from '@/lib/auth-errors';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -18,13 +19,16 @@ export default function LoginPage() {
     setError(null);
     const supabase = createBrowserSupabase();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (error) {
-      setError(error.message);
+      setLoading(false);
+      setError(toJaAuthError(error.message));
       return;
     }
-    router.push('/dashboard');
-    router.refresh();
+    // ハードナビゲーションで遷移する。router.push だと初回はサーバー側が
+    // まだ新しい認証クッキーを認識できず /login に戻され「1回目は無反応・
+    // 2回目で成功」に見えることがあるため（@supabase/ssr のクッキー伝播レース）。
+    // loading は解除せず、ページ遷移までスピナーを出したままにする。
+    window.location.assign('/dashboard');
   }
 
   return (
@@ -39,17 +43,10 @@ export default function LoginPage() {
           required
           style={{ padding: 10, fontSize: 16 }}
         />
-        <input
-          type="password"
-          placeholder="パスワード"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ padding: 10, fontSize: 16 }}
-        />
+        <PasswordInput value={password} onChange={setPassword} placeholder="パスワード" required />
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
         <button type="submit" disabled={loading} style={{ padding: 12, fontSize: 16 }}>
-          {loading ? '...' : 'ログイン'}
+          {loading ? <Spinner /> : 'ログイン'}
         </button>
       </form>
       <p style={{ marginTop: 16 }}>

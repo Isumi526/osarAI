@@ -2,12 +2,15 @@
 // コンテキスト化して Gemini に相談 → 回答。会話は ai_chats / ai_chat_messages に保存。
 // コスト優先で Flash-Lite（§8 末尾）。データが薄い初期は一般営業ナレッジで補う。
 import { NextResponse } from 'next/server';
-import { buildAdvicePrompt, ADVICE_SYSTEM_PROMPT, type ChatScope, type AiSummary } from '@osarai/shared';
+import { buildAdvicePrompt, ADVICE_SYSTEM_PROMPT, jstMonthStartUtc, type ChatScope } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
 import { geminiText, GEMINI_MODEL_LITE } from '@/lib/gemini';
+import { buildContext, formatUserProfile } from '@/lib/customer-context';
 
 export const runtime = 'nodejs';
+// lib/gemini.ts のリトライが最悪ケースでGemini呼び出しを複数回行うため余裕を持たせる
+export const maxDuration = 60;
 
 export function OPTIONS() {
   return corsPreflight();
@@ -32,7 +35,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('org_id')
+    .select('org_id, user_profile')
     .eq('id', user.id)
     .maybeSingle();
   if (!profile) return json({ error: 'profile not found' }, 400);
@@ -45,9 +48,10 @@ export async function POST(req: Request) {
   }
   const limit = ent.def?.aiAdviceLimit ?? null;
   if (limit != null) {
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    // A5対策: サーバー(Vercel)はUTCで動くため、素の new Date().setHours(0,0,0,0) は
+    // UTC深夜0時になりJSTの月初と最大9時間ずれる（月初/月末付近でカウント境界が狂う）。
+    // JST固定で「今月」を判定する。
+    const monthStart = jstMonthStartUtc();
     // RLS により自分のチャットのメッセージのみ数える
     const { count } = await supabase
       .from('ai_chat_messages')
@@ -99,7 +103,8 @@ export async function POST(req: Request) {
 
   // --- 顧客データをコンテキスト化 ---
   const data = await buildContext(supabase, scope, customerId);
-  const systemAndData = buildAdvicePrompt({ scope, data });
+  const userProfile = formatUserProfile(profile.user_profile as Record<string, unknown> | null);
+  const systemAndData = buildAdvicePrompt({ scope, data, userProfile });
   const convo = (history ?? [])
     .map((m) => `${m.role === 'user' ? 'ユーザー' : 'コーチ'}: ${m.content}`)
     .join('\n');
@@ -120,62 +125,6 @@ export async function POST(req: Request) {
   await supabase.from('ai_chat_messages').insert({ chat_id: chatId, role: 'assistant', content: reply });
 
   return json({ chatId, reply }, 200);
-}
-
-type SB = import('@supabase/supabase-js').SupabaseClient<
-  import('@osarai/shared/database.types').Database
->;
-
-async function buildContext(
-  supabase: SB,
-  scope: ChatScope,
-  customerId: string | null,
-): Promise<string> {
-  if (scope === 'customer' && customerId) {
-    const { data: c } = await supabase
-      .from('customers')
-      .select('name, temperature, needs, last_met_at, custom_fields')
-      .eq('id', customerId)
-      .maybeSingle();
-    if (!c) return 'データなし';
-    const { data: ix } = await supabase
-      .from('interactions')
-      .select('source, met_at, ai_summary, raw_text')
-      .eq('customer_id', customerId)
-      .order('met_at', { ascending: false, nullsFirst: false })
-      .limit(10);
-    const timeline = (ix ?? [])
-      .map((r) => {
-        const s = r.ai_summary as AiSummary | null;
-        const when = r.met_at ? new Date(r.met_at).toLocaleDateString('ja-JP') : '日付不明';
-        const bodyText = s?.points?.length ? s.points.join('、') : (r.raw_text ?? '').slice(0, 120);
-        const next = s?.next_actions?.length ? ` / 次: ${s.next_actions.join('、')}` : '';
-        return `- ${when}: ${bodyText}${next}`;
-      })
-      .join('\n');
-    return [
-      `名前: ${c.name}`,
-      `温度感: ${c.temperature ?? '未設定'}`,
-      `ニーズ: ${c.needs ?? '未把握'}`,
-      `最終接触: ${c.last_met_at ? new Date(c.last_met_at).toLocaleDateString('ja-JP') : '未記録'}`,
-      `履歴:\n${timeline || '（履歴なし）'}`,
-    ].join('\n');
-  }
-
-  // scope=all: 顧客一覧サマリ（RLS で自分の担当分のみ）
-  const { data: customers } = await supabase
-    .from('customers')
-    .select('name, temperature, needs, last_met_at, status')
-    .eq('status', 'active')
-    .order('last_met_at', { ascending: false, nullsFirst: false })
-    .limit(50);
-  if (!customers || customers.length === 0) return 'データなし（まだ顧客が登録されていません）';
-  return customers
-    .map((c) => {
-      const when = c.last_met_at ? new Date(c.last_met_at).toLocaleDateString('ja-JP') : '未記録';
-      return `- ${c.name}（温度: ${c.temperature ?? '?'} / ニーズ: ${c.needs ?? '未把握'} / 最終接触: ${when}）`;
-    })
-    .join('\n');
 }
 
 function json(payload: unknown, status: number) {

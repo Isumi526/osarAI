@@ -7,11 +7,14 @@ export interface AdviceResponse {
   reply: string;
 }
 
-export async function askAdvice(input: {
-  message: string;
-  scope: ChatScope;
-  customerId?: string | null;
-  chatId?: string;
-}): Promise<AdviceResponse> {
-  return apiPost<AdviceResponse>('/api/advice', input);
+export async function askAdvice(
+  input: {
+    message: string;
+    scope: ChatScope;
+    customerId?: string | null;
+    chatId?: string;
+  },
+  signal?: AbortSignal,
+): Promise<AdviceResponse> {
+  return apiPost<AdviceResponse>('/api/advice', input, signal);
 }

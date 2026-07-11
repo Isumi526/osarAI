@@ -15,6 +15,8 @@ import { getEntitlement } from '@/lib/entitlement';
 import { geminiJson, GEMINI_MODEL_DIALOGUE, type GeminiSchema } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
+// lib/gemini.ts のリトライ+モデルフォールバックが最悪ケースでGemini呼び出しを複数回行うため余裕を持たせる
+export const maxDuration = 60;
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -57,9 +59,11 @@ export async function POST(req: Request) {
     sessionId?: string;
     customerId?: string | null;
     message?: string;
+    forceEnd?: boolean;
   };
+  const forceEnd = body.forceEnd === true;
   const message = (body.message ?? '').trim();
-  if (!message) return json({ error: 'message required' }, 400);
+  if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
   // 契約ゲート（§16 未契約/解約は機能制限）
   const ent = await getEntitlement(supabase, user.id);
@@ -86,11 +90,14 @@ export async function POST(req: Request) {
       .from('osarai_sessions')
       .select('id, messages, customer_id, status')
       .eq('id', sessionId)
+      .eq('user_id', user.id)
       .maybeSingle();
     if (error || !sess) return json({ error: 'session not found' }, 404);
     if (sess.status === 'done') return json({ error: 'session already done' }, 409);
     messages = (sess.messages as ChatMessage[]) ?? [];
     customerId = sess.customer_id ?? customerId;
+  } else if (forceEnd) {
+    return json({ error: 'no session to end' }, 400);
   } else {
     const { data: created, error } = await supabase
       .from('osarai_sessions')
@@ -99,6 +106,9 @@ export async function POST(req: Request) {
       .single();
     if (error || !created) return json({ error: 'session create failed' }, 500);
     sessionId = created.id;
+  }
+  if (forceEnd && messages.length === 0) {
+    return json({ error: 'nothing to summarize yet' }, 400);
   }
 
   // 既存顧客データ（あれば差分を聞かせる）
@@ -112,8 +122,8 @@ export async function POST(req: Request) {
     if (c) customerJson = JSON.stringify(c);
   }
 
-  // ユーザー発話を履歴に追加
-  messages.push({ role: 'user', content: message });
+  // ユーザー発話を履歴に追加（forceEndで空発話の場合は追加しない）
+  if (message) messages.push({ role: 'user', content: message });
 
   // --- Gemini 1ターン ---
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
@@ -128,6 +138,10 @@ export async function POST(req: Request) {
   } catch (e) {
     return json({ error: 'ai failed', detail: String(e) }, 502);
   }
+  // 明示的な終了操作は、Geminiの done 判定にかかわらずここまでの抽出内容で必ず完了させる
+  if (forceEnd) {
+    result = { ...result, done: true, next_question: null };
+  }
 
   // AI の質問を履歴に追加（done のときは next_question=null）
   if (result.next_question) {
@@ -136,6 +150,8 @@ export async function POST(req: Request) {
 
   // --- 完了処理 ---
   let resultingInteractionId: string | null = null;
+  let customerName: string | null = null;
+  let isNewCustomer = false;
   if (result.done) {
     const persisted = await persistOnDone({
       supabase,
@@ -148,10 +164,13 @@ export async function POST(req: Request) {
     if ('error' in persisted) return json(persisted, 500);
     customerId = persisted.customerId;
     resultingInteractionId = persisted.interactionId;
+    customerName = persisted.customerName;
+    isNewCustomer = persisted.isNewCustomer;
   }
 
-  // セッション更新
-  await supabase
+  // セッション更新（interaction/customerは既に確定保存済み。ここが失敗してもユーザーの
+  // データは失われないが、セッションの進行状況が古いまま残るためログには残す）
+  const { error: sessionUpdateError } = await supabase
     .from('osarai_sessions')
     .update({
       messages: messages as unknown as never,
@@ -159,7 +178,11 @@ export async function POST(req: Request) {
       status: result.done ? 'done' : 'in_progress',
       resulting_interaction_id: resultingInteractionId,
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .eq('user_id', user.id);
+  if (sessionUpdateError) {
+    console.error('osarai_sessions update failed', sessionId, sessionUpdateError);
+  }
 
   return json(
     {
@@ -169,6 +192,8 @@ export async function POST(req: Request) {
       done: result.done,
       extracted: result.extracted,
       interactionId: resultingInteractionId,
+      customerName,
+      isNewCustomer,
     },
     200,
   );
@@ -187,20 +212,25 @@ interface PersistArgs {
 
 async function persistOnDone(
   args: PersistArgs,
-): Promise<{ customerId: string; interactionId: string } | { error: string }> {
+): Promise<
+  | { customerId: string; interactionId: string; customerName: string; isNewCustomer: boolean }
+  | { error: string }
+> {
   const { supabase, orgId, authorId, extracted } = args;
   const now = new Date().toISOString();
 
   // 顧客が未指定なら抽出名で新規カード作成（おさらいからカード自動生成・§8-1）
   let customerId = args.customerId;
+  let customerName = '新しく会った人';
+  const isNewCustomer = !customerId;
   if (!customerId) {
-    const inferredName = inferName(extracted) ?? '新しく会った人';
+    customerName = inferName(extracted) ?? '新しく会った人';
     const { data: c, error } = await supabase
       .from('customers')
       .insert({
         org_id: orgId,
         owner_id: authorId,
-        name: inferredName,
+        name: customerName,
         needs: joinList(extracted.needs),
         temperature: extracted.temperature ?? null,
         custom_fields: (extracted.custom_fields ?? {}) as never,
@@ -247,7 +277,7 @@ async function persistOnDone(
     .single();
   if (error || !interaction) return { error: 'interaction create failed' };
 
-  return { customerId, interactionId: interaction.id };
+  return { customerId, interactionId: interaction.id, customerName, isNewCustomer };
 }
 
 function joinList(v?: string[]): string | null {

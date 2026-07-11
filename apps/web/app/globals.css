@@ -1,0 +1,59 @@
+/* osarAI デザインシステム — LINE風UX + 暖色系オレンジ #fd780f（apps/mobile/src/styles.css と同一トークン） */
+:root {
+  --color-primary: #fd780f;
+  --color-primary-dark: #e56800;
+  --color-primary-light: #fff3eb;
+  --color-primary-border: #fdd0a0;
+  --color-text: #2a2622;
+  --color-text-muted: #7a6e65;
+  --color-bg: #faf9f7;
+  --color-surface: #ffffff;
+  --color-border: #e8e0d6;
+  --color-success: #2d7d46;
+  --color-danger: #c0392b;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --btn-radius: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  border-radius: var(--btn-radius);
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+input, textarea, select {
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(253,120,15,0.12);
+}
+
+a {
+  color: var(--color-primary);
+}
+
+@keyframes osarai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

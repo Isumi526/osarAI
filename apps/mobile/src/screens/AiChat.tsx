@@ -2,14 +2,18 @@
 // scope=all は全顧客サマリ、customer は対象顧客の履歴を踏まえてコーチが助言。
 // ?customerId=... 付きで来たら顧客指定で開始。
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { askAdvice } from '../lib/advice.js';
 import { listCustomers, type Customer } from '../lib/db.js';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { useConfirm } from '../components/ConfirmDialog.js';
+import { useRegisterNavGuard } from '../components/NavGuard.js';
 import type { ChatScope } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
 export function AiChat() {
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const initialCustomerId = params.get('customerId');
 
@@ -21,7 +25,25 @@ export function AiChat() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AIが生成中でも続けて送信でき、受け取った順に1件ずつ処理する(議事録要望・Claude風)。
+  const [queue, setQueue] = useState<string[]>([]);
+  const processingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
+  // 送信済みメッセージはその都度サーバーに保存されるため失われないが、
+  // まだ送信していない入力中のテキストは離脱すると失われる。「編集中」として
+  // 下部ナビ/戻るボタンの両方に確認ダイアログを挟む(議事録要望)。
+  useRegisterNavGuard(input.trim().length > 0 || sending);
+
+  async function onBack() {
+    if (input.trim()) {
+      const ok = await confirm('入力中の内容はまだ送信されていません。このまま戻りますか？（内容は失われます）');
+      if (!ok) return;
+    }
+    navigate(-1);
+  }
 
   // 顧客指定モード用に一覧を読み込む
   useEffect(() => {
@@ -47,44 +69,71 @@ export function AiChat() {
     setMessages([]);
   }
 
-  async function send() {
+  // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
+  function send() {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text) return;
     if (scope === 'customer' && !customerId) {
-      setError('相談する顧客を選んでください。');
+      setError('相談するつながりを選んでください。');
       return;
     }
     setError(null);
     setInput('');
     setMessages((m) => [...m, { role: 'user', content: text }]);
+    setQueue((q) => [...q, text]);
+  }
+
+  // キューを1件ずつ順番に処理するワーカー。chatId更新→再評価で次の1件へ進む。
+  // processingRefで多重起動を防ぐ(処理中のscope/customerId/chatId変化は無視)。
+  useEffect(() => {
+    if (processingRef.current || queue.length === 0) return;
+    processingRef.current = true;
+    const text = queue[0]!;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSending(true);
-    try {
-      const res = await askAdvice({ message: text, scope, customerId, chatId });
-      setChatId(res.chatId);
-      setMessages((m) => [...m, { role: 'assistant', content: res.reply }]);
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      setInput(text);
-      setMessages((m) => m.slice(0, -1));
-    } finally {
-      setSending(false);
-    }
+    askAdvice({ message: text, scope, customerId, chatId }, controller.signal)
+      .then((res) => {
+        setChatId(res.chatId);
+        setMessages((m) => [...m, { role: 'assistant', content: res.reply }]);
+        setQueue((q) => q.slice(1));
+      })
+      .catch((e) => {
+        // 停止(abort)はエラー表示しない。停止/エラーともキューを破棄し中断する。
+        if (!controller.signal.aborted) {
+          setError(String(e instanceof Error ? e.message : e));
+        }
+        setQueue([]);
+      })
+      .finally(() => {
+        abortRef.current = null;
+        setSending(false);
+        processingRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, chatId, scope, customerId]);
+
+  // 生成中の停止: 進行中リクエストをabortし、未処理のキューも破棄する。
+  function stopGenerating() {
+    abortRef.current?.abort();
+    setQueue([]);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Cmd/Ctrl+Enter のみ送信。Enter単独・Shift+Enterは改行(誤送信防止のため送信トリガーから除外)。
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       send();
     }
   }
 
   const placeholder =
-    scope === 'all' ? '例: 今週フォローすべき人は？' : '例: この人に次どう連絡するのがいい？';
+    scope === 'all' ? '例: 今週フォローすべき人は？（Cmd/Ctrl+Enterで送信）' : '例: この人に次どう連絡するのがいい？（Cmd/Ctrl+Enterで送信）';
 
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link to="/">← ホーム</Link>
+    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
+      <header className="screen-header">
+        <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>AIに相談</strong>
         <span style={{ width: 48 }} />
       </header>
@@ -93,7 +142,7 @@ export function AiChat() {
       <div style={{ display: 'flex', gap: 8, margin: '12px 0', alignItems: 'center' }}>
         <select value={scope} onChange={(e) => switchScope(e.target.value as ChatScope)}>
           <option value="all">全体で相談</option>
-          <option value="customer">顧客を指定</option>
+          <option value="customer">つながりを指定</option>
         </select>
         {scope === 'customer' && (
           <select
@@ -101,7 +150,7 @@ export function AiChat() {
             onChange={(e) => switchCustomer(e.target.value)}
             style={{ flex: 1 }}
           >
-            <option value="">顧客を選択…</option>
+            <option value="">つながりを選択…</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -111,13 +160,13 @@ export function AiChat() {
         )}
       </div>
 
-      {/* 会話 */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, padding: '8px 0', alignContent: 'start' }}>
+      {/* 会話（内部スクロール。入力欄が隠れないよう会話エリアだけスクロールさせる） */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'grid', gap: 10, padding: '8px 0', alignContent: 'start' }}>
         {messages.length === 0 && (
           <p style={{ color: '#6b6358' }}>
             {scope === 'all'
-              ? '担当している顧客全体を踏まえて、次の一手を相談できます。'
-              : '選んだ顧客の履歴を踏まえて、次の連絡や提案を相談できます。'}
+              ? '担当しているつながり全体を踏まえて、次の一手を相談できます。'
+              : '選んだつながりの履歴を踏まえて、次の連絡や提案を相談できます。'}
           </p>
         )}
         {messages.map((m, i) => (
@@ -126,9 +175,9 @@ export function AiChat() {
             style={{
               justifySelf: m.role === 'user' ? 'end' : 'start',
               maxWidth: '85%',
-              background: m.role === 'user' ? '#2d7d46' : '#fff',
+              background: m.role === 'user' ? '#fd780f' : '#fff',
               color: m.role === 'user' ? '#fff' : 'inherit',
-              border: m.role === 'user' ? 'none' : '1px solid #e7e1d6',
+              border: m.role === 'user' ? 'none' : '1px solid var(--color-border)',
               borderRadius: 14,
               padding: '10px 14px',
               whiteSpace: 'pre-wrap',
@@ -148,32 +197,38 @@ export function AiChat() {
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8, paddingBottom: 8, alignItems: 'flex-end' }}>
-        <textarea
+      <div style={{ display: 'flex', gap: 8, paddingBottom: 8, paddingTop: 8, alignItems: 'flex-end', position: 'sticky', bottom: 56, background: 'var(--color-bg)' }}>
+        <AutoResizeTextarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           rows={1}
-          disabled={sending}
           style={{
             flex: 1,
             padding: 12,
             borderRadius: 10,
-            border: '1px solid #e7e1d6',
+            border: '1px solid var(--color-border)',
             resize: 'none',
             fontFamily: 'inherit',
             fontSize: 15,
           }}
         />
-        <button
-          onClick={send}
-          disabled={sending || !input.trim()}
-          style={{ padding: '0 18px', minHeight: 44 }}
-        >
+        {/* 生成中でも送信ボタンは有効(キューに積める)。生成中は停止ボタンも並べる。 */}
+        {sending && (
+          <button
+            onClick={stopGenerating}
+            aria-label="生成を停止"
+            style={{ padding: '0 14px', minHeight: 44, background: '#c0392b' }}
+          >
+            ■
+          </button>
+        )}
+        <button onClick={send} disabled={!input.trim()} style={{ padding: '0 18px', minHeight: 44 }}>
           送信
         </button>
       </div>
+      {confirmDialog}
     </main>
   );
 }

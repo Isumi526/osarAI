@@ -17,6 +17,47 @@ export async function getMyProfile(): Promise<Profile | null> {
   return (data as Profile | null) ?? null;
 }
 
+// AI戦略相談のコンテキストに使う自由記述プロフィール（年齢/性別/経歴/仕事/扱い商品/目標）。
+// 目標(goals)は構造化配列を持つため値はstring以外(配列)も許容する。
+export async function updateMyUserProfile(userProfile: Record<string, unknown>): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { error } = await supabase
+    .from('profiles')
+    .update({ user_profile: userProfile as never })
+    .eq('id', user.id);
+  if (error) throw error;
+}
+
+// 「自分をおさらいする」対話の抽出結果(notes)を既存user_profileに追記蓄積する
+// (上書きではなく既存のnotes配列の末尾に追加)。他の項目(age/gender等)は変更しない。
+// アトミックなRPC(append_user_profile_notes・migration 0011)を使う。クライアント側の
+// fetch→マージ→updateは読み取りと書き込みの間に競合状態があったため避けた。
+export async function appendUserProfileNotes(newNotes: string[]): Promise<void> {
+  if (newNotes.length === 0) return;
+  const { error } = await supabase.rpc('append_user_profile_notes', { new_notes: newNotes });
+  if (error) throw error;
+}
+
+// 「自分をおさらいする」対話の抽出結果(notes + job/products等の構造化フィールド)を
+// アトミックに保存する(migration 0013)。job/productsがuser_profileに反映されず、
+// 次回以降も未登録扱いのまま同じ質問を聞き直してしまうバグの修正。
+// notesの追記のみで構造化フィールドが無い場合は既存のappendUserProfileNotesと等価。
+export async function saveSelfOsaraiExtraction(
+  newNotes: string[],
+  fields: { job?: string; products?: string; age?: string; gender?: string; background?: string; goal?: string } = {},
+): Promise<void> {
+  const cleanFields = Object.fromEntries(Object.entries(fields).filter(([, v]) => !!v && v.trim()));
+  if (newNotes.length === 0 && Object.keys(cleanFields).length === 0) return;
+  const { error } = await supabase.rpc('merge_user_profile_fields', {
+    new_notes: newNotes,
+    new_fields: cleanFields,
+  });
+  if (error) throw error;
+}
+
 export async function listCustomers(opts: {
   status?: CustomerStatus;
   temperature?: Temperature;
@@ -46,11 +87,17 @@ export async function listInteractions(customerId: string): Promise<Interaction[
   return (data as Interaction[]) ?? [];
 }
 
+// ステータス(対応中/アーカイブ)はユーザーには意識させない概念。新規作成は常にactive、
+// 「削除」操作は物理削除ではなくarchivedへの論理削除として扱う(議事録『review』人力回答A)。
+// つながりの区分。将来の追加を考慮しtext自由記述だが、UIは固定リストから選ぶ。
+export const RELATION_TYPES = ['つながり', '顧客', 'パートナー'] as const;
+export const DEFAULT_RELATION_TYPE = 'つながり';
+
 export interface CustomerInput {
   name: string;
   temperature: Temperature | null;
   needs: string | null;
-  status: CustomerStatus;
+  relationType: string | null;
 }
 
 export async function createCustomer(
@@ -65,7 +112,8 @@ export async function createCustomer(
       name: input.name,
       temperature: input.temperature,
       needs: input.needs,
-      status: input.status,
+      relation_type: input.relationType,
+      status: 'active' satisfies CustomerStatus,
     })
     .select()
     .single();
@@ -80,14 +128,57 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
       name: input.name,
       temperature: input.temperature,
       needs: input.needs,
-      status: input.status,
+      relation_type: input.relationType,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
   if (error) throw error;
 }
 
-export async function deleteCustomer(id: string): Promise<void> {
-  const { error } = await supabase.from('customers').delete().eq('id', id);
+// 「削除」は論理削除(status=archived)。一覧・選択肢からは外れるがデータ(履歴含む)は保持される。
+export async function archiveCustomer(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('customers')
+    .update({ status: 'archived' satisfies CustomerStatus, updated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
+}
+
+export interface SummaryEdit {
+  points: string[];
+  needs: string[];
+  next_actions: string[];
+  temperature: Temperature | null;
+  name?: string;
+}
+
+/**
+ * おさらい対話完了時にAIが生成したサマリを、ユーザーの確認・修正後に保存する（F-02 AC）。
+ * turn API側で自動保存済みの interaction/customer を、編集内容で上書きする。
+ * RLS(interactions_cud: author_id=auth.uid() / customers_cud: owner_id=auth.uid())が
+ * 本人分のみ更新可能であることを担保する。
+ */
+export async function updateInteractionSummary(
+  interactionId: string,
+  customerId: string,
+  edit: SummaryEdit,
+): Promise<void> {
+  const { error: ixError } = await supabase
+    .from('interactions')
+    .update({
+      ai_summary: { points: edit.points, needs: edit.needs, next_actions: edit.next_actions } as never,
+    })
+    .eq('id', interactionId);
+  if (ixError) throw ixError;
+
+  const { error: custError } = await supabase
+    .from('customers')
+    .update({
+      temperature: edit.temperature,
+      needs: edit.needs.length ? edit.needs.join(' / ') : null,
+      updated_at: new Date().toISOString(),
+      ...(edit.name && edit.name.trim() ? { name: edit.name.trim() } : {}),
+    })
+    .eq('id', customerId);
+  if (custError) throw custError;
 }

@@ -1,0 +1,33 @@
+// JST(UTC+9)基準の日時境界計算（A5対策）。
+// サーバー(Vercel)はUTCで動くため `new Date().setHours(0,0,0,0)` は
+// UTC深夜0時になり、JSTの月初とは最大9時間ずれる。月次カウント等の
+// 「JSTでの月初」が必要な箇所はこのユーティリティで揃える。
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** 指定時刻(既定=現在)を含む「JSTでの月」の月初0:00(JST)を、実時刻(UTC基準のDate)として返す。 */
+export function jstMonthStartUtc(now: Date = new Date()): Date {
+  const jstShifted = new Date(now.getTime() + JST_OFFSET_MS);
+  const monthStartJstShifted = Date.UTC(jstShifted.getUTCFullYear(), jstShifted.getUTCMonth(), 1, 0, 0, 0, 0);
+  return new Date(monthStartJstShifted - JST_OFFSET_MS);
+}
+
+/** 指定時刻(既定=現在)のJSTでの日付を `YYYY-MM-DD` で返す（cron等の「1日1回」判定用）。 */
+export function jstDateString(now: Date = new Date()): string {
+  const jstShifted = new Date(now.getTime() + JST_OFFSET_MS);
+  return jstShifted.toISOString().slice(0, 10);
+}
+
+/** 指定時刻(既定=現在)を含む「JSTでの日」の0:00(JST)を、実時刻(UTC基準のDate)として返す。 */
+export function jstDayStartUtc(now: Date = new Date()): Date {
+  const jstShifted = new Date(now.getTime() + JST_OFFSET_MS);
+  const dayStartJstShifted = Date.UTC(
+    jstShifted.getUTCFullYear(),
+    jstShifted.getUTCMonth(),
+    jstShifted.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+  return new Date(dayStartJstShifted - JST_OFFSET_MS);
+}

@@ -68,7 +68,7 @@ export default async function MemberPage({ params }: { params: Promise<{ memberI
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 24 }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '2px solid #e7e1d6' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--color-border)' }}>
             <th style={th}>顧客</th>
             <th style={th}>温度感</th>
             <th style={th}>ニーズ</th>

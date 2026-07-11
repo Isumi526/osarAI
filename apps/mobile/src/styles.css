@@ -1,6 +1,30 @@
+/* osarAI デザインシステム — LINE風UX + 暖色系オレンジ #fd780f */
 :root {
   font-family: system-ui, -apple-system, 'Hiragino Sans', sans-serif;
   color-scheme: light;
+
+  /* カラーパレット */
+  --color-primary: #fd780f;          /* メインオレンジ */
+  --color-primary-dark: #e56800;     /* 押下/ホバー */
+  --color-primary-light: #fff3eb;    /* オレンジ淡（背景） */
+  --color-primary-border: #fdd0a0;   /* オレンジ枠 */
+  --color-text: #2a2622;             /* 本文テキスト */
+  --color-text-muted: #7a6e65;       /* 補助テキスト */
+  --color-bg: #faf9f7;               /* 画面背景 */
+  --color-surface: #ffffff;          /* カード背景 */
+  --color-border: #e8e0d6;           /* 枠線 */
+  --color-success: #2d7d46;          /* 緑（既存 — おさらい完了等） */
+  --color-danger: #c0392b;           /* 赤 */
+  --color-user-bubble: #fd780f;      /* チャット発話バブル（旧: グリーン） */
+
+  /* 角丸 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* ボタン */
+  --btn-radius: 24px;  /* LINE風の丸みあるボタン */
 }
 
 * {
@@ -10,12 +34,62 @@
 body {
   margin: 0;
   padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-  background: #faf9f7;
-  color: #2a2622;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .screen {
   padding: 24px 20px;
   max-width: 640px;
   margin: 0 auto;
+}
+
+/* 画面ヘッダーを固定表示（現在地が常に分かるように）。.screen の左右padding分を
+   ネガティブマージンでフルブリードにし、スクロール時に横に隙間が出ないようにする。 */
+.screen-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--color-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -24px -20px 0;
+  padding: calc(24px + env(safe-area-inset-top)) 20px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* 共通ボタン基底スタイル（インラインスタイルと併用） */
+button {
+  border-radius: var(--btn-radius);
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  min-height: 44px; /* タップ想定の最低サイズ */
+  padding: 0 12px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* インプット/テキストエリア基底 */
+input, select {
+  min-height: 44px; /* タップ想定の最低サイズ（textareaは複数行入力のため対象外） */
+}
+select {
+  padding: 0 10px; /* ブラウザ既定だと左右が詰まって見えるため明示 */
+}
+input, textarea, select {
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(253,120,15,0.12);
 }

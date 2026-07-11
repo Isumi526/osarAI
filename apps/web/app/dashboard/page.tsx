@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { WelcomeBanner } from './WelcomeBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,7 @@ export default async function DashboardPage() {
   if (profile?.role !== 'leader') {
     return (
       <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px' }}>
+        <WelcomeBanner />
         <h1>ダッシュボード</h1>
         <p style={{ color: '#6b6358' }}>
           リーダー集約ビューは leader ロールのみ閲覧できます（あなたは {profile?.role ?? '—'}）。
@@ -85,6 +87,7 @@ export default async function DashboardPage() {
 
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px' }}>
+      <WelcomeBanner />
       <h1 style={{ marginBottom: 4 }}>リーダーダッシュボード</h1>
       <p style={{ color: '#6b6358', marginTop: 0 }}>
         {profile.display_name ?? user.email} さん ・ メンバー{rows.length}名 ・ 顧客{totalCustomers}件 ・
@@ -93,7 +96,7 @@ export default async function DashboardPage() {
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 24 }}>
         <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '2px solid #e7e1d6' }}>
+          <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--color-border)' }}>
             <th style={th}>メンバー</th>
             <th style={th}>役割</th>
             <th style={{ ...th, textAlign: 'right' }}>顧客数</th>
@@ -112,7 +115,7 @@ export default async function DashboardPage() {
             rows.map((r) => (
               <tr key={r.id} style={{ borderBottom: '1px solid #efeae0' }}>
                 <td style={td}>
-                  <Link href={`/dashboard/${r.id}`} style={{ color: '#2d7d46', fontWeight: 600 }}>
+                  <Link href={`/dashboard/${r.id}`} style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
                     {r.name}
                   </Link>
                 </td>
