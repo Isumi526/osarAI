@@ -16,6 +16,7 @@ import {
   type ScheduleInput,
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { RequiredMark } from '../components/RequiredMark.js';
 import { useNavigate } from 'react-router-dom';
 
 type ViewMode = 'month' | 'week' | 'day';
@@ -868,14 +869,18 @@ function ScheduleForm({
           borderRadius: '16px 16px 0 0',
           padding: 20,
           width: '100%',
+          boxSizing: 'border-box',
           display: 'grid',
           gap: 10,
+          // 項目が増えて画面幅/高さを超えても内容が切れないよう内部スクロールにする(議事録要望)。
+          maxHeight: '90dvh',
+          overflowY: 'auto',
         }}
       >
         <strong>{initial ? '予定を編集' : '予定を追加'}</strong>
         {/* 顧客プルダウンを最上部に移動(議事録要望・タイトルより先に選べるように) */}
         <label>
-          つながり（任意）
+          つながり
           <input
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
@@ -942,7 +947,8 @@ function ScheduleForm({
           </button>
         )}
         <label>
-          タイトル{customerId ? '（任意・空欄ならつながり名を使用）' : ''}
+          タイトル {!customerId && <RequiredMark />}
+          {customerId ? '（空欄ならつながり名を使用）' : ''}
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -951,7 +957,7 @@ function ScheduleForm({
           />
         </label>
         <label>
-          開始
+          開始 <RequiredMark />
           {/* step=600秒=10分刻み。スマホのネイティブ日時ピッカーが10分単位になる。 */}
           <input
             type="datetime-local"
@@ -963,7 +969,7 @@ function ScheduleForm({
           />
         </label>
         <label>
-          終了
+          終了 <RequiredMark />
           <input
             type="datetime-local"
             step={600}
@@ -974,7 +980,7 @@ function ScheduleForm({
           />
         </label>
         <label>
-          カテゴリ（任意）
+          カテゴリ
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -989,7 +995,7 @@ function ScheduleForm({
           </select>
         </label>
         <label>
-          場所（任意）
+          場所
           <input
             list="schedule-location-history"
             value={location}
@@ -1004,7 +1010,7 @@ function ScheduleForm({
           </datalist>
         </label>
         <label>
-          対面/オンライン（任意）
+          対面/オンライン
           <select value={mode} onChange={(e) => setMode(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4 }}>
             <option value="">指定しない</option>
             {SCHEDULE_MODES.map((m) => (
@@ -1015,7 +1021,7 @@ function ScheduleForm({
           </select>
         </label>
         <label>
-          メモ（任意）
+          メモ
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
