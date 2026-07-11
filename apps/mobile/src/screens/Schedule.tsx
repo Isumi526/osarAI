@@ -7,6 +7,8 @@ import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  findFreeSlots,
+  formatScheduleProposalText,
   SCHEDULE_CATEGORIES,
   type Schedule,
   type ScheduleInput,
@@ -93,12 +95,42 @@ export function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Schedule | 'new' | null>(null);
+  const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
+  const [proposalLoading, setProposalLoading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     getMyProfile().then(setProfile);
     listCustomers({ status: 'active' }).then(setCustomers).catch(() => undefined);
   }, []);
+
+  // 日程調整の文章生成(議事録『review』人力回答A寄り): 表示中のビューに関わらず、
+  // 「今」から直近7日間の予定を取得して空き時間を探す(AIは使わず既存データからの計算)。
+  async function openProposal() {
+    setProposalLoading(true);
+    setError(null);
+    try {
+      const now = new Date();
+      const to = addDays(now, 7);
+      const upcoming = await listSchedules({ from: now.toISOString(), to: to.toISOString() });
+      const slots = findFreeSlots(upcoming, now);
+      setProposal({ text: formatScheduleProposalText(slots), copyMsg: null });
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setProposalLoading(false);
+    }
+  }
+
+  async function onCopyProposal() {
+    if (!proposal) return;
+    try {
+      await navigator.clipboard.writeText(proposal.text);
+      setProposal({ ...proposal, copyMsg: 'コピーしました。' });
+    } catch {
+      setProposal({ ...proposal, copyMsg: null });
+    }
+  }
 
   function reload() {
     const { from, to } = rangeFor(view, anchor);
@@ -138,9 +170,18 @@ export function SchedulePage() {
     <main className="screen">
       <header className="screen-header">
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
-        <button onClick={() => setEditing('new')} style={{ padding: '0 14px' }}>
-          + 予定
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={openProposal}
+            disabled={proposalLoading}
+            style={{ padding: '0 10px', fontSize: 13, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+          >
+            {proposalLoading ? '作成中…' : '日程調整の文章'}
+          </button>
+          <button onClick={() => setEditing('new')} style={{ padding: '0 14px' }}>
+            + 予定
+          </button>
+        </div>
       </header>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -211,6 +252,53 @@ export function SchedulePage() {
             reload();
           }}
         />
+      )}
+      {proposal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(42,38,34,0.4)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            zIndex: 200,
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              borderRadius: '16px 16px 0 0',
+              padding: 20,
+              width: '100%',
+              display: 'grid',
+              gap: 10,
+            }}
+          >
+            <strong>日程調整の文章</strong>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
+              直近7日間の空き時間から候補を作成しました。コピーしてLINE等で送れます。
+            </p>
+            <textarea
+              readOnly
+              value={proposal.text}
+              rows={8}
+              style={{ width: '100%', padding: 10, fontSize: 14, lineHeight: 1.6, resize: 'none' }}
+            />
+            {proposal.copyMsg && <p style={{ margin: 0, fontSize: 13 }}>{proposal.copyMsg}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setProposal(null)}
+                style={{ flex: 1, padding: 12, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              >
+                閉じる
+              </button>
+              <button type="button" onClick={onCopyProposal} style={{ flex: 1, padding: 12 }}>
+                コピー
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {confirmDialog}
     </main>

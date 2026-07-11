@@ -67,3 +67,60 @@ export async function deleteSchedule(id: string): Promise<void> {
   const { error } = await supabase.from('schedules').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ========== 日程調整文章生成（議事録『review』人力回答A寄り） ==========
+// 自分の既存予定から空いている時間帯(候補日時)を探し、コピーしてLINE等で送れる
+// 文章を生成する。AIは使わず、既存スケジュールデータからの純粋な計算(低コスト・低リスク)。
+
+const BUSINESS_START_HOUR = 9;
+const BUSINESS_END_HOUR = 19;
+const SLOT_HOURS = 1;
+const MAX_CANDIDATES = 3;
+const SEARCH_DAYS = 7;
+
+export interface FreeSlot {
+  start: Date;
+  end: Date;
+}
+
+// 平日(月〜金)・営業時間内(9-19時)で、既存予定と重ならない1時間枠を探す。
+// 直近7日間から最大3件、日をなるべく分散させて選ぶ。
+export function findFreeSlots(existing: Schedule[], now: Date = new Date()): FreeSlot[] {
+  const busy = existing
+    .map((s) => ({ start: new Date(s.start_at), end: new Date(s.end_at) }))
+    .sort((a, b) => +a.start - +b.start);
+
+  const candidates: FreeSlot[] = [];
+  for (let dayOffset = 0; dayOffset < SEARCH_DAYS && candidates.length < MAX_CANDIDATES; dayOffset++) {
+    const day = new Date(now);
+    day.setDate(day.getDate() + dayOffset);
+    if (day.getDay() === 0 || day.getDay() === 6) continue; // 平日のみ
+
+    let foundOnThisDay = false;
+    for (let hour = BUSINESS_START_HOUR; hour + SLOT_HOURS <= BUSINESS_END_HOUR; hour++) {
+      const slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0);
+      const slotEnd = new Date(slotStart.getTime() + SLOT_HOURS * 60 * 60 * 1000);
+      if (slotStart < now) continue; // 過去の時間帯は候補にしない
+      const overlaps = busy.some((b) => slotStart < b.end && slotEnd > b.start);
+      if (!overlaps) {
+        candidates.push({ start: slotStart, end: slotEnd });
+        foundOnThisDay = true;
+        break; // 1日1候補に留めて日をなるべく分散させる
+      }
+    }
+    if (!foundOnThisDay) continue;
+  }
+  return candidates;
+}
+
+export function formatScheduleProposalText(slots: FreeSlot[]): string {
+  if (slots.length === 0) {
+    return '直近1週間で空いている候補が見つかりませんでした。日程を調整してもう一度お試しください。';
+  }
+  const lines = slots.map((s) => {
+    const dateLabel = s.start.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+    const timeLabel = `${s.start.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}〜${s.end.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+    return `・${dateLabel} ${timeLabel}`;
+  });
+  return `以下の日程でご都合いかがでしょうか？\n\n${lines.join('\n')}\n\nご都合の良い日時があればお知らせください。`;
+}
