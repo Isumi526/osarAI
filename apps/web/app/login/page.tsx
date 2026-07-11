@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
 import { toJaAuthError } from '@/lib/auth-errors';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -42,14 +43,7 @@ export default function LoginPage() {
           required
           style={{ padding: 10, fontSize: 16 }}
         />
-        <input
-          type="password"
-          placeholder="パスワード"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={{ padding: 10, fontSize: 16 }}
-        />
+        <PasswordInput value={password} onChange={setPassword} placeholder="パスワード" required />
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
         <button type="submit" disabled={loading} style={{ padding: 12, fontSize: 16 }}>
           {loading ? <Spinner /> : 'ログイン'}

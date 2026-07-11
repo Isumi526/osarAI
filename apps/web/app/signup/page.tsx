@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
 import { toJaAuthError } from '@/lib/auth-errors';
+import { PasswordInput } from '@/components/PasswordInput';
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -89,15 +90,7 @@ function SignupForm() {
           required
           style={{ padding: 10, fontSize: 16 }}
         />
-        <input
-          type="password"
-          placeholder="パスワード（8文字以上）"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          minLength={8}
-          required
-          style={{ padding: 10, fontSize: 16 }}
-        />
+        <PasswordInput value={password} onChange={setPassword} placeholder="パスワード（8文字以上）" minLength={8} required />
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
           <input
             type="checkbox"
