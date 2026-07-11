@@ -12,7 +12,6 @@ const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
 export function Home() {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [temp, setTemp] = useState<Temperature | ''>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subActive, setSubActive] = useState(true); // 判定前は制限を出さない
@@ -46,14 +45,15 @@ export function Home() {
     setLoading(true);
     // ステータス(対応中/アーカイブ)概念はユーザーに意識させない。常にactiveのみ表示する
     // (議事録『review』人力回答A・アーカイブ済みは一覧から外れる)。
-    listCustomers({ status: 'active', temperature: temp || undefined })
+    // 温度感の絞り込みは削除した(議事録要望)ため全件取得する。
+    listCustomers({ status: 'active' })
       .then((rows) => active && setCustomers(rows))
       .catch((e) => active && setError(String(e)))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [temp]);
+  }, []);
 
   useEffect(() => {
     getEntitlement()
@@ -174,18 +174,6 @@ export function Home() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-        <select value={temp} onChange={(e) => setTemp(e.target.value as Temperature | '')}>
-          <option value="">温度感: 全部</option>
-          <option value="hot">高</option>
-          <option value="warm">中</option>
-          <option value="cold">低</option>
-        </select>
-        <button onClick={() => navigate('/customers/new')} style={{ marginLeft: 'auto' }}>
-          ＋つながり
-        </button>
-      </div>
-
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
       {loading ? (
         <p>読み込み中…</p>
@@ -221,6 +209,27 @@ export function Home() {
           ))}
         </ul>
       )}
+
+      {/* +つながりを右下固定のFABに(タップしやすさ・議事録要望)。下部ナビの上に配置。 */}
+      <button
+        onClick={() => navigate('/customers/new')}
+        disabled={!subActive}
+        aria-label="つながりを追加"
+        style={{
+          position: 'fixed',
+          right: 16,
+          bottom: 'calc(56px + env(safe-area-inset-bottom) + 16px)',
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          fontSize: 28,
+          lineHeight: 1,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          zIndex: 90,
+        }}
+      >
+        ＋
+      </button>
     </main>
   );
 }
