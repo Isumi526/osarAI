@@ -1080,16 +1080,17 @@ function ScheduleForm({
             + 新しいつながりを登録
           </button>
         )}
-        <label>
-          タイトル {!customerId && <RequiredMark />}
-          {customerId ? '（空欄ならつながり名を使用）' : ''}
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required={!customerId}
-            style={{ width: '100%', padding: 10, marginTop: 4 }}
-          />
-        </label>
+        {!customerId && (
+          <label>
+            タイトル <RequiredMark />
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              style={{ width: '100%', padding: 10, marginTop: 4 }}
+            />
+          </label>
+        )}
         <label>
           カテゴリ
           <select
