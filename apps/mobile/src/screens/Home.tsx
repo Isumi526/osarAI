@@ -65,7 +65,6 @@ export function Home() {
     <main className="screen">
       <header className="screen-header">
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
-        <Link to="/settings">設定</Link>
       </header>
 
       {!subActive && (
