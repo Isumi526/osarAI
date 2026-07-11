@@ -418,12 +418,22 @@ function MonthGrid({
   const gridStart = startOfWeek(startOfMonth(anchor));
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const today = new Date();
+  const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  // 日を跨ぐ予定(例: 末日23:00→翌日1:00)は開始日だけでなく、跨いだ各日のセルにも表示する
+  // (バグ修正: 従来はstart_atの日にしか出ず、終了日側のセルから欠落していた)。
+  // グリッドに現れる日(days)の範囲で、各予定が重なる日すべてに割り当てる。
   const itemsByDay = new Map<string, Schedule[]>();
-  for (const s of [...schedules].sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at))) {
-    const d = new Date(s.start_at);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    if (!itemsByDay.has(key)) itemsByDay.set(key, []);
-    itemsByDay.get(key)!.push(s);
+  const sorted = [...schedules].sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at));
+  for (const d of days) {
+    const cellStart = startOfDay(d);
+    const cellEnd = addDays(cellStart, 1);
+    for (const s of sorted) {
+      if (new Date(s.start_at) < cellEnd && new Date(s.end_at) > cellStart) {
+        const key = dayKey(d);
+        if (!itemsByDay.has(key)) itemsByDay.set(key, []);
+        itemsByDay.get(key)!.push(s);
+      }
+    }
   }
 
   return (
@@ -467,33 +477,39 @@ function MonthGrid({
               <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-primary)' : 'var(--color-text)' }}>
                 {d.getDate()}
               </span>
-              {items.slice(0, MONTH_MAX_EVENTS_PER_CELL).map((s) => (
-                <button
-                  key={s.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectSchedule(s);
-                  }}
-                  style={{
-                    marginTop: 1,
-                    padding: '1px 3px',
-                    background: 'var(--color-primary-light)',
-                    color: 'var(--color-primary)',
-                    border: 'none',
-                    borderRadius: 3,
-                    fontSize: 9,
-                    lineHeight: 1.3,
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    minHeight: 'auto',
-                    height: 'auto',
-                  }}
-                >
-                  {new Date(s.start_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} {s.title}
-                </button>
-              ))}
+              {items.slice(0, MONTH_MAX_EVENTS_PER_CELL).map((s) => {
+                // 日跨ぎ予定: 開始日は時刻+タイトル、継続日(翌日以降)は⇢マーカー+タイトルで表す。
+                const startsToday = isSameDay(new Date(s.start_at), d);
+                return (
+                  <button
+                    key={`${s.id}-${key}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectSchedule(s);
+                    }}
+                    style={{
+                      marginTop: 1,
+                      padding: '1px 3px',
+                      background: 'var(--color-primary-light)',
+                      color: 'var(--color-primary)',
+                      border: 'none',
+                      borderRadius: 3,
+                      fontSize: 9,
+                      lineHeight: 1.3,
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      minHeight: 'auto',
+                      height: 'auto',
+                    }}
+                  >
+                    {startsToday
+                      ? `${new Date(s.start_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} ${s.title}`
+                      : `⇢ ${s.title}`}
+                  </button>
+                );
+              })}
               {items.length > MONTH_MAX_EVENTS_PER_CELL && (
                 <span style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 1 }}>
                   +{items.length - MONTH_MAX_EVENTS_PER_CELL}件
