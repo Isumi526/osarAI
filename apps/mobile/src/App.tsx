@@ -33,7 +33,7 @@ function AppRoutes() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-      <BottomNav />
+      {navVisible && <BottomNav />}
     </>
   );
 }

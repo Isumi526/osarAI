@@ -61,6 +61,12 @@ export function BottomNav() {
   );
 }
 
+// 全画面で常時表示だが、初回オンボーディング(離脱防止)に限り例外的に非表示にする:
+// ①ウェルカム画面(/welcome) ②そこから遷移した初回の自分をおさらいする(/self-osarai?from=welcome)。
+// 通常のsettings経由での自分をおさらいするでは引き続き表示する(意図的な例外・全画面表示の一般ルールは維持)。
 export function useBottomNavVisible() {
-  return true; // 全画面で常時表示
+  const { pathname, search } = useLocation();
+  if (pathname === '/welcome') return false;
+  if (pathname === '/self-osarai' && new URLSearchParams(search).get('from') === 'welcome') return false;
+  return true;
 }
