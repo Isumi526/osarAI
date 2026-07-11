@@ -132,7 +132,17 @@ export function SelfOsarai() {
   }
 
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: fromWelcome ? '100dvh' : 'calc(100dvh - 56px)' }}>
+    <main
+      className="screen"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        // height(固定)でないとflex:1+overflowY:autoが内部スクロールにならず、
+        // ページ全体が伸びて入力欄がスクロールで隠れてしまう(バグ修正)。
+        height: fromWelcome ? '100dvh' : 'calc(100dvh - 56px)',
+        overflow: 'hidden',
+      }}
+    >
       <header className="screen-header">
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
           ← 戻る
