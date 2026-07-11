@@ -146,6 +146,7 @@ export type Database = {
           needs: string | null
           org_id: string
           owner_id: string
+          relation_type: string | null
           status: string
           temperature: string | null
           updated_at: string
@@ -159,6 +160,7 @@ export type Database = {
           needs?: string | null
           org_id: string
           owner_id: string
+          relation_type?: string | null
           status?: string
           temperature?: string | null
           updated_at?: string
@@ -172,6 +174,7 @@ export type Database = {
           needs?: string | null
           org_id?: string
           owner_id?: string
+          relation_type?: string | null
           status?: string
           temperature?: string | null
           updated_at?: string

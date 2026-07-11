@@ -89,10 +89,15 @@ export async function listInteractions(customerId: string): Promise<Interaction[
 
 // ステータス(対応中/アーカイブ)はユーザーには意識させない概念。新規作成は常にactive、
 // 「削除」操作は物理削除ではなくarchivedへの論理削除として扱う(議事録『review』人力回答A)。
+// つながりの区分。将来の追加を考慮しtext自由記述だが、UIは固定リストから選ぶ。
+export const RELATION_TYPES = ['つながり', '顧客', 'パートナー'] as const;
+export const DEFAULT_RELATION_TYPE = 'つながり';
+
 export interface CustomerInput {
   name: string;
   temperature: Temperature | null;
   needs: string | null;
+  relationType: string | null;
 }
 
 export async function createCustomer(
@@ -107,6 +112,7 @@ export async function createCustomer(
       name: input.name,
       temperature: input.temperature,
       needs: input.needs,
+      relation_type: input.relationType,
       status: 'active' satisfies CustomerStatus,
     })
     .select()
@@ -122,6 +128,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
       name: input.name,
       temperature: input.temperature,
       needs: input.needs,
+      relation_type: input.relationType,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);

@@ -6,6 +6,8 @@ import {
   updateCustomer,
   getCustomer,
   getMyProfile,
+  RELATION_TYPES,
+  DEFAULT_RELATION_TYPE,
   type CustomerInput,
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
@@ -21,6 +23,7 @@ export function CustomerForm() {
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
+  const [relationType, setRelationType] = useState<string>(DEFAULT_RELATION_TYPE);
   const [temperature, setTemperature] = useState<Temperature | null>(null);
   const [needs, setNeeds] = useState('');
   const [loading, setLoading] = useState(isEdit);
@@ -72,6 +75,7 @@ export function CustomerForm() {
       .then((c) => {
         if (!c) return;
         setName(c.name);
+        setRelationType((c.relation_type as string | null) ?? DEFAULT_RELATION_TYPE);
         setTemperature((c.temperature as Temperature | null) ?? null);
         setNeeds(c.needs ?? '');
       })
@@ -83,7 +87,7 @@ export function CustomerForm() {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const input: CustomerInput = { name, temperature, needs: needs || null };
+    const input: CustomerInput = { name, temperature, needs: needs || null, relationType };
     try {
       if (isEdit && id) {
         await updateCustomer(id, input);
@@ -196,6 +200,21 @@ export function CustomerForm() {
             required
             style={{ width: '100%', padding: 10, fontSize: 16 }}
           />
+        </label>
+
+        <label>
+          区分
+          <select
+            value={relationType}
+            onChange={(e) => setRelationType(e.target.value)}
+            style={{ width: '100%', padding: 10, fontSize: 16, marginTop: 4 }}
+          >
+            {RELATION_TYPES.map((rt) => (
+              <option key={rt} value={rt}>
+                {rt}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div>

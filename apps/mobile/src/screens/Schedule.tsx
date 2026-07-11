@@ -725,7 +725,7 @@ function ScheduleForm({
     setCreatingCustomer(true);
     setNewCustomerError(null);
     try {
-      const created = await createCustomer({ name, temperature: null, needs: null }, profile);
+      const created = await createCustomer({ name, temperature: null, needs: null, relationType: null }, profile);
       onCustomerCreated(created);
       setCustomerId(created.id);
       setAddingCustomer(false);
