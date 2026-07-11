@@ -1,7 +1,7 @@
 // スケジュール管理（月/週/日 グリッドカレンダー・顧客紐付け任意）。§14フェーズ後追加。
 // Google/Appleカレンダー品質のグリッドUIに刷新（旧: アジェンダ形式のリスト表示）。
 import { useEffect, useRef, useState } from 'react';
-import { listCustomers, getMyProfile, type Customer, type Profile } from '../lib/db.js';
+import { listCustomers, getMyProfile, createCustomer, type Customer, type Profile } from '../lib/db.js';
 import {
   listSchedules,
   createSchedule,
@@ -254,6 +254,7 @@ export function SchedulePage() {
         <ScheduleForm
           initial={editing === 'new' ? null : editing}
           customers={customers}
+          onCustomerCreated={(c) => setCustomers((prev) => [c, ...prev])}
           locationHistory={locationHistory}
           profile={profile}
           onClose={() => setEditing(null)}
@@ -526,6 +527,7 @@ function TimeGrid({
 function ScheduleForm({
   initial,
   customers,
+  onCustomerCreated,
   locationHistory,
   profile,
   onClose,
@@ -534,6 +536,7 @@ function ScheduleForm({
 }: {
   initial: Schedule | null;
   customers: Customer[];
+  onCustomerCreated: (customer: Customer) => void;
   locationHistory: string[];
   profile: Pick<Profile, 'id' | 'org_id'>;
   onClose: () => void;
@@ -551,9 +554,35 @@ function ScheduleForm({
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [mode, setMode] = useState(initial?.mode ?? '');
   const [location, setLocation] = useState(initial?.location ?? '');
+  const [addingCustomer, setAddingCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 予定作成のその場で新しい顧客を登録できるようにする(既存顧客一覧に無い相手の場合、
+  // 一旦顧客登録画面へ離脱すると入力中の予定内容が失われるため。議事録要望)。
+  // 顧客登録のフル機能(温度感/ニーズ等)はここでは持たず、名前のみの簡易登録とし、
+  // 詳細は後で顧客詳細画面から編集してもらう(既存の顧客登録ロジック自体は変更しない)。
+  async function handleCreateCustomer() {
+    const name = newCustomerName.trim();
+    if (!name || creatingCustomer) return;
+    setCreatingCustomer(true);
+    setNewCustomerError(null);
+    try {
+      const created = await createCustomer({ name, temperature: null, needs: null }, profile);
+      onCustomerCreated(created);
+      setCustomerId(created.id);
+      setAddingCustomer(false);
+      setNewCustomerName('');
+    } catch (e) {
+      setNewCustomerError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setCreatingCustomer(false);
+    }
+  }
 
   async function handleDelete() {
     if (!onDelete || deleting) return; // 連打による二重削除リクエストを防止
@@ -718,6 +747,46 @@ function ScheduleForm({
               ))}
           </select>
         </label>
+        {addingCustomer ? (
+          <div style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 10, padding: 10 }}>
+            <input
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="新しい顧客の名前"
+              style={{ width: '100%', padding: 10 }}
+            />
+            {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingCustomer(false);
+                  setNewCustomerName('');
+                  setNewCustomerError(null);
+                }}
+                style={{ flex: 1, padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCustomer}
+                disabled={!newCustomerName.trim() || creatingCustomer}
+                style={{ flex: 1, padding: 10 }}
+              >
+                {creatingCustomer ? '登録中…' : '登録して選択'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddingCustomer(true)}
+            style={{ padding: 10, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)' }}
+          >
+            + 新しい顧客を登録
+          </button>
+        )}
         <label>
           メモ（任意）
           <textarea
