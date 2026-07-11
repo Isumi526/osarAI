@@ -47,12 +47,12 @@ function LightbulbIllustration() {
 const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX.Element }[] = [
   {
     titleLines: ['忙しくても、', '人を大切にできる自分に。'],
-    body: 'osarAIは、人と会ったあとの「おさらい」を通じて、大切な人との関係を忘れずに育てるための相棒です。',
+    body: 'osarAIは、人と会ったあとの5分「おさらい」を通じて、大切な人との関係を忘れずに育てるための相棒アプリです。',
     Illustration: HeartIllustration,
   },
   {
     titleLines: ['会ったあと5分の', '「AI対話おさらい」'],
-    body: 'AIが1問ずつ自然に聞いてくれるので、話すだけで顧客カードが自動で整理されます。',
+    body: 'AIが1問ずつ自然に聞いてくれるので、思ったことを話すだけで相手と話したことが自動で整理されます。',
     Illustration: ChatClockIllustration,
   },
   {
@@ -61,8 +61,8 @@ const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX
     Illustration: CardTimelineIllustration,
   },
   {
-    titleLines: ['AIに', '戦略を相談できる'],
-    body: '「次に誰にどう連絡すればいいか」など、あなたの状況を踏まえてAIが一緒に考えます。',
+    titleLines: ['AIに', '仕事を相談できる'],
+    body: '「次は誰にどう連絡するのがいいかな？」「この人と3ヶ月ぶりに会うけどどんな話するのがいいかな？」「新しくこんな商品が出たけど、誰が喜んでくれるかな？」など、あなたとあなたの周りの人をよく知るAIが一緒に考えます。',
     Illustration: LightbulbIllustration,
   },
 ];
