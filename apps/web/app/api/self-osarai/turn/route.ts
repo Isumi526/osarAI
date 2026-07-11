@@ -60,19 +60,31 @@ export async function POST(req: Request) {
   // （AC④: 何度でも実行でき過去の蓄積の上に積み増す。同じことを聞き直さず差分を深掘りするため）。
   const { data: profile } = await supabase
     .from('profiles')
-    .select('user_profile')
+    .select('display_name, user_profile')
     .eq('id', user.id)
     .maybeSingle();
-  const existingNotes = ((profile?.user_profile as { notes?: string[] } | null)?.notes ?? []).filter(
-    (n) => typeof n === 'string' && n.trim(),
-  );
+  const userProfile = (profile?.user_profile as { notes?: string[]; job?: string; products?: string } | null) ?? {};
+  const existingNotes = (userProfile.notes ?? []).filter((n) => typeof n === 'string' && n.trim());
   const notesBlock =
     existingNotes.length > 0
       ? `\n\nこれまでに蓄積された、この人についての気づき:\n${existingNotes.map((n) => `- ${n}`).join('\n')}`
       : '\n\nこれまでに蓄積された気づき: なし（初回）';
 
+  // 議事録『review(2回目)』要望: 初回はまず名前を確認し、仕事・扱っている商品が
+  // 未登録なら優先的にヒアリングする(Settingsの構造化フィールドの空欄状況を伝える)。
+  const nameBlock = profile?.display_name
+    ? `\n\n登録名: ${profile.display_name}(既に分かっている。改めて名前は聞かない)`
+    : '\n\n登録名: 未登録(対話の最初にお名前を確認すること)';
+  const missingFields: string[] = [];
+  if (!userProfile.job) missingFields.push('仕事');
+  if (!userProfile.products) missingFields.push('扱っている商品');
+  const missingFieldsBlock =
+    missingFields.length > 0
+      ? `\n未登録の項目(優先的にヒアリング): ${missingFields.join('・')}`
+      : '\n仕事・扱っている商品は登録済み。自由な深掘りでよい。';
+
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
-  const prompt = `${SELF_OSARAI_SYSTEM_PROMPT}${notesBlock}\n\n対話履歴:\n${history}`;
+  const prompt = `${SELF_OSARAI_SYSTEM_PROMPT}${notesBlock}${nameBlock}${missingFieldsBlock}\n\n対話履歴:\n${history}`;
 
   let result: SelfOsaraiTurnResult;
   try {

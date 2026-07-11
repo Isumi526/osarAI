@@ -4,13 +4,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { selfOsaraiTurn } from '../lib/selfOsarai.js';
-import { appendUserProfileNotes } from '../lib/db.js';
+import { appendUserProfileNotes, getMyProfile } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const OPENING = '今日は最近のことでも、ふと考えていることでも、なんでも話してください。';
+const DEFAULT_OPENING = '今日は最近のことでも、ふと考えていることでも、なんでも話してください。';
+
+// 議事録『review(2回目)』要望: 初回はまず名前を確認し、仕事・扱っている商品が
+// 未登録なら優先的にヒアリングする。名前は通常signup時のdisplay_nameで既に分かって
+// いることが多いため、未登録の場合のみ聞く(AC①)。
+function decideOpening(displayName: string | null, job: string | undefined, products: string | undefined): string {
+  if (!displayName) return 'はじめまして。まずはお名前を教えてください。';
+  if (!job) return `${displayName}さん、こんにちは。まずはどんなお仕事をされているか教えてください。`;
+  if (!products) return `${displayName}さん、こんにちは。どんな商品・サービスを扱っていますか？`;
+  return DEFAULT_OPENING;
+}
 
 export function SelfOsarai() {
   const navigate = useNavigate();
@@ -18,7 +28,7 @@ export function SelfOsarai() {
   // ウェルカム画面経由の初回セッションでは下部固定ナビを非表示にする(離脱防止・BottomNav.tsx
   // のuseBottomNavVisible()と対応)。その分、画面の高さもフルに使う。
   const fromWelcome = params.get('from') === 'welcome';
-  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING }]);
+  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: DEFAULT_OPENING }]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -27,6 +37,19 @@ export function SelfOsarai() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
+
+  // まだ何もやり取りしていない(初回ターン前)なら、名前・未登録項目に応じた挨拶に差し替える。
+  useEffect(() => {
+    getMyProfile()
+      .then((p) => {
+        if (!p) return;
+        const up = (p.user_profile as { job?: string; products?: string } | null) ?? {};
+        const opening = decideOpening(p.display_name, up.job, up.products);
+        setMessages((m) => (m.length === 1 && m[0]!.role === 'assistant' ? [{ role: 'assistant', content: opening }] : m));
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
