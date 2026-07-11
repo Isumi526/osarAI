@@ -33,32 +33,31 @@ export function PlanPicker({ code }: { code: string | null }) {
     <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
       {ORDER.map((id) => {
         const p = PLANS[id];
-        const recommended = id === 'standard';
         return (
           <div
             key={id}
             style={{
-              border: recommended ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+              border: '1px solid var(--color-border)',
               borderRadius: 12,
               padding: 20,
               background: '#fff',
             }}
           >
-            <h2 style={{ margin: '0 0 4px' }}>{p.name}</h2>
-            {recommended && <p style={{ color: 'var(--color-primary)', margin: '0 0 8px' }}>おすすめ</p>}
-            <p style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px' }}>無料/14日間</p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
-              15日目以降 ¥{p.listPrice.toLocaleString()}/月。14日以内にキャンセルすれば料金はかかりません。
+            <h2 style={{ margin: '0 0 12px' }}>{p.name}</h2>
+            <p style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px' }}>無料/14日間</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 16px', lineHeight: 1.6 }}>
+              15日目以降は¥{p.listPrice.toLocaleString()}/月。
+              <br />
+              14日以内にキャンセルすれば料金はかかりません。
             </p>
-            <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358' }}>
+            <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358', margin: '0 0 16px' }}>
+              <li>AI対話でのおさらい・顧客管理</li>
               <li>AI相談: {p.aiAdviceLimit === null ? '無制限' : `月${p.aiAdviceLimit}回`}</li>
-              <li>録音取り込み: {p.recordingImport ? '○' : '×'}</li>
-              <li>リーダー集約: {p.leaderDashboard ? '○' : '×'}</li>
             </ul>
             <button
               onClick={() => choose(id)}
               disabled={loading !== null}
-              style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 8 }}
+              style={{ width: '100%', padding: 12, fontSize: 16 }}
             >
               {loading === id ? <Spinner /> : '14日無料で始める'}
             </button>
