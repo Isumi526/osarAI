@@ -12,6 +12,13 @@ import type { ChatScope } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
+// つながり指定の相談で、まだ話し始めていない時だけ出すヒント(バブル)。タップでその話題から相談を始める。
+const CUSTOMER_HINTS: { label: string; message: string }[] = [
+  { label: '次に取るべきアクションを相談する', message: '次に取るべきアクションを相談したいです。' },
+  { label: 'この人との関係を深める提案が欲しい', message: 'この人との関係をもっと深めるための提案がほしいです。' },
+  { label: '温度感を上げるには何ができるか相談する', message: '温度感を上げるには何ができるか相談したいです。' },
+];
+
 export function AiChat() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -70,8 +77,8 @@ export function AiChat() {
   }
 
   // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
-  function send() {
-    const text = input.trim();
+  function sendText(raw: string) {
+    const text = raw.trim();
     if (!text) return;
     if (scope === 'customer' && !customerId) {
       setError('相談するつながりを選んでください。');
@@ -81,6 +88,9 @@ export function AiChat() {
     setInput('');
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setQueue((q) => [...q, text]);
+  }
+  function send() {
+    sendText(input);
   }
 
   // キューを1件ずつ順番に処理するワーカー。chatId更新→再評価で次の1件へ進む。
@@ -197,6 +207,28 @@ export function AiChat() {
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
+      {scope === 'customer' && customerId && messages.length === 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
+          {CUSTOMER_HINTS.map((h) => (
+            <button
+              key={h.label}
+              type="button"
+              onClick={() => sendText(h.message)}
+              style={{
+                padding: '8px 14px',
+                background: 'var(--color-primary-light)',
+                border: '1px solid var(--color-primary-border)',
+                borderRadius: 999,
+                color: 'var(--color-primary)',
+                fontSize: 13,
+              }}
+            >
+              {h.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, paddingBottom: 8, paddingTop: 8, alignItems: 'flex-end', position: 'sticky', bottom: 56, background: 'var(--color-bg)' }}>
         <AutoResizeTextarea
           value={input}
@@ -219,7 +251,7 @@ export function AiChat() {
           <button
             onClick={stopGenerating}
             aria-label="生成を停止"
-            style={{ padding: '0 14px', minHeight: 44, background: '#c0392b' }}
+            style={{ padding: '0 14px', minHeight: 44, background: 'var(--color-text-muted)' }}
           >
             ■
           </button>

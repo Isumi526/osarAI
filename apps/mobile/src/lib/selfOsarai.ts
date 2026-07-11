@@ -14,10 +14,13 @@ export interface SelfOsaraiTurnResponse {
   history: ChatMessage[];
 }
 
-export async function selfOsaraiTurn(input: {
-  message: string;
-  history: ChatMessage[];
-  forceEnd?: boolean;
-}): Promise<SelfOsaraiTurnResponse> {
-  return apiPost<SelfOsaraiTurnResponse>('/api/self-osarai/turn', input);
+export async function selfOsaraiTurn(
+  input: {
+    message: string;
+    history: ChatMessage[];
+    forceEnd?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<SelfOsaraiTurnResponse> {
+  return apiPost<SelfOsaraiTurnResponse>('/api/self-osarai/turn', input, signal);
 }

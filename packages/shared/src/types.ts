@@ -31,6 +31,8 @@ export interface OsaraiExtracted {
   temperature?: Temperature | null;
   next_actions?: string[];
   custom_fields?: Record<string, unknown>;
+  /** 対話中に判明した相手の名前（未言及なら null）。§F-02: 新規/仮名のカードへの自動反映に使う */
+  name?: string | null;
 }
 
 // /api/osarai/turn の応答契約（§8-1）

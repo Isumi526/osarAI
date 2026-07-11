@@ -13,13 +13,16 @@ export interface OsaraiTurnResponse {
   isNewCustomer: boolean;
 }
 
-export async function osaraiTurn(input: {
-  message: string;
-  sessionId?: string;
-  customerId?: string | null;
-  forceEnd?: boolean;
-}): Promise<OsaraiTurnResponse> {
-  return apiPost<OsaraiTurnResponse>('/api/osarai/turn', input);
+export async function osaraiTurn(
+  input: {
+    message: string;
+    sessionId?: string;
+    customerId?: string | null;
+    forceEnd?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<OsaraiTurnResponse> {
+  return apiPost<OsaraiTurnResponse>('/api/osarai/turn', input, signal);
 }
 
 // 録音音声を文字起こし（§8-1 音声入力）。Blob を base64 にして STT エンドポイントへ。
