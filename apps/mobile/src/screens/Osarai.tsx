@@ -494,19 +494,26 @@ export function Osarai() {
               onClick={() => setShowHint((v) => !v)}
               aria-label="ヒントを見る"
               style={{
-                width: 28,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
                 height: 28,
                 minHeight: 28,
-                padding: 0,
-                borderRadius: '50%',
+                padding: '0 10px',
+                borderRadius: 14,
                 background: 'var(--color-primary-light)',
                 color: 'var(--color-primary)',
                 border: '1px solid var(--color-primary-border)',
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
-              ?
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5" />
+                <circle cx="12" cy="17" r="0.5" fill="currentColor" />
+              </svg>
+              ヒント
             </button>
             {showHint && (
               <div
