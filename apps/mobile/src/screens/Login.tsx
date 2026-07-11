@@ -40,7 +40,7 @@ export function Login() {
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
         {mode === 'signup' && (
           <input
-            placeholder="お名前"
+            placeholder="ニックネーム"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required

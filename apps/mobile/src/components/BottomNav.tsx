@@ -13,7 +13,7 @@ const TABS = [
   { path: '/', label: 'ホーム', Icon: HomeIcon },
   { path: '/schedule', label: '予定', Icon: ScheduleIcon },
   { path: '/chat', label: '相談', Icon: ChatIcon },
-  { path: '/settings', label: '設定', Icon: SettingsIcon },
+  { path: '/settings', label: 'マイページ', Icon: SettingsIcon },
 ];
 
 export function BottomNav() {

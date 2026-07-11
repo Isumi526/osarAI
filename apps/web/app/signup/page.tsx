@@ -76,7 +76,7 @@ function SignupForm() {
       <p style={{ fontSize: 14, color: '#6b6358' }}>14日間無料。まずはアカウント作成から。</p>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
         <input
-          placeholder="お名前"
+          placeholder="ニックネーム"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required

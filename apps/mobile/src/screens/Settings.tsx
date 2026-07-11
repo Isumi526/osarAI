@@ -4,12 +4,15 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { enablePush, isPushSupported } from '../lib/push.js';
 import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 
 // 目標は「目標内容+いつまでに」を複数登録できるよう別UI(goals)で扱うため、ここには含めない。
-const PROFILE_FIELDS: { key: string; label: string }[] = [
+// 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
+const GENDER_OPTIONS = ['男性', '女性', 'その他', '回答しない'] as const;
+const PROFILE_FIELDS: { key: string; label: string; type?: 'select' | 'textarea' }[] = [
   { key: 'age', label: '年齢' },
-  { key: 'gender', label: '性別' },
-  { key: 'background', label: '経歴' },
+  { key: 'gender', label: '性別', type: 'select' },
+  { key: 'background', label: '経歴', type: 'textarea' },
   { key: 'job', label: '仕事' },
   { key: 'products', label: '扱っている商品' },
 ];
@@ -108,7 +111,7 @@ export function Settings() {
     <main className="screen">
       <header className="screen-header">
         <Link to="/">← ホーム</Link>
-        <strong>設定</strong>
+        <strong>マイページ</strong>
         <span style={{ width: 48 }} />
       </header>
 
@@ -188,11 +191,33 @@ export function Settings() {
           {PROFILE_FIELDS.map((f) => (
             <label key={f.key} style={{ display: 'block', fontSize: 13 }}>
               {f.label}
-              <input
-                value={userProfile[f.key] ?? ''}
-                onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
-                style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
-              />
+              {f.type === 'select' ? (
+                <select
+                  value={userProfile[f.key] ?? ''}
+                  onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
+                  style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
+                >
+                  <option value="">未選択</option>
+                  {GENDER_OPTIONS.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : f.type === 'textarea' ? (
+                <AutoResizeTextarea
+                  value={userProfile[f.key] ?? ''}
+                  onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
+                  rows={2}
+                  style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
+                />
+              ) : (
+                <input
+                  value={userProfile[f.key] ?? ''}
+                  onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
+                  style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
+                />
+              )}
             </label>
           ))}
 
