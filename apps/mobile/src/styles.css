@@ -79,6 +79,9 @@ button:disabled {
 input, select {
   min-height: 44px; /* タップ想定の最低サイズ（textareaは複数行入力のため対象外） */
 }
+select {
+  padding: 0 10px; /* ブラウザ既定だと左右が詰まって見えるため明示 */
+}
 input, textarea, select {
   border-radius: var(--radius-md);
   border: 1.5px solid var(--color-border);
