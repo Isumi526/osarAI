@@ -101,6 +101,7 @@ export function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Schedule | 'new' | null>(null);
+  const [presetSlot, setPresetSlot] = useState<Date | null>(null);
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -237,6 +238,10 @@ export function SchedulePage() {
           schedulesOnDay={schedulesOnDay}
           customers={customers}
           onSelectSchedule={(s) => setEditing(s)}
+          onSelectSlot={(dateTime) => {
+            setPresetSlot(dateTime);
+            setEditing('new');
+          }}
         />
       )}
 
@@ -249,7 +254,13 @@ export function SchedulePage() {
         >
           {proposalLoading ? '作成中…' : '日程調整の文章'}
         </button>
-        <button onClick={() => setEditing('new')} style={{ flex: 1, padding: 12, fontSize: 14 }}>
+        <button
+          onClick={() => {
+            setPresetSlot(null);
+            setEditing('new');
+          }}
+          style={{ flex: 1, padding: 12, fontSize: 14 }}
+        >
           + 予定
         </button>
       </div>
@@ -257,13 +268,18 @@ export function SchedulePage() {
       {editing && profile && (
         <ScheduleForm
           initial={editing === 'new' ? null : editing}
+          presetSlot={editing === 'new' ? presetSlot : null}
           customers={customers}
           onCustomerCreated={(c) => setCustomers((prev) => [c, ...prev])}
           locationHistory={locationHistory}
           profile={profile}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setPresetSlot(null);
+            setEditing(null);
+          }}
           onDelete={editing !== 'new' ? () => onDelete((editing as Schedule).id).then(() => setEditing(null)) : undefined}
           onSaved={() => {
+            setPresetSlot(null);
             setEditing(null);
             reload();
           }}
@@ -428,11 +444,13 @@ function TimeGrid({
   schedulesOnDay,
   customers,
   onSelectSchedule,
+  onSelectSlot,
 }: {
   days: Date[];
   schedulesOnDay: (d: Date) => Schedule[];
   customers: Customer[];
   onSelectSchedule: (s: Schedule) => void;
+  onSelectSlot: (dateTime: Date) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -493,7 +511,20 @@ function TimeGrid({
               >
                 {WEEKDAY_JA[day.getDay()]} {day.getDate()}
               </div>
-              <div style={{ position: 'relative', height: HOUR_HEIGHT * 24 }}>
+              <div
+                style={{ position: 'relative', height: HOUR_HEIGHT * 24 }}
+                onClick={(e) => {
+                  // 予定の無い空き枠をタップした時だけ、その日時を選択済みで新規作成モーダルを開く
+                  // (既存の予定ブロックのタップはそちら側のonClickが個別に処理する)。
+                  if (e.target !== e.currentTarget) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const rawHour = (e.clientY - rect.top) / HOUR_HEIGHT;
+                  const minutes = rawHour % 1 >= 0.5 ? 30 : 0;
+                  const slot = new Date(day);
+                  slot.setHours(Math.max(0, Math.min(23, Math.floor(rawHour))), minutes, 0, 0);
+                  onSelectSlot(slot);
+                }}
+              >
                 {Array.from({ length: 24 }, (_, h) => (
                   <div key={h} style={{ position: 'absolute', top: h * HOUR_HEIGHT, left: 0, right: 0, borderTop: '1px solid #f7f4ef' }} />
                 ))}
@@ -558,6 +589,7 @@ function TimeGrid({
 
 function ScheduleForm({
   initial,
+  presetSlot,
   customers,
   onCustomerCreated,
   locationHistory,
@@ -567,6 +599,7 @@ function ScheduleForm({
   onDelete,
 }: {
   initial: Schedule | null;
+  presetSlot?: Date | null;
   customers: Customer[];
   onCustomerCreated: (customer: Customer) => void;
   locationHistory: string[];
@@ -575,10 +608,12 @@ function ScheduleForm({
   onSaved: () => void;
   onDelete?: () => void | Promise<void>;
 }) {
-  const now = new Date();
-  const inHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+  // カレンダーの空き枠をタップして新規作成した場合は、その日時を選択済みにする
+  // (議事録要望)。それ以外(+予定ボタン等)は従来通り現在時刻を既定にする。
+  const defaultStart = presetSlot ?? new Date();
+  const inHourLater = new Date(defaultStart.getTime() + 60 * 60 * 1000);
   const [title, setTitle] = useState(initial?.title ?? '');
-  const [startAt, setStartAt] = useState(initial ? toDatetimeLocal(initial.start_at) : toDatetimeLocal(now.toISOString()));
+  const [startAt, setStartAt] = useState(initial ? toDatetimeLocal(initial.start_at) : toDatetimeLocal(defaultStart.toISOString()));
   const [endAt, setEndAt] = useState(initial ? toDatetimeLocal(initial.end_at) : toDatetimeLocal(inHourLater.toISOString()));
   const [customerId, setCustomerId] = useState(initial?.customer_id ?? '');
   const [customerSearch, setCustomerSearch] = useState('');
