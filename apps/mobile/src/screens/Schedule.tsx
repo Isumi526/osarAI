@@ -839,11 +839,22 @@ function ScheduleForm({
           </button>
         </div>
         {onDelete && (
+          // 保存/キャンセルから離し、控えめな見た目(枠なしのテキストリンク)にすることで
+          // 誤タップを防ぐ(議事録要望・確認ダイアログは既存のonDelete側で挟んでいる)。
           <button
             type="button"
             onClick={handleDelete}
             disabled={deleting || saving}
-            style={{ padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b' }}
+            style={{
+              marginTop: 16,
+              padding: 8,
+              background: 'none',
+              border: 'none',
+              color: '#c0392b',
+              textDecoration: 'underline',
+              fontSize: 13,
+              justifySelf: 'center',
+            }}
           >
             {deleting ? '削除中…' : 'この予定を削除'}
           </button>
