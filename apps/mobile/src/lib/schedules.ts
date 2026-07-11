@@ -19,6 +19,7 @@ export interface ScheduleInput {
   endAt: string; // ISO
   notes: string | null;
   mode: string | null;
+  location: string | null;
 }
 
 export async function listSchedules(range: { from: string; to: string }): Promise<Schedule[]> {
@@ -48,6 +49,7 @@ export async function createSchedule(
       end_at: input.endAt,
       notes: input.notes,
       mode: input.mode,
+      location: input.location,
     })
     .select()
     .single();
@@ -66,6 +68,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
       end_at: input.endAt,
       notes: input.notes,
       mode: input.mode,
+      location: input.location,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
@@ -75,6 +78,36 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
 export async function deleteSchedule(id: string): Promise<void> {
   const { error } = await supabase.from('schedules').delete().eq('id', id);
   if (error) throw error;
+}
+
+// 場所の入力履歴(議事録要望「ユーザーごとに履歴を残し次回以降選択できるように」)。
+// 履歴専用テーブルは設けず、自分の過去の予定から場所を新しい順に重複除去して返す簡易実装。
+// owner_idを明示フィルタする(RLSはleaderに他メンバー分の閲覧も許すため、ここでは
+// 「自分の」履歴に厳密に絞る)。
+export async function listLocationHistory(limit = 20): Promise<string[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('schedules')
+    .select('location')
+    .eq('owner_id', user.id)
+    .not('location', 'is', null)
+    .order('start_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  const seen = new Set<string>();
+  const history: string[] = [];
+  for (const row of (data as { location: string | null }[]) ?? []) {
+    const loc = row.location?.trim();
+    if (loc && !seen.has(loc)) {
+      seen.add(loc);
+      history.push(loc);
+      if (history.length >= limit) break;
+    }
+  }
+  return history;
 }
 
 // ========== 日程調整文章生成（議事録『review』人力回答A寄り） ==========

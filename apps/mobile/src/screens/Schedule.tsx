@@ -9,6 +9,7 @@ import {
   deleteSchedule,
   findFreeSlots,
   formatScheduleProposalText,
+  listLocationHistory,
   SCHEDULE_CATEGORIES,
   SCHEDULE_MODES,
   type Schedule,
@@ -95,6 +96,7 @@ export function SchedulePage() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [locationHistory, setLocationHistory] = useState<string[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +108,7 @@ export function SchedulePage() {
   useEffect(() => {
     getMyProfile().then(setProfile);
     listCustomers({ status: 'active' }).then(setCustomers).catch(() => undefined);
+    listLocationHistory().then(setLocationHistory).catch(() => undefined);
   }, []);
 
   // 日程調整の文章生成(議事録『review』人力回答A寄り): 表示中のビューに関わらず、
@@ -251,6 +254,7 @@ export function SchedulePage() {
         <ScheduleForm
           initial={editing === 'new' ? null : editing}
           customers={customers}
+          locationHistory={locationHistory}
           profile={profile}
           onClose={() => setEditing(null)}
           onDelete={editing !== 'new' ? () => onDelete((editing as Schedule).id).then(() => setEditing(null)) : undefined}
@@ -522,6 +526,7 @@ function TimeGrid({
 function ScheduleForm({
   initial,
   customers,
+  locationHistory,
   profile,
   onClose,
   onSaved,
@@ -529,6 +534,7 @@ function ScheduleForm({
 }: {
   initial: Schedule | null;
   customers: Customer[];
+  locationHistory: string[];
   profile: Pick<Profile, 'id' | 'org_id'>;
   onClose: () => void;
   onSaved: () => void;
@@ -544,6 +550,7 @@ function ScheduleForm({
   const [category, setCategory] = useState(initial?.category ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [mode, setMode] = useState(initial?.mode ?? '');
+  const [location, setLocation] = useState(initial?.location ?? '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -578,6 +585,7 @@ function ScheduleForm({
       endAt: new Date(endAt).toISOString(),
       notes: notes.trim() || null,
       mode: mode || null,
+      location: location.trim() || null,
     };
     try {
       if (initial) await updateSchedule(initial.id, input);
@@ -656,6 +664,21 @@ function ScheduleForm({
               </option>
             ))}
           </select>
+        </label>
+        <label>
+          場所（任意）
+          <input
+            list="schedule-location-history"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="過去に入力した場所を選ぶか、新しく入力…"
+            style={{ width: '100%', padding: 10, marginTop: 4 }}
+          />
+          <datalist id="schedule-location-history">
+            {locationHistory.map((loc) => (
+              <option key={loc} value={loc} />
+            ))}
+          </datalist>
         </label>
         <label>
           対面/オンライン（任意）
