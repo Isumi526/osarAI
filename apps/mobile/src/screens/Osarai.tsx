@@ -410,6 +410,7 @@ export function Osarai() {
                       padding: 10,
                       border: editTemperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                       background: editTemperature === t ? 'var(--color-primary-light)' : '#fff',
+                      color: 'var(--color-text)',
                       borderRadius: 8,
                     }}
                   >

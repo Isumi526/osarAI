@@ -183,6 +183,7 @@ export function CustomerForm() {
                   padding: 10,
                   border: temperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
                   background: temperature === t ? 'var(--color-primary-light)' : '#fff',
+                  color: 'var(--color-text)',
                   borderRadius: 8,
                 }}
               >
