@@ -12,11 +12,17 @@ export interface PersonalStats {
   upcomingSchedules: number; // 今後(現在時刻以降)の予定件数。議事録『review(2回目)』要望の予定集計。
   monthNewCustomers: number; // 今月新規登録した顧客数
   totalCustomers: number; // 累計顧客数(archiveされていないもの)
+  monthMeetings: number; // 今月の会議(category=会議)件数
+  upcomingMeetings: number; // 今後の会議(category=会議)件数
 }
 
 export async function getPersonalStats(): Promise<PersonalStats> {
   const monthStart = jstMonthStartUtc().toISOString();
   const now = new Date().toISOString();
+
+  // アポ数の集計は私用の予定を除外する(=業務上のアポ数のみ)。カテゴリ未設定は
+  // 既定でアポ扱いとして含める(除外しない)ため category.is.null も許可する。
+  const excludePrivate = 'category.neq.私用,category.is.null';
 
   const [
     monthAppointments,
@@ -26,18 +32,22 @@ export async function getPersonalStats(): Promise<PersonalStats> {
     upcomingSchedules,
     monthNewCustomers,
     totalCustomers,
+    monthMeetings,
+    upcomingMeetings,
   ] = await Promise.all([
-    supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', monthStart),
+    supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', monthStart).or(excludePrivate),
     supabase
       .from('interactions')
       .select('id', { count: 'exact', head: true })
       .eq('source', 'ai_dialogue')
       .gte('met_at', monthStart),
-    supabase.from('schedules').select('id', { count: 'exact', head: true }),
+    supabase.from('schedules').select('id', { count: 'exact', head: true }).or(excludePrivate),
     supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('source', 'ai_dialogue'),
-    supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', now),
+    supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', now).or(excludePrivate),
     supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', monthStart),
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase.from('schedules').select('id', { count: 'exact', head: true }).eq('category', '会議').gte('start_at', monthStart),
+    supabase.from('schedules').select('id', { count: 'exact', head: true }).eq('category', '会議').gte('start_at', now),
   ]);
 
   return {
@@ -48,5 +58,7 @@ export async function getPersonalStats(): Promise<PersonalStats> {
     upcomingSchedules: upcomingSchedules.count ?? 0,
     monthNewCustomers: monthNewCustomers.count ?? 0,
     totalCustomers: totalCustomers.count ?? 0,
+    monthMeetings: monthMeetings.count ?? 0,
+    upcomingMeetings: upcomingMeetings.count ?? 0,
   };
 }

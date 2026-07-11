@@ -100,6 +100,8 @@ export function Home() {
             { label: '累計おさらい', value: stats.totalOsarai },
             { label: '今月の新規顧客', value: stats.monthNewCustomers },
             { label: '累計顧客', value: stats.totalCustomers },
+            { label: '今月の会議', value: stats.monthMeetings },
+            { label: '今後の会議', value: stats.upcomingMeetings },
           ].map((s) => (
             <div
               key={s.label}
