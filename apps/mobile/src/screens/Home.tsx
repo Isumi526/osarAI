@@ -25,8 +25,10 @@ export function Home() {
       .catch(() => undefined); // 集計失敗はダッシュボード非表示に留め、画面全体は壊さない
   }, []);
 
-  // 初回ログイン(この端末で未案内 かつ プロフィール未登録)なら「自分をおさらいする」へ誘導。
-  // localStorageフラグで一度きり。スキップは self-osarai の戻るで可能。
+  // 初回ログイン(この端末で未案内 かつ プロフィール未登録)ならウェルカム/チュートリアル
+  // 画面(/welcome)へ誘導する。いきなり自分をおさらいするに飛ばすと驚くため、まずステップ式の
+  // アプリ紹介を挟み、最後に本人が入口を選ぶ(議事録『review』フィードバックでの仕様変更)。
+  // localStorageフラグで一度きり。スキップは welcome/self-osarai の導線から可能。
   useEffect(() => {
     if (localStorage.getItem(SELF_INTRO_PROMPTED_KEY)) return;
     getMyProfile()
@@ -34,7 +36,7 @@ export function Home() {
         const up = (p?.user_profile as Record<string, unknown> | null) ?? {};
         const empty = Object.keys(up).length === 0;
         localStorage.setItem(SELF_INTRO_PROMPTED_KEY, '1');
-        if (empty) navigate('/self-osarai');
+        if (empty) navigate('/welcome');
       })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
