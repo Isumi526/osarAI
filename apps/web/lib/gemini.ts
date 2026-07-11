@@ -199,6 +199,7 @@ export async function geminiTranscribe(
     `話し言葉のまま、要約や解説は一切付けず、発話内容のテキストだけを返してください。`;
 
   const runOnce = async (model: string): Promise<string> => {
+    const t0 = Date.now();
     const res = await fetchWithTimeout(
       `${API_BASE}/models/${model}:generateContent`,
       {
@@ -214,8 +215,11 @@ export async function geminiTranscribe(
           generationConfig: { temperature: 0 },
         }),
       },
-      45_000, // 音声は長さによって時間がかかりうるため長めに
+      // 実測(約30秒の実発話)では数秒〜10秒程度で完了するため25秒に短縮。
+      // 45秒のままだと、リトライ1回込みで最悪91秒待たされてしまう(体感の遅さの一因)。
+      25_000,
     );
+    console.log(`[geminiTranscribe] model=${model} elapsed=${Date.now() - t0}ms`);
     if (!res.ok) {
       const detail = await res.text();
       throw new GeminiApiError(res.status, `Gemini STT ${res.status}: ${detail.slice(0, 300)}`);
