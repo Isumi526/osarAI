@@ -270,30 +270,33 @@ export function SchedulePage() {
   // 週日表示のTimeGrid)だけが内部スクロールするようにする。
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
+      {/* カレンダーの表示範囲を広げるため、月/3日/日の切替はタブ行を独立させず
+          ヘッダー内に同居させて縦スペースを節約する(議事録要望)。
+          ヘッダーとコンテンツの被り(過去に position:sticky が原因で複数回発生した不具合)
+          を再発させないよう、ヘッダーは position:static のまま・直後の要素にも
+          十分なmarginTopを持たせる。 */}
       <header className="screen-header" style={{ position: 'static' }}>
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              style={{
+                padding: '6px 12px',
+                fontSize: 13,
+                background: view === v ? 'var(--color-primary)' : '#fff',
+                color: view === v ? '#fff' : 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              {v === 'month' ? '月' : v === 'week' ? '3日' : '日'}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {/* ヘッダーとタブが被る不具合(position:stickyが効かず余白も足りなかった)の修正 */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 28 }}>
-        {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            style={{
-              flex: 1,
-              padding: 8,
-              background: view === v ? 'var(--color-primary)' : '#fff',
-              color: view === v ? '#fff' : 'var(--color-text)',
-              border: '1px solid var(--color-border)',
-            }}
-          >
-            {v === 'month' ? '月' : v === 'week' ? '3日' : '日'}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 8 }}>
         <button onClick={() => shift(-1)} style={{ padding: '0 14px' }}>
           ←
         </button>
