@@ -163,19 +163,21 @@ export function Osarai() {
 
   // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）。
   // 現在の名前も控えておき、まだ空/仮名なら対話で判明した名前を自動反映する対象にする（F-02 名前自動反映）。
+  // registerMode(つながりAI登録)はcustomerIdがあっても「初対面として登録する」目的の対話のため、
+  // 既存顧客レビュー向けのオープニングに差し替えない(F-06登録目的向け文言のNG指摘)。
   useEffect(() => {
     if (!customerId) return;
     getCustomer(customerId)
       .then((c) => {
         if (!c) return;
         setExistingCustomerName(c.name ?? null);
-        if (c.name) {
+        if (c.name && !isRegisterMode) {
           setMessages([{ role: 'assistant', content: openingForExisting(c.name) }]);
         }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  }, [customerId, isRegisterMode]);
 
   // 文字起こしを実行（録音blobを保持し、失敗時は再試行できるようにする）
   async function runTranscribe(blob: Blob) {
