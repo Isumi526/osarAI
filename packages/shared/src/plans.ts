@@ -26,7 +26,7 @@ export const PLANS: Record<PlanId, PlanDef> = {
   standard: {
     id: 'standard',
     name: 'Standard',
-    listPrice: 3980,
+    listPrice: 1980,
     aiAdviceLimit: null,
     recordingImport: true,
     leaderDashboard: false,

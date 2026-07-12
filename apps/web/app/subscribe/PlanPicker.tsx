@@ -44,7 +44,7 @@ export function PlanPicker({ code }: { code: string | null }) {
             }}
           >
             <h2 style={{ margin: '0 0 12px' }}>{p.name}</h2>
-            <p style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px' }}>無料/14日間</p>
+            <p style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px' }}>¥0 / 14日間</p>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 16px', lineHeight: 1.6 }}>
               15日目以降は¥{p.listPrice.toLocaleString()}/月。
               <br />
