@@ -343,7 +343,7 @@ export function Osarai() {
 
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
-      <header className="screen-header">
+      <header className="screen-header" style={{ position: 'static' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
         {remainingSec !== null && !done ? (
@@ -382,8 +382,9 @@ export function Osarai() {
         </div>
       )}
 
-      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, padding: '20px 0 12px', alignContent: 'start' }}>
+      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる
+          (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
+      <div style={{ flex: 1, display: 'grid', gap: 10, marginTop: 32, padding: '0 0 12px', alignContent: 'start' }}>
         {messages.map((m, i) => (
           <div
             key={i}
