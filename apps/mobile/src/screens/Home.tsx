@@ -72,8 +72,27 @@ export function Home() {
   return (
     <main className="screen">
       <header className="screen-header">
-        <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
+        <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 8 }}>
+          osarAI
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--color-primary)',
+              background: 'var(--color-primary-light)',
+              border: '1px solid var(--color-primary-border)',
+              borderRadius: 999,
+              padding: '2px 8px',
+            }}
+          >
+            β版
+          </span>
+        </h1>
       </header>
+
+      <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+        現在β版として提供しています。不具合や使いづらい点が残っている場合がありますので、ご了承ください。
+      </p>
 
       {!subActive && (
         <div

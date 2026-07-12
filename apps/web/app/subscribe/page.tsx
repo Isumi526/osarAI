@@ -37,6 +37,19 @@ export default async function SubscribePage({
     <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
       <h1>プランを選ぶ</h1>
       <p style={{ color: '#6b6358' }}>14日間無料。トライアル終了後に自動課金されます。</p>
+      <p
+        style={{
+          fontSize: 13,
+          color: 'var(--color-text-muted)',
+          background: 'var(--color-primary-light)',
+          border: '1px solid var(--color-primary-border)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          margin: '12px 0 16px',
+        }}
+      >
+        osarAIは現在β版として提供しています。不具合や使いづらい点が残っている場合がありますので、ご了承ください。
+      </p>
       {code && (
         <p style={{ color: amountOff ? 'var(--color-success)' : '#c0392b' }}>
           {amountOff
