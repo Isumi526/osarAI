@@ -40,6 +40,15 @@ const openingForExisting = (name: string) =>
     `${name}さんとお会いしたんですね。どんな話をしたか教えてください。`,
     `${name}さんとの時間、おつかれさまでした。印象に残っていることはありますか？`,
   ]);
+// つながりAI登録で名前が判明した後の開始メッセージ。「初めて聞く」ではなく、
+// 既に予定等で関わりがある相手についてこれまでの関係性・話した内容・知っていることを
+// 聞く内容にする(議事録指摘: 全くの初対面向けの文言はおかしい)。
+const openingForRegister = (name: string) =>
+  pickRandom([
+    `${name}さんについて登録しましょう。これまでどんな話をしましたか？関係性や知っていることも教えてください。`,
+    `${name}さんはどんな方ですか？今までのやり取りや、知っていることを聞かせてください。`,
+    `${name}さんとのこれまでを教えてください。話した内容や関係性、知っていることがあれば聞かせてください。`,
+  ]);
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 // APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
 const prefillName = (isNew: boolean, name: string | null) =>
@@ -163,16 +172,19 @@ export function Osarai() {
 
   // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）。
   // 現在の名前も控えておき、まだ空/仮名なら対話で判明した名前を自動反映する対象にする（F-02 名前自動反映）。
-  // registerMode(つながりAI登録)はcustomerIdがあっても「初対面として登録する」目的の対話のため、
-  // 既存顧客レビュー向けのオープニングに差し替えない(F-06登録目的向け文言のNG指摘)。
+  // registerMode(つながりAI登録)はcustomerIdがあっても「初対面として登録する」目的ではなく、
+  // 予定等で既に関わりがある相手の関係性・これまでの話を聞く目的のため、専用の名前入りオープニングに
+  // 差し替える（全くの初対面向け文言はおかしいというNG指摘）。
   useEffect(() => {
     if (!customerId) return;
     getCustomer(customerId)
       .then((c) => {
         if (!c) return;
         setExistingCustomerName(c.name ?? null);
-        if (c.name && !isRegisterMode) {
-          setMessages([{ role: 'assistant', content: openingForExisting(c.name) }]);
+        if (c.name) {
+          setMessages([
+            { role: 'assistant', content: isRegisterMode ? openingForRegister(c.name) : openingForExisting(c.name) },
+          ]);
         }
       })
       .catch(() => {});
