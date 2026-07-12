@@ -523,9 +523,6 @@
     grid-template-columns: 1fr;
     gap: 44px;
   }
-  .phoneStage {
-    order: -1;
-  }
   .steps,
   .objGrid,
   .nums {
