@@ -98,9 +98,13 @@
 .mark {
   position: relative;
   /* white-space:nowrapは強制的に1行に収めようとし、モバイル幅ではテキストが
-     画面右端で見切れる原因になっていた(実機レビュー指摘)。折り返しを許可する。 */
+     画面右端で見切れる原因になっていた(実機レビュー指摘)。折り返しを許可する。
+     word-break:keep-allで任意の文字間での折り返しを避け、JSX側に置いた<wbr>の
+     意図した位置(「できる」の後)でだけ折り返すようにする(折り返し位置が不格好という指摘)。 */
   background: linear-gradient(to bottom, transparent 60%, #f2b441 60%);
   opacity: 0.95;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 .lead {
   font-size: 1.12rem;

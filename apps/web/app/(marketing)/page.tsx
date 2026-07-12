@@ -35,7 +35,7 @@ export default async function LandingPage({
             <h1 className={styles.h1}>
               忙しくても、
               <br />
-              <span className={styles.mark}>人を大切にできる自分に。</span>
+              <span className={styles.mark}>人を大切にできる<wbr />自分に。</span>
             </h1>
             <p className={styles.lead}>
               人と会ったあと、AIと5分話すだけ。
