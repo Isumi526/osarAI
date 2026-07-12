@@ -691,7 +691,7 @@ export function Osarai() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…（Cmd/Ctrl+Enterで送信）'}
+            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…'}
             rows={1}
             disabled={recorder.recording}
             style={{

@@ -230,6 +230,7 @@ export function SelfOsarai() {
                 background: m.role === 'user' ? 'var(--color-user-bubble)' : '#fff',
                 color: m.role === 'user' ? '#fff' : 'var(--color-text)',
                 border: m.role === 'assistant' ? '1px solid var(--color-border)' : 'none',
+                whiteSpace: 'pre-wrap',
               }}
             >
               {m.content}
@@ -297,7 +298,7 @@ export function SelfOsarai() {
                   send();
                 }
               }}
-              placeholder="話したいことを入力…（Cmd/Ctrl+Enterで送信）"
+              placeholder="話したいことを入力…"
               rows={1}
               style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid var(--color-border)', resize: 'none', fontFamily: 'inherit', fontSize: 15 }}
             />
