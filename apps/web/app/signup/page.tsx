@@ -39,7 +39,7 @@ function SignupForm() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: name, ...(ref ? { ref } : {}) } },
+      options: { data: { display_name: name, ...(ref ? { ref } : {}), ...(code ? { code } : {}) } },
     });
     if (error) {
       setLoading(false);
