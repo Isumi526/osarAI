@@ -2,7 +2,22 @@
 // チャネル割引は ?code=LL2026 のように埋め込まれたコードを引き継ぐ。
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { getStripe } from '@/lib/stripe';
 import { PlanPicker } from './PlanPicker';
+
+// checkout route(A4対策)と同じ検証: コードは特定プラン向け(Coupon.metadata.plan)。
+// ここではphase1のStandard固定表示のためstandard向けクーポンのみ解決する。
+async function resolveAmountOff(code: string): Promise<number | null> {
+  try {
+    const stripe = getStripe();
+    const found = await stripe.promotionCodes.list({ code, active: true, limit: 1 });
+    const pc = found.data[0];
+    if (!pc || pc.coupon.metadata?.plan !== 'standard') return null;
+    return pc.coupon.amount_off ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function SubscribePage({
   searchParams,
@@ -16,12 +31,20 @@ export default async function SubscribePage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  const amountOff = code ? await resolveAmountOff(code) : null;
+
   return (
     <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
       <h1>プランを選ぶ</h1>
       <p style={{ color: '#6b6358' }}>14日間無料。トライアル終了後に自動課金されます。</p>
-      {code && <p style={{ color: 'var(--color-primary)' }}>割引コード適用中: {code}</p>}
-      <PlanPicker code={code ?? null} />
+      {code && (
+        <p style={{ color: amountOff ? 'var(--color-success)' : '#c0392b' }}>
+          {amountOff
+            ? `割引コード「${code}」適用中（¥${amountOff.toLocaleString()}引き）`
+            : `割引コード「${code}」は無効です`}
+        </p>
+      )}
+      <PlanPicker code={code ?? null} amountOff={amountOff} />
     </main>
   );
 }

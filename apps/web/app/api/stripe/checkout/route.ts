@@ -13,6 +13,11 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   }
+  // 決済完了後にapp.osarai.app側へそのままログイン状態で入れるよう、
+  // Webのセッションをフラグメント経由で引き継ぐ（サーバーに送られないURL部分）。
+  const {
+    data: { session: authSession },
+  } = await supabase.auth.getSession();
 
   const stripe = getStripe();
   const body = (await req.json()) as { plan?: PlanId; promoCode?: string };
@@ -51,6 +56,9 @@ export async function POST(req: Request) {
   const origin = req.headers.get('origin') ?? 'http://localhost:3000';
   // 決済完了後はWeb(dashboard)ではなく実際に使うモバイルアプリ側へ誘導する。
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.osarai.app';
+  const sessionHandoff = authSession
+    ? `#access_token=${encodeURIComponent(authSession.access_token)}&refresh_token=${encodeURIComponent(authSession.refresh_token)}`
+    : '';
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -61,7 +69,7 @@ export async function POST(req: Request) {
     metadata: { user_id: user.id, plan, promo_code: appliedCode ?? '' },
     // コードが解決できた時はそれを適用、無ければ手入力欄を出す
     ...(discounts ? { discounts } : { allow_promotion_codes: true }),
-    success_url: `${appUrl}/?welcome=1`,
+    success_url: `${appUrl}/?welcome=1${sessionHandoff}`,
     cancel_url: `${origin}/subscribe`,
   });
 
