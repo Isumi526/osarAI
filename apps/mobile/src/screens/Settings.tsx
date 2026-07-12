@@ -7,7 +7,7 @@ import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 
-// 目標は「目標内容+いつまでに」を複数登録できるよう別UI(goals)で扱うため、ここには含めない。
+// 目標・扱っている商品は複数登録できるよう別UI(goals/products)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
 const GENDER_OPTIONS = ['男性', '女性', 'その他', '回答しない'] as const;
 const PROFILE_FIELDS: { key: string; label: string; type?: 'select' | 'textarea' }[] = [
@@ -15,10 +15,10 @@ const PROFILE_FIELDS: { key: string; label: string; type?: 'select' | 'textarea'
   { key: 'gender', label: '性別', type: 'select' },
   { key: 'background', label: '経歴', type: 'textarea' },
   { key: 'job', label: '仕事' },
-  { key: 'products', label: '扱っている商品' },
 ];
 
 type Goal = { text: string; by: string };
+type Product = { name: string; price: string; condition: string };
 
 export function Settings() {
   const [pushMsg, setPushMsg] = useState<string | null>(null);
@@ -27,6 +27,7 @@ export function Settings() {
   // AI戦略相談のコンテキストに使う自分のプロフィール
   const [userProfile, setUserProfile] = useState<Record<string, string>>({});
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   // プロフィール項目(userProfile/goals)を未保存で編集中かどうか。BottomNav離脱時の確認ダイアログに使う。
@@ -40,10 +41,11 @@ export function Settings() {
     getMyProfile()
       .then((p) => {
         const raw = (p?.user_profile as Record<string, unknown> | null) ?? {};
-        // goals(構造化)以外の自由記述フィールドだけを文字列マップとして取り出す。
-        const { goals: rawGoals, goal: legacyGoal, ...rest } = raw as {
+        // goals/products(構造化)以外の自由記述フィールドだけを文字列マップとして取り出す。
+        const { goals: rawGoals, goal: legacyGoal, products: rawProducts, ...rest } = raw as {
           goals?: Goal[];
           goal?: string;
+          products?: Product[] | string;
           [k: string]: unknown;
         };
         const strFields: Record<string, string> = {};
@@ -52,6 +54,11 @@ export function Settings() {
         // 旧: 単一のgoal(文字列) → 新: goals配列へ移行。
         if (Array.isArray(rawGoals)) setGoals(rawGoals.filter((g) => g && typeof g.text === 'string'));
         else if (legacyGoal) setGoals([{ text: legacyGoal, by: '' }]);
+        // 旧: 単一の自由記述文字列 → 新: products配列(名称/金額/購入条件)へ移行。
+        if (Array.isArray(rawProducts)) setProducts(rawProducts.filter((x) => x && typeof x.name === 'string'));
+        else if (typeof rawProducts === 'string' && rawProducts.trim()) {
+          setProducts([{ name: rawProducts, price: '', condition: '' }]);
+        }
         if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 12));
       })
       .catch(() => {});
@@ -82,9 +89,10 @@ export function Settings() {
     setProfileSaving(true);
     setProfileMsg(null);
     try {
-      // 空の目標行は保存しない。旧単一goalキーは残さない(goals配列へ一本化)。
+      // 空の目標行/商品行は保存しない。旧単一goal/products文字列は残さない(配列へ一本化)。
       const cleanGoals = goals.filter((g) => g.text.trim());
-      await updateMyUserProfile({ ...userProfile, goals: cleanGoals });
+      const cleanProducts = products.filter((p) => p.name.trim());
+      await updateMyUserProfile({ ...userProfile, goals: cleanGoals, products: cleanProducts });
       setProfileMsg('保存しました。');
       setProfileDirty(false);
     } catch (e) {
@@ -259,6 +267,66 @@ export function Settings() {
                 style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', fontSize: 13 }}
               >
                 + 目標を追加
+              </button>
+            </div>
+          </div>
+
+          {/* 扱っている商品も目標と同様に「名称+金額+購入条件」を複数登録できる(議事録要望) */}
+          <div style={{ fontSize: 13 }}>
+            扱っている商品
+            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+              {products.map((prod, i) => (
+                <div key={i} style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 8, padding: 8 }}>
+                  <input
+                    value={prod.name}
+                    onChange={(e) => {
+                      setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)));
+                      setProfileDirty(true);
+                    }}
+                    placeholder="商品名（例: がん保険）"
+                    style={{ width: '100%', padding: 8, fontSize: 15 }}
+                  />
+                  <input
+                    value={prod.price}
+                    onChange={(e) => {
+                      setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)));
+                      setProfileDirty(true);
+                    }}
+                    placeholder="金額（例: 月々3,000円〜）"
+                    style={{ width: '100%', padding: 8, fontSize: 14 }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      value={prod.condition}
+                      onChange={(e) => {
+                        setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, condition: e.target.value } : x)));
+                        setProfileDirty(true);
+                      }}
+                      placeholder="購入条件（例: 満20歳〜）"
+                      style={{ flex: 1, padding: 8, fontSize: 14 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProducts((ps) => ps.filter((_, j) => j !== i));
+                        setProfileDirty(true);
+                      }}
+                      style={{ padding: '8px 10px', background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b', fontSize: 13 }}
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setProducts((ps) => [...ps, { name: '', price: '', condition: '' }]);
+                  setProfileDirty(true);
+                }}
+                style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', fontSize: 13 }}
+              >
+                + 商品を追加
               </button>
             </div>
           </div>

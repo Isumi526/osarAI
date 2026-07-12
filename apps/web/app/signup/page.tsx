@@ -26,6 +26,7 @@ function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,17 +92,34 @@ function SignupForm() {
           style={{ padding: 10, fontSize: 16 }}
         />
         <PasswordInput value={password} onChange={setPassword} placeholder="パスワード（8文字以上）" minLength={8} required />
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, padding: '4px 0' }}>
           <input
             type="checkbox"
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
-            style={{ width: 'auto' }}
+            style={{ width: 22, height: 22, flexShrink: 0 }}
           />
-          <Link href="/terms" target="_blank">
-            利用規約
-          </Link>
-          に同意する
+          <span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowTerms(true);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                color: 'var(--color-primary)',
+                textDecoration: 'underline',
+                font: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              利用規約
+            </button>
+            に同意する
+          </span>
         </label>
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}
         <button type="submit" disabled={loading || !agreed} style={{ padding: 12, fontSize: 16 }}>
@@ -111,6 +129,46 @@ function SignupForm() {
       <p style={{ marginTop: 16 }}>
         既にアカウントをお持ちの方は <Link href="/login">ログイン</Link>
       </p>
+
+      {showTerms && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(42,38,34,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 200,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              width: '100%',
+              maxWidth: 640,
+              maxHeight: '85dvh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <iframe
+              src="/terms"
+              title="利用規約"
+              style={{ flex: 1, border: 'none', borderRadius: '16px 16px 0 0', minHeight: 0 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowTerms(false)}
+              style={{ margin: 16, padding: 12, fontSize: 16 }}
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -182,7 +182,7 @@ export function SelfOsarai() {
         overflow: 'hidden',
       }}
     >
-      <header className="screen-header">
+      <header className="screen-header" style={{ position: 'static' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
           ← 戻る
         </button>
@@ -218,8 +218,9 @@ export function SelfOsarai() {
         </div>
       )}
 
-      {/* バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上マージンを広げる */}
-      <div style={{ flex: 1, overflowY: 'auto', margin: '20px 0 12px' }}>
+      {/* バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上マージンを広げる
+          (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
+      <div style={{ flex: 1, overflowY: 'auto', marginTop: 32, padding: '0 0 12px' }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div
@@ -230,6 +231,7 @@ export function SelfOsarai() {
                 background: m.role === 'user' ? 'var(--color-user-bubble)' : '#fff',
                 color: m.role === 'user' ? '#fff' : 'var(--color-text)',
                 border: m.role === 'assistant' ? '1px solid var(--color-border)' : 'none',
+                whiteSpace: 'pre-wrap',
               }}
             >
               {m.content}
@@ -297,7 +299,7 @@ export function SelfOsarai() {
                   send();
                 }
               }}
-              placeholder="話したいことを入力…（Cmd/Ctrl+Enterで送信）"
+              placeholder="話したいことを入力…"
               rows={1}
               style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid var(--color-border)', resize: 'none', fontFamily: 'inherit', fontSize: 15 }}
             />

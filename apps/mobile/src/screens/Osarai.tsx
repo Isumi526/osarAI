@@ -25,11 +25,12 @@ const OPENINGS_NEW = [
   '今日はどんな出会いがありましたか？印象に残っていることから話してもらえますか？',
 ];
 // つながりAI登録（新規カードを対話だけで作る導線・CustomerForm.tsx参照）専用の開始メッセージ。
-// 「振り返り」ではなく「初めて聞く」トーンにする（議事録要望）。
+// 想定利用者は「既に関係性がある人・何度か話したことがある人」(CustomerForm.tsxの案内文言と同じ前提)
+// であり、赤の他人と初めて会った体では聞かない。「はじめまして」「新しく出会った方」トーンはNG指摘。
 const OPENINGS_REGISTER = [
-  'はじめまして。これから、新しく出会った方について聞かせてください。まずはどんな方か教えてもらえますか？',
-  '新しいつながりの登録ですね。お名前や、どんな方なのか、知っていることを教えてください。',
-  '新しく出会った方について、AIが聞きながら整理します。まずはどんな出会いだったか教えてください。',
+  'つながりを登録しましょう。どんな方ですか？関係性や、知っていることから教えてください。',
+  'あの方について教えてください。どんな関係の方で、これまでどんなやり取りがありましたか？',
+  'AIが聞きながら整理します。どんな方か、関係性や知っていることを聞かせてください。',
 ];
 const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]!;
 const OPENING_NEW = () => pickRandom(OPENINGS_NEW);
@@ -39,6 +40,15 @@ const openingForExisting = (name: string) =>
     `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`,
     `${name}さんとお会いしたんですね。どんな話をしたか教えてください。`,
     `${name}さんとの時間、おつかれさまでした。印象に残っていることはありますか？`,
+  ]);
+// つながりAI登録で名前が判明した後の開始メッセージ。「初めて聞く」ではなく、
+// 既に予定等で関わりがある相手についてこれまでの関係性・話した内容・知っていることを
+// 聞く内容にする(議事録指摘: 全くの初対面向けの文言はおかしい)。
+const openingForRegister = (name: string) =>
+  pickRandom([
+    `${name}さんについて登録しましょう。これまでどんな話をしましたか？関係性や知っていることも教えてください。`,
+    `${name}さんはどんな方ですか？今までのやり取りや、知っていることを聞かせてください。`,
+    `${name}さんとのこれまでを教えてください。話した内容や関係性、知っていることがあれば聞かせてください。`,
   ]);
 const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 // APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
@@ -62,8 +72,10 @@ export function Osarai() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const customerId = params.get('customerId');
-  // つながりAI登録（CustomerForm.tsxの「AIと対話して登録する」）専用モード。顧客未指定の時のみ意味を持つ。
-  const isRegisterMode = !customerId && params.get('mode') === 'register';
+  // つながりAI登録（CustomerForm.tsx/予定の登録提案モーダルの「AIと対話して登録する」）専用モード。
+  // customerIdの有無に関わらずmode=registerなら登録目的の文言にする
+  // (予定作成中にその場で名前だけ仮登録したつながりを、そのままAI対話で本登録する導線もcustomerIdを持つため)。
+  const isRegisterMode = params.get('mode') === 'register';
 
   const [messages, setMessages] = useState<Msg[]>([
     { role: 'assistant', content: isRegisterMode ? OPENING_REGISTER() : OPENING_NEW() },
@@ -161,6 +173,9 @@ export function Osarai() {
 
   // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）。
   // 現在の名前も控えておき、まだ空/仮名なら対話で判明した名前を自動反映する対象にする（F-02 名前自動反映）。
+  // registerMode(つながりAI登録)はcustomerIdがあっても「初対面として登録する」目的ではなく、
+  // 予定等で既に関わりがある相手の関係性・これまでの話を聞く目的のため、専用の名前入りオープニングに
+  // 差し替える（全くの初対面向け文言はおかしいというNG指摘）。
   useEffect(() => {
     if (!customerId) return;
     getCustomer(customerId)
@@ -168,12 +183,14 @@ export function Osarai() {
         if (!c) return;
         setExistingCustomerName(c.name ?? null);
         if (c.name) {
-          setMessages([{ role: 'assistant', content: openingForExisting(c.name) }]);
+          setMessages([
+            { role: 'assistant', content: isRegisterMode ? openingForRegister(c.name) : openingForExisting(c.name) },
+          ]);
         }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  }, [customerId, isRegisterMode]);
 
   // 文字起こしを実行（録音blobを保持し、失敗時は再試行できるようにする）
   async function runTranscribe(blob: Blob) {
@@ -341,7 +358,7 @@ export function Osarai() {
 
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
-      <header className="screen-header">
+      <header className="screen-header" style={{ position: 'static' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
         {remainingSec !== null && !done ? (
@@ -380,8 +397,9 @@ export function Osarai() {
         </div>
       )}
 
-      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, padding: '20px 0 12px', alignContent: 'start' }}>
+      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる
+          (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
+      <div style={{ flex: 1, display: 'grid', gap: 10, marginTop: 32, padding: '0 0 12px', alignContent: 'start' }}>
         {messages.map((m, i) => (
           <div
             key={i}
@@ -689,7 +707,7 @@ export function Osarai() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…（Cmd/Ctrl+Enterで送信）'}
+            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…'}
             rows={1}
             disabled={recorder.recording}
             style={{

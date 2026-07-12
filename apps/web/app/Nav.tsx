@@ -29,8 +29,21 @@ export async function Nav() {
         background: 'var(--color-surface)',
       }}
     >
-      <Link href="/" style={{ fontWeight: 700, color: 'var(--color-text)' }}>
+      <Link href="/" style={{ fontWeight: 700, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 8 }}>
         osarAI
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--color-primary)',
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary-border)',
+            borderRadius: 999,
+            padding: '2px 8px',
+          }}
+        >
+          β版
+        </span>
       </Link>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 14 }}>
         {user ? (

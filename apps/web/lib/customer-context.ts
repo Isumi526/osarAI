@@ -63,14 +63,13 @@ const USER_PROFILE_LABEL: Record<string, string> = {
   gender: '性別',
   background: '経歴',
   job: '仕事',
-  products: '扱っている商品',
   goal: '目標',
 };
 
 export function formatUserProfile(userProfile: Record<string, unknown> | null): string | undefined {
   if (!userProfile) return undefined;
   const lines = Object.entries(userProfile)
-    .filter(([k, v]) => k !== 'notes' && k !== 'goals' && typeof v === 'string' && v.trim())
+    .filter(([k, v]) => k !== 'notes' && k !== 'goals' && k !== 'products' && typeof v === 'string' && v.trim())
     .map(([k, v]) => `${USER_PROFILE_LABEL[k] ?? k}: ${v as string}`);
 
   // 目標（goals: {text, by}[]）は「目標内容（いつまでに）」の形で複数行に整形する。
@@ -80,6 +79,23 @@ export function formatUserProfile(userProfile: Record<string, unknown> | null): 
       .filter((g): g is { text: string; by?: string } => !!g && typeof g.text === 'string' && g.text.trim())
       .map((g) => (g.by?.trim() ? `- ${g.text}（${g.by}）` : `- ${g.text}`));
     if (goalLines.length > 0) lines.push(`目標:\n${goalLines.join('\n')}`);
+  }
+
+  // 扱っている商品（products: {name, price, condition}[]。目標と同じカラム化パターン）。
+  const products = userProfile.products;
+  if (Array.isArray(products)) {
+    const productLines = products
+      .filter((p): p is { name: string; price?: string; condition?: string } => !!p && typeof p.name === 'string' && p.name.trim())
+      .map((p) => {
+        const parts = [p.name];
+        if (p.price?.trim()) parts.push(p.price);
+        if (p.condition?.trim()) parts.push(p.condition);
+        return `- ${parts.join(' / ')}`;
+      });
+    if (productLines.length > 0) lines.push(`扱っている商品:\n${productLines.join('\n')}`);
+  } else if (typeof products === 'string' && products.trim()) {
+    // 旧: 単一自由記述文字列からの移行期間の後方互換。
+    lines.push(`扱っている商品: ${products}`);
   }
 
   // 「自分をおさらいする」対話で蓄積した自由記述の気づき（notes: string[]）

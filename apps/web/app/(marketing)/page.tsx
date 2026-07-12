@@ -31,11 +31,11 @@ export default async function LandingPage({
       <section className={styles.hero}>
         <div className={`${styles.wrap} ${styles.heroGrid}`}>
           <div>
-            <span className={styles.eyebrow}>お客さんと会ったあと、たった5分のおさらい習慣</span>
+            <span className={styles.eyebrow}>人と会ったあと、たった5分のおさらい習慣</span>
             <h1 className={styles.h1}>
               忙しくても、
               <br />
-              <span className={styles.mark}>人を大切にできる自分に。</span>
+              <span className={styles.mark}>人を大切にできる<wbr />自分に。</span>
             </h1>
             <p className={styles.lead}>
               人と会ったあと、AIと5分話すだけ。
@@ -43,7 +43,7 @@ export default async function LandingPage({
               大切な人のことを、ちゃんと覚えておける。
             </p>
             <p className={styles.target}>
-              保険・不動産・通信・MLMから、美容・サロン・パーソナルジムまで──人と会って商売する、すべての人へ。
+              保険・不動産・通信・物販から、美容・サロン・パーソナルジムまで──人と会って商売する、すべての人へ。
             </p>
             <div className={styles.heroCtaRow}>
               <Link href={signupHref} className={styles.cta}>
@@ -124,7 +124,7 @@ export default async function LandingPage({
           <span className={styles.secTag}>The Solution</span>
           <h2 className={styles.h2}>やることは、たった5分の「おさらい」だけ。</h2>
           <p className={styles.secLead}>
-            お客さんと会ったら、アプリを開いて、対話AIと5分話すだけ。フォームを埋める必要はありません。聞かれたことに、答えるだけ。
+            人と会ったら、アプリを開いて、対話AIと5分話すだけ。フォームを埋める必要はありません。聞かれたことに、答えるだけ。
           </p>
           <div className={styles.steps}>
             <div className={styles.step}>
@@ -196,7 +196,7 @@ export default async function LandingPage({
           <div className={styles.objGrid}>
             <div className={styles.objCard}>
               <div className={styles.objQ}>どうせ続かへん？</div>
-              <p className={styles.objA}>かかるのはたった5分。お客さんと会ったあとに通知が来て、答えるだけ。&quot;思い出してやる作業&quot;にならないから続く。</p>
+              <p className={styles.objA}>かかるのはたった5分。人と会ったあとに通知が来て、答えるだけ。&quot;思い出してやる作業&quot;にならないから続く。</p>
             </div>
             <div className={styles.objCard}>
               <div className={styles.objQ}>入力が面倒では？</div>

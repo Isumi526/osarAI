@@ -137,8 +137,7 @@ export function AiChat() {
     }
   }
 
-  const placeholder =
-    scope === 'all' ? '例: 今週フォローすべき人は？（Cmd/Ctrl+Enterで送信）' : '例: この人に次どう連絡するのがいい？（Cmd/Ctrl+Enterで送信）';
+  const placeholder = scope === 'all' ? '例: 今週フォローすべき人は？' : '例: この人に次どう連絡するのがいい？';
 
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>

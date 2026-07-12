@@ -1,6 +1,4 @@
 // 利用規約ページ（静的）。録音同意・個人情報・決済に関する基本方針を明記。
-import Link from 'next/link';
-
 export default function TermsPage() {
   return (
     <main style={{ maxWidth: 640, margin: '0 auto', padding: '64px 24px', lineHeight: 1.8 }}>
@@ -44,10 +42,6 @@ export default function TermsPage() {
       <p>
         本サービスでご利用いただける機能は、サービス改善のため、事前の予告なく変更・追加・削除される場合があります。
         料金プランごとの提供機能についても同様に、随時見直される可能性があります。
-      </p>
-
-      <p style={{ marginTop: 32 }}>
-        <Link href="/">トップへ戻る</Link>
       </p>
     </main>
   );
