@@ -1,6 +1,6 @@
 // 顧客の新規作成／編集フォーム。/customers/new と /customers/:id/edit。
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   createCustomer,
   updateCustomer,
@@ -22,6 +22,11 @@ export function CustomerForm() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // 予定作成中にその場で名前だけ仮登録したつながりを、その場提案モーダルの
+  // 「テキストで登録する」から本登録する専用フロー。isEditだが自己紹介解析UIを出す。
+  const isRegisterFlow = searchParams.get('register') === '1';
+  const showAnalyze = !isEdit || isRegisterFlow;
 
   const [name, setName] = useState('');
   const [relationType, setRelationType] = useState<string>(DEFAULT_RELATION_TYPE);
@@ -109,7 +114,7 @@ export function CustomerForm() {
 
   return (
     <main className="screen">
-      <h1>{isEdit ? 'つながりを編集' : '新しいつながり'}</h1>
+      <h1>{isRegisterFlow ? 'つながりを追加' : isEdit ? 'つながりを編集' : '新しいつながり'}</h1>
 
       {!isEdit && (
         <section
@@ -137,7 +142,7 @@ export function CustomerForm() {
         </section>
       )}
 
-      {!isEdit && (
+      {showAnalyze && (
         <section
           style={{
             background: 'var(--color-primary-light)',

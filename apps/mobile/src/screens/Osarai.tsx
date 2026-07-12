@@ -62,8 +62,10 @@ export function Osarai() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const customerId = params.get('customerId');
-  // つながりAI登録（CustomerForm.tsxの「AIと対話して登録する」）専用モード。顧客未指定の時のみ意味を持つ。
-  const isRegisterMode = !customerId && params.get('mode') === 'register';
+  // つながりAI登録（CustomerForm.tsx/予定の登録提案モーダルの「AIと対話して登録する」）専用モード。
+  // customerIdの有無に関わらずmode=registerなら登録目的の文言にする
+  // (予定作成中にその場で名前だけ仮登録したつながりを、そのままAI対話で本登録する導線もcustomerIdを持つため)。
+  const isRegisterMode = params.get('mode') === 'register';
 
   const [messages, setMessages] = useState<Msg[]>([
     { role: 'assistant', content: isRegisterMode ? OPENING_REGISTER() : OPENING_NEW() },

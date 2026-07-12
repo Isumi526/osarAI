@@ -317,12 +317,35 @@ export function SchedulePage() {
         <div
           ref={monthScrollRef}
           onScroll={onMonthScroll}
-          style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: 12 }}
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: 16 }}
         >
           {monthList.map((m) => (
             <div key={monthKey(m)}>
-              <div style={{ position: 'sticky', top: 0, background: 'var(--color-bg)', padding: '4px 0', fontSize: 14, fontWeight: 700, zIndex: 1 }}>
-                {m.getFullYear()}年{m.getMonth() + 1}月
+              {/* 上部の今日/前後移動バーの年月表示と紛らわしく見える(実機レビュー指摘)ため、
+                  背景色/枠で区別できるチップ状にして「今表示中の月」ラベルだと分かるようにする。 */}
+              <div
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  display: 'flex',
+                  padding: '6px 0',
+                  background: 'var(--color-bg)',
+                }}
+              >
+                <span
+                  style={{
+                    background: 'var(--color-primary-light)',
+                    border: '1px solid var(--color-primary-border)',
+                    borderRadius: 999,
+                    padding: '2px 10px',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: 'var(--color-primary-dark)',
+                  }}
+                >
+                  {m.getFullYear()}年{m.getMonth() + 1}月
+                </span>
               </div>
               <MonthGrid
                 anchor={m}
@@ -354,8 +377,11 @@ export function SchedulePage() {
         </div>
       )}
 
-      {/* 操作ボタンを画面下部(親指の届く位置)に配置(議事録『review(2回目)』要望) */}
-      <div style={{ display: 'flex', gap: 8, paddingTop: 12, paddingBottom: 8, position: 'sticky', bottom: 56, background: 'var(--color-bg)' }}>
+      {/* 操作ボタンを画面下部(親指の届く位置)に配置(議事録『review(2回目)』要望)。
+          mainは既にcalc(100dvh - 56px)で下部ナビ分を引いたflex columnのため、ここでの
+          sticky/bottom指定は不要かつ余白の原因になっていた(実機レビュー指摘)。通常のflex子要素として
+          カレンダー領域(flex:1)のすぐ下・画面最下部に固定する。 */}
+      <div style={{ display: 'flex', gap: 8, flex: 'none', paddingTop: 12, paddingBottom: 8, background: 'var(--color-bg)' }}>
         <button
           onClick={openProposal}
           disabled={proposalLoading}
@@ -406,14 +432,14 @@ export function SchedulePage() {
             </p>
             <button
               type="button"
-              onClick={() => navigate(`/customers/${proposeCustomer.id}/edit`)}
+              onClick={() => navigate(`/customers/${proposeCustomer.id}/edit?register=1`)}
               style={{ padding: 12 }}
             >
               テキストで登録する
             </button>
             <button
               type="button"
-              onClick={() => navigate('/osarai')}
+              onClick={() => navigate(`/osarai?customerId=${proposeCustomer.id}&mode=register`)}
               style={{ padding: 12, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
             >
               AIと対話して登録する
