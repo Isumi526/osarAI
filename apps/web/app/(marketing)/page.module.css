@@ -1,6 +1,6 @@
 /* osarAI LP（議事録共有デザインの移植・実装内容に合わせて文言調整） */
 .page {
-  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-family: var(--font-body), 'Zen Kaku Gothic New', sans-serif;
   color: #1e2740;
   background: #fbf3e7;
   line-height: 1.85;
@@ -21,7 +21,7 @@
 }
 
 .logo {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 900;
   font-size: 1.35rem;
   letter-spacing: 0.01em;
@@ -33,7 +33,7 @@
   color: #ff7a3d;
 }
 .logo small {
-  font-family: 'Zen Kaku Gothic New', sans-serif;
+  font-family: var(--font-body), 'Zen Kaku Gothic New', sans-serif;
   font-weight: 500;
   font-size: 0.7rem;
   color: #46506b;
@@ -46,7 +46,7 @@
   gap: 0.6em;
   background: #ff7a3d;
   color: #fffcf7;
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 700;
   font-size: 1.02rem;
   padding: 1.05em 1.9em;
@@ -89,7 +89,7 @@
   margin-bottom: 22px;
 }
 .h1 {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 900;
   font-size: clamp(2.3rem, 4.6vw, 3.5rem);
   line-height: 1.28;
@@ -165,7 +165,7 @@
   justify-content: center;
 }
 .appName {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 900;
   font-size: 0.95rem;
 }
@@ -227,7 +227,7 @@
   padding: 84px 0;
 }
 .secTag {
-  font-family: Georgia, serif;
+  font-family: var(--font-num), Georgia, serif;
   font-style: italic;
   font-size: 1.05rem;
   color: #ea5e1e;
@@ -235,7 +235,7 @@
   display: block;
 }
 .h2 {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 900;
   font-size: clamp(1.7rem, 3.3vw, 2.4rem);
   line-height: 1.4;
@@ -283,7 +283,7 @@
   max-width: 38em;
 }
 .statBandBig {
-  font-family: Georgia, serif;
+  font-family: var(--font-num), Georgia, serif;
   font-size: 2.6rem;
   font-weight: 600;
   color: #f2b441;
@@ -313,13 +313,13 @@
   border: 1px solid rgba(30, 39, 64, 0.12);
 }
 .stepN {
-  font-family: Georgia, serif;
+  font-family: var(--font-num), Georgia, serif;
   font-size: 1.4rem;
   color: #ff7a3d;
   font-weight: 600;
 }
 .step h3 {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 700;
   font-size: 1.1rem;
   margin: 8px 0 8px;
@@ -389,7 +389,7 @@
   color: #fffcf7;
 }
 .baCard h3 {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 900;
   font-size: 1.2rem;
   margin-bottom: 18px;
@@ -436,7 +436,7 @@
   box-shadow: 0 8px 24px -10px rgba(30, 39, 64, 0.25);
 }
 .objQ {
-  font-family: 'Zen Maru Gothic', sans-serif;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
   font-weight: 700;
   color: #ea5e1e;
   font-size: 1.05rem;
@@ -462,7 +462,7 @@
   border: 1px solid rgba(30, 39, 64, 0.12);
 }
 .numboxV {
-  font-family: Georgia, serif;
+  font-family: var(--font-num), Georgia, serif;
   font-size: 2.8rem;
   font-weight: 600;
   color: #ff7a3d;

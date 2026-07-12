@@ -1,9 +1,20 @@
 import Link from 'next/link';
+import { Zen_Maru_Gothic, Zen_Kaku_Gothic_New, Fraunces } from 'next/font/google';
 import styles from './page.module.css';
 
 // LP（マーケティング）。議事録で共有されたデザイン(osarai_lp_(4).html)を移植。
 // ?ref=CODE で来た場合は紹介コードとしてsignupまで引き継ぐ（既存の?code=チャネル割引と同じパターン）。
 // 全CTAに signupHref を使うこと(ハードコードの /signup を書かない)。
+
+const zenMaru = Zen_Maru_Gothic({ subsets: ['latin'], weight: ['500', '700', '900'], variable: '--font-disp' });
+const zenKaku = Zen_Kaku_Gothic_New({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-body' });
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  style: ['normal', 'italic'],
+  variable: '--font-num',
+});
+
 export default async function LandingPage({
   searchParams,
 }: {
@@ -13,7 +24,7 @@ export default async function LandingPage({
   const signupHref = ref ? `/signup?ref=${encodeURIComponent(ref)}` : '/signup';
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${zenMaru.variable} ${zenKaku.variable} ${fraunces.variable}`}>
       <section className={styles.hero}>
         <div className={`${styles.wrap} ${styles.heroGrid}`}>
           <div>
