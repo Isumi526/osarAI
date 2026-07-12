@@ -31,17 +31,23 @@ export function Home() {
       .catch(() => undefined); // 集計失敗はダッシュボード非表示に留め、画面全体は壊さない
   }, []);
 
-  // 初回ログイン(この端末で未案内 かつ プロフィール未登録)ならウェルカム/チュートリアル
+  // 初回ログイン(このアカウントで未案内 かつ プロフィール未登録)ならウェルカム/チュートリアル
   // 画面(/welcome)へ誘導する。いきなり自分をおさらいするに飛ばすと驚くため、まずステップ式の
   // アプリ紹介を挟み、最後に本人が入口を選ぶ(議事録『review』フィードバックでの仕様変更)。
   // localStorageフラグで一度きり。スキップは welcome/self-osarai の導線から可能。
+  // 【重要】フラグはユーザーID単位でキー化する。端末単位(共通キー)だと、同じ端末で
+  // 別アカウントが先にHomeを開いただけで以降誰もウェルカムに案内されなくなる
+  // (本番で確認された不具合: 既存アカウントで一度Homeを開いた端末では、後から
+  // サインアップした新規アカウントがウェルカムに一切案内されなかった)。
   useEffect(() => {
-    if (localStorage.getItem(SELF_INTRO_PROMPTED_KEY)) return;
     getMyProfile()
       .then((p) => {
-        const up = (p?.user_profile as Record<string, unknown> | null) ?? {};
+        if (!p) return;
+        const key = `${SELF_INTRO_PROMPTED_KEY}:${p.id}`;
+        if (localStorage.getItem(key)) return;
+        const up = (p.user_profile as Record<string, unknown> | null) ?? {};
         const empty = Object.keys(up).length === 0;
-        localStorage.setItem(SELF_INTRO_PROMPTED_KEY, '1');
+        localStorage.setItem(key, '1');
         if (empty) navigate('/welcome');
       })
       .catch(() => undefined);
