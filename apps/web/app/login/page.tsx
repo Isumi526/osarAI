@@ -12,12 +12,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  // middlewareがLPの?ref=CODEを保持するCookieを見て、新規登録リンクにも引き継ぐ
+  // middlewareがLPの?ref=/?code=を保持するCookieを見て、新規登録リンクにも引き継ぐ
   // (サーバー側の初期描画とhydration不一致を避けるためmount後に反映)。
   const [signupHref, setSignupHref] = useState('/signup');
   useEffect(() => {
     const ref = document.cookie.match(/(?:^|; )osarai_ref=([^;]+)/)?.[1];
-    if (ref) setSignupHref(`/signup?ref=${ref}`);
+    const code = document.cookie.match(/(?:^|; )osarai_code=([^;]+)/)?.[1];
+    const params = new URLSearchParams();
+    if (ref) params.set('ref', ref);
+    if (code) params.set('code', code);
+    if (params.size > 0) setSignupHref(`/signup?${params.toString()}`);
   }, []);
 
   async function onSubmit(e: React.FormEvent) {

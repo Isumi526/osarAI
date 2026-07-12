@@ -3,17 +3,22 @@ import { createServerClient } from '@supabase/ssr';
 import { updateSession } from './lib/supabase/middleware';
 
 const REF_COOKIE = 'osarai_ref';
+const CODE_COOKIE = 'osarai_code';
 const ACTIVE_STATUSES = new Set(['trialing', 'active']);
 // 未契約/解約ユーザーでも触れる必要がある画面(課金導線そのもの・認証・公開ページ)。
 const PLAN_GATE_EXEMPT = ['/subscribe', '/billing', '/login', '/signup', '/terms', '/api'];
 
 export async function middleware(request: NextRequest) {
   const response = await updateSession(request);
-  // LPの?ref=CODEをCookieに保持し、ヘッダーの新規登録リンク等サイト内どこから
-  // signupへ向かってもチャネル紹介コードが引き継がれるようにする。
+  // LPの?ref=CODE(紹介コード)・?code=CODE(チャネル割引コード)をCookieに保持し、
+  // ヘッダーの新規登録リンク等サイト内どこからsignupへ向かっても引き継がれるようにする。
   const ref = request.nextUrl.searchParams.get('ref');
   if (ref) {
     response.cookies.set(REF_COOKIE, ref, { path: '/', maxAge: 60 * 60 * 24 * 30 });
+  }
+  const code = request.nextUrl.searchParams.get('code');
+  if (code) {
+    response.cookies.set(CODE_COOKIE, code, { path: '/', maxAge: 60 * 60 * 24 * 30 });
   }
 
   const { pathname } = request.nextUrl;
