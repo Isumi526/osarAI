@@ -270,11 +270,12 @@ export function SchedulePage() {
   // 週日表示のTimeGrid)だけが内部スクロールするようにする。
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
-      <header className="screen-header">
+      <header className="screen-header" style={{ position: 'static' }}>
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
       </header>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      {/* ヘッダーとタブが被る不具合(position:stickyが効かず余白も足りなかった)の修正 */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 28 }}>
         {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
           <button
             key={v}
