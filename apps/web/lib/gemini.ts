@@ -240,6 +240,10 @@ async function callGenerate(prompt: string, opts: GenerateOpts): Promise<string>
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: opts.temperature ?? 0.7,
+      // gemini-flash-latest(2.5 Flash)は既定でthinkingが有効になり、対話1ターンごとに
+      // 数秒〜十数秒の余計な遅延が乗る。おさらい対話/自分をおさらいは1問1答の抽出＋短い
+      // 次の質問生成が主でありthinkingの恩恵が薄いため、0にして体感速度を優先する。
+      thinkingConfig: { thinkingBudget: 0 },
       ...(opts.jsonSchema
         ? { responseMimeType: 'application/json', responseSchema: opts.jsonSchema }
         : {}),
