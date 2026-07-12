@@ -18,10 +18,13 @@ const fraunces = Fraunces({
 export default async function LandingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ref?: string }>;
+  searchParams: Promise<{ ref?: string; code?: string }>;
 }) {
-  const { ref } = await searchParams;
-  const signupHref = ref ? `/signup?ref=${encodeURIComponent(ref)}` : '/signup';
+  const { ref, code } = await searchParams;
+  const signupParams = new URLSearchParams();
+  if (ref) signupParams.set('ref', ref);
+  if (code) signupParams.set('code', code);
+  const signupHref = signupParams.size > 0 ? `/signup?${signupParams.toString()}` : '/signup';
 
   return (
     <div className={`${styles.page} ${zenMaru.variable} ${zenKaku.variable} ${fraunces.variable}`}>
