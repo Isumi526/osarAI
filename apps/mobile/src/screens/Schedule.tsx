@@ -1,6 +1,6 @@
 // スケジュール管理（月/週/日 グリッドカレンダー・顧客紐付け任意）。§14フェーズ後追加。
 // Google/Appleカレンダー品質のグリッドUIに刷新（旧: アジェンダ形式のリスト表示）。
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { listCustomers, getMyProfile, createCustomer, type Customer, type Profile } from '../lib/db.js';
 import {
   listSchedules,
@@ -17,7 +17,10 @@ import {
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { RequiredMark } from '../components/RequiredMark.js';
+import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
+import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { useNavigate } from 'react-router-dom';
+import type { Temperature } from '@osarai/shared';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -28,6 +31,7 @@ const WEEKDAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
 // カテゴリ別の予定ブロック色(議事録要望)。未設定/未知のカテゴリは既定色。
 const CATEGORY_COLORS: Record<string, string> = {
   アポ: '#fd780f', // 既定のオレンジ
+  商談: '#0f9d8f', // 青緑
   会議: '#3b82f6', // 青
   私用: '#8b5cf6', // 紫
   その他: '#6b7280', // グレー
@@ -145,6 +149,10 @@ export function SchedulePage() {
   const [monthList, setMonthList] = useState<Date[]>([]);
   const monthScrollRef = useRef<HTMLDivElement>(null);
   const prependAdjustRef = useRef<number | null>(null);
+  // 前後移動(</>)のたびに一覧を丸ごとブランクにすると体感の遅延・ちらつきが大きいため、
+  // 初回読み込みの時だけ「読み込み中…」を出し、以降の再取得は前の表示を残したまま裏で
+  // 差し替える(議事録要望: 前後移動時のもたつき軽減)。
+  const loadedOnceRef = useRef(false);
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   // 月表示に入る/基準日(今日ボタン等)が変わったら、その月を中心に前後1ヶ月で初期化。
@@ -218,7 +226,10 @@ export function SchedulePage() {
     }
     setLoading(true);
     listSchedules({ from: from.toISOString(), to: to.toISOString() })
-      .then(setSchedules)
+      .then((data) => {
+        setSchedules(data);
+        loadedOnceRef.current = true;
+      })
       .catch((e) => setError(String(e instanceof Error ? e.message : e)))
       .finally(() => setLoading(false));
   }
@@ -253,8 +264,12 @@ export function SchedulePage() {
   const weekDays =
     view === 'week' ? Array.from({ length: MULTI_DAY_COUNT }, (_, i) => addDays(startOfDay(anchor), i)) : [startOfDay(anchor)];
 
+  // 年月バーが下部ボタンと重なるバグ・月表示で画面全体がスクロールしてしまうバグの修正
+  // (議事録要望): main自体を画面高に固定しoverflow:hiddenにすることで、上部の
+  // タブ/前後移動バーは常に画面内に留まり、カレンダー本体(月表示のmonthScrollRef/
+  // 週日表示のTimeGrid)だけが内部スクロールするようにする。
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
+    <main className="screen" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
       <header className="screen-header">
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
       </header>
@@ -272,7 +287,7 @@ export function SchedulePage() {
               border: '1px solid var(--color-border)',
             }}
           >
-            {v === 'month' ? '月' : v === 'week' ? '週' : '日'}
+            {v === 'month' ? '月' : v === 'week' ? '3日' : '日'}
           </button>
         ))}
       </div>
@@ -295,7 +310,7 @@ export function SchedulePage() {
 
       {error && <p style={{ color: '#c0392b', marginTop: 12 }}>{error}</p>}
 
-      {loading ? (
+      {loading && !loadedOnceRef.current ? (
         <p style={{ marginTop: 16 }}>読み込み中…</p>
       ) : view === 'month' ? (
         // 月表示は縦に連続表示(無限スクロール)。上下端で前後の月を継ぎ足す(回答A)。
@@ -323,16 +338,20 @@ export function SchedulePage() {
           ))}
         </div>
       ) : (
-        <TimeGrid
-          days={weekDays}
-          schedulesOnDay={schedulesOnDay}
-          customers={customers}
-          onSelectSchedule={(s) => setEditing(s)}
-          onSelectSlot={(dateTime) => {
-            setPresetSlot(dateTime);
-            setEditing('new');
-          }}
-        />
+        // TimeGrid自身のmaxHeight(内部スクロール)より画面が小さい端末でも下部ボタンが
+        // 隠れないよう、flex:1のラッパーで包んで必要なら二重にスクロール可能にする。
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <TimeGrid
+            days={weekDays}
+            schedulesOnDay={schedulesOnDay}
+            customers={customers}
+            onSelectSchedule={(s) => setEditing(s)}
+            onSelectSlot={(dateTime) => {
+              setPresetSlot(dateTime);
+              setEditing('new');
+            }}
+          />
+        </div>
       )}
 
       {/* 操作ボタンを画面下部(親指の届く位置)に配置(議事録『review(2回目)』要望) */}
@@ -487,19 +506,26 @@ function MonthGrid({
   // 日を跨ぐ予定(例: 末日23:00→翌日1:00)は開始日だけでなく、跨いだ各日のセルにも表示する
   // (バグ修正: 従来はstart_atの日にしか出ず、終了日側のセルから欠落していた)。
   // グリッドに現れる日(days)の範囲で、各予定が重なる日すべてに割り当てる。
-  const itemsByDay = new Map<string, Schedule[]>();
-  const sorted = [...schedules].sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at));
-  for (const d of days) {
-    const cellStart = startOfDay(d);
-    const cellEnd = addDays(cellStart, 1);
-    for (const s of sorted) {
-      if (new Date(s.start_at) < cellEnd && new Date(s.end_at) > cellStart) {
-        const key = dayKey(d);
-        if (!itemsByDay.has(key)) itemsByDay.set(key, []);
-        itemsByDay.get(key)!.push(s);
+  // 無限スクロールで複数月分のMonthGridが同時にマウントされるため、schedules/月が
+  // 変わらない再レンダー(例: 他の月のスクロールによる親の再描画)ではこの計算を
+  // 使い回す(前後移動時のもたつき軽減・議事録要望)。
+  const itemsByDay = useMemo(() => {
+    const map = new Map<string, Schedule[]>();
+    const sorted = [...schedules].sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at));
+    for (const d of days) {
+      const cellStart = startOfDay(d);
+      const cellEnd = addDays(cellStart, 1);
+      for (const s of sorted) {
+        if (new Date(s.start_at) < cellEnd && new Date(s.end_at) > cellStart) {
+          const key = dayKey(d);
+          if (!map.has(key)) map.set(key, []);
+          map.get(key)!.push(s);
+        }
       }
     }
-  }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedules, gridStart.getTime()]);
 
   return (
     <div style={fixedHeight ? { marginTop: 8 } : { marginTop: 12, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -634,7 +660,20 @@ function TimeGrid({
       <div style={{ width: 36, flexShrink: 0, borderRight: '1px solid var(--color-border)' }}>
           <div style={{ height: 28 }} />
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} style={{ height: HOUR_HEIGHT, fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'right', paddingRight: 4, boxSizing: 'border-box', borderTop: '1px solid #f0ece5' }}>
+            <div
+              key={h}
+              style={{
+                height: HOUR_HEIGHT,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                fontSize: 10,
+                color: 'var(--color-text-muted)',
+                paddingRight: 4,
+                boxSizing: 'border-box',
+                borderTop: '1px solid #f0ece5',
+              }}
+            >
               {h}
             </div>
           ))}
@@ -644,14 +683,20 @@ function TimeGrid({
           const items = schedulesOnDay(day);
           const layout = layoutOverlaps(items);
           const isToday = isSameDay(day, today);
+          // 土日の色分け(議事録要望)。土=青、日=赤。当日強調(オレンジ)を優先する。
+          const dow = day.getDay();
+          const weekendColor = dow === 0 ? '#c0392b' : dow === 6 ? '#3b82f6' : undefined;
           return (
             <div key={day.toDateString()} style={{ flex: 1, minWidth: days.length > 1 ? 44 : undefined, position: 'relative', borderRight: '1px solid #f0ece5' }}>
               <div
                 style={{
                   height: 28,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   textAlign: 'center',
                   fontSize: 11,
-                  color: isToday ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  color: isToday ? 'var(--color-primary)' : weekendColor ?? 'var(--color-text-muted)',
                   fontWeight: isToday ? 700 : 400,
                   position: 'sticky',
                   top: 0,
@@ -775,8 +820,14 @@ function ScheduleForm({
   const [location, setLocation] = useState(initial?.location ?? '');
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerNeeds, setNewCustomerNeeds] = useState('');
+  const [newCustomerTemperature, setNewCustomerTemperature] = useState<Temperature | null>(null);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
+  // つながりを追加(自己紹介解析): CustomerForm.tsxのテキスト/画像解析と同じAPIを使う簡易版。
+  const [analyzeText, setAnalyzeText] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const analyzeFileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -785,20 +836,60 @@ function ScheduleForm({
 
   // 予定作成のその場で新しい顧客を登録できるようにする(既存顧客一覧に無い相手の場合、
   // 一旦顧客登録画面へ離脱すると入力中の予定内容が失われるため。議事録要望)。
-  // 顧客登録のフル機能(温度感/ニーズ等)はここでは持たず、名前のみの簡易登録とし、
-  // 詳細は後で顧客詳細画面から編集してもらう(既存の顧客登録ロジック自体は変更しない)。
+  // つながり登録画面(CustomerForm.tsx)と同じ自己紹介テキスト/画像解析を使い、
+  // 名前だけでなくニーズ・温度感も抽出したうえで登録する(議事録要望「つながりを追加」)。
+  async function onAnalyzeText() {
+    if (!analyzeText.trim() || analyzing) return;
+    setAnalyzing(true);
+    setNewCustomerError(null);
+    try {
+      const r = await analyzeCustomerText(analyzeText);
+      if (r.name) setNewCustomerName(r.name);
+      if (r.needs) setNewCustomerNeeds(r.needs);
+      if (r.temperature) setNewCustomerTemperature(r.temperature);
+    } catch (e) {
+      setNewCustomerError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function onAnalyzeImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (analyzeFileRef.current) analyzeFileRef.current.value = '';
+    if (!file || analyzing) return;
+    setAnalyzing(true);
+    setNewCustomerError(null);
+    try {
+      const r = await analyzeCustomerImage(file);
+      if (r.name) setNewCustomerName(r.name);
+      if (r.needs) setNewCustomerNeeds(r.needs);
+      if (r.temperature) setNewCustomerTemperature(r.temperature);
+    } catch (e) {
+      setNewCustomerError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   async function handleCreateCustomer() {
     const name = newCustomerName.trim();
     if (!name || creatingCustomer) return;
     setCreatingCustomer(true);
     setNewCustomerError(null);
     try {
-      const created = await createCustomer({ name, temperature: null, needs: null, relationType: null }, profile);
+      const created = await createCustomer(
+        { name, temperature: newCustomerTemperature, needs: newCustomerNeeds.trim() || null, relationType: null },
+        profile,
+      );
       onCustomerCreated(created);
       createdCustomerRef.current = created;
       setCustomerId(created.id);
       setAddingCustomer(false);
       setNewCustomerName('');
+      setNewCustomerNeeds('');
+      setNewCustomerTemperature(null);
+      setAnalyzeText('');
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -908,12 +999,52 @@ function ScheduleForm({
         </label>
         {addingCustomer ? (
           <div style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 10, padding: 10 }}>
+            <strong style={{ fontSize: 14 }}>つながりを追加</strong>
             <input
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
-              placeholder="新しいつながりの名前"
+              placeholder="名前"
               style={{ width: '100%', padding: 10 }}
             />
+            {/* つながり登録画面(CustomerForm.tsx)と同じ自己紹介テキスト/画像解析(議事録要望)。 */}
+            <textarea
+              value={analyzeText}
+              onChange={(e) => setAnalyzeText(e.target.value)}
+              placeholder="紹介文や自己紹介の文面を貼り付け…（任意）"
+              rows={2}
+              disabled={analyzing}
+              style={{ width: '100%', padding: 10, fontSize: 13, fontFamily: 'inherit' }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={onAnalyzeText}
+                disabled={analyzing || !analyzeText.trim()}
+                style={{ flex: 1, padding: 8, fontSize: 13 }}
+              >
+                {analyzing ? '解析中…' : 'テキストから解析'}
+              </button>
+              <button
+                type="button"
+                onClick={() => analyzeFileRef.current?.click()}
+                disabled={analyzing}
+                style={{ flex: 1, padding: 8, fontSize: 13 }}
+              >
+                画像から解析
+              </button>
+            </div>
+            <input ref={analyzeFileRef} type="file" accept="image/*" onChange={onAnalyzeImage} style={{ display: 'none' }} />
+            {(newCustomerNeeds || newCustomerTemperature) && (
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                {newCustomerTemperature && (
+                  <>
+                    <TempIcon value={newCustomerTemperature} />
+                    温度感: {TEMP_JA[newCustomerTemperature]}{' '}
+                  </>
+                )}
+                {newCustomerNeeds && `ニーズ: ${newCustomerNeeds}`}
+              </p>
+            )}
             {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
@@ -921,6 +1052,9 @@ function ScheduleForm({
                 onClick={() => {
                   setAddingCustomer(false);
                   setNewCustomerName('');
+                  setNewCustomerNeeds('');
+                  setNewCustomerTemperature(null);
+                  setAnalyzeText('');
                   setNewCustomerError(null);
                 }}
                 style={{ flex: 1, padding: 10, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
@@ -946,15 +1080,31 @@ function ScheduleForm({
             + 新しいつながりを登録
           </button>
         )}
+        {!customerId && (
+          <label>
+            タイトル <RequiredMark />
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              style={{ width: '100%', padding: 10, marginTop: 4 }}
+            />
+          </label>
+        )}
         <label>
-          タイトル {!customerId && <RequiredMark />}
-          {customerId ? '（空欄ならつながり名を使用）' : ''}
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required={!customerId}
+          カテゴリ
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
             style={{ width: '100%', padding: 10, marginTop: 4 }}
-          />
+          >
+            <option value="">指定しない</option>
+            {SCHEDULE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           開始 <RequiredMark />
@@ -963,7 +1113,16 @@ function ScheduleForm({
             type="datetime-local"
             step={600}
             value={startAt}
-            onChange={(e) => setStartAt(e.target.value)}
+            onChange={(e) => {
+              // 開始を変更したら終了を開始+1時間に自動設定する(既存の終了時刻は保持しない・
+              // 議事録要望)。
+              const v = e.target.value;
+              setStartAt(v);
+              const d = new Date(v);
+              if (!Number.isNaN(d.getTime())) {
+                setEndAt(toDatetimeLocal(new Date(d.getTime() + 60 * 60 * 1000).toISOString()));
+              }
+            }}
             required
             style={{ width: '100%', padding: 10, marginTop: 4 }}
           />
@@ -980,16 +1139,12 @@ function ScheduleForm({
           />
         </label>
         <label>
-          カテゴリ
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            style={{ width: '100%', padding: 10, marginTop: 4 }}
-          >
+          対面/オンライン
+          <select value={mode} onChange={(e) => setMode(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4 }}>
             <option value="">指定しない</option>
-            {SCHEDULE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {SCHEDULE_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m}
               </option>
             ))}
           </select>
@@ -1008,17 +1163,6 @@ function ScheduleForm({
               <option key={loc} value={loc} />
             ))}
           </datalist>
-        </label>
-        <label>
-          対面/オンライン
-          <select value={mode} onChange={(e) => setMode(e.target.value)} style={{ width: '100%', padding: 10, marginTop: 4 }}>
-            <option value="">指定しない</option>
-            {SCHEDULE_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
         </label>
         <label>
           メモ

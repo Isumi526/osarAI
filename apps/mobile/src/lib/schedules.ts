@@ -6,7 +6,7 @@ import type { Profile } from './db.js';
 export type Schedule = Database['public']['Tables']['schedules']['Row'];
 
 // カテゴリは汎用の固定リスト(select)から選ぶ想定だが、DBはtext(自由記述可)。
-export const SCHEDULE_CATEGORIES = ['アポ', '会議', '私用', 'その他'] as const;
+export const SCHEDULE_CATEGORIES = ['アポ', '商談', '会議', '私用', 'その他'] as const;
 
 // 対面/オンラインの区分。category同様、将来の選択肢追加を考慮しCHECK制約は設けずtext。
 export const SCHEDULE_MODES = ['対面', 'オンライン'] as const;

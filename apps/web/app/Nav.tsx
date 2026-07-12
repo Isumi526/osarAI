@@ -1,5 +1,6 @@
 // 全ページ共通のシンプルなナビ。未ログイン: login/signup、ログイン中: dashboard/billing/logout。
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { createServerSupabase } from '@/lib/supabase/server';
 
 export async function Nav() {
@@ -7,6 +8,10 @@ export async function Nav() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // middlewareがLPの?ref=CODEをCookieに保持しているため、ヘッダーの新規登録リンクからでも
+  // チャネル紹介コードが引き継がれる。
+  const ref = (await cookies()).get('osarai_ref')?.value;
+  const signupHref = ref ? `/signup?ref=${encodeURIComponent(ref)}` : '/signup';
 
   return (
     <nav
@@ -36,7 +41,7 @@ export async function Nav() {
         ) : (
           <>
             <Link href="/login">ログイン</Link>
-            <Link href="/signup">新規登録</Link>
+            <Link href={signupHref}>新規登録</Link>
           </>
         )}
       </div>

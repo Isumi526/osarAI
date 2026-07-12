@@ -1,13 +1,21 @@
 // Home（顧客リスト＋フィルタ＋おさらい導線）。§10。
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listCustomers, getMyProfile, type Customer } from '../lib/db.js';
+import { listCustomers, getMyProfile, RELATION_TYPES, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { TempIcon } from '../components/TempIcon.js';
 import type { Temperature } from '@osarai/shared';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
+
+// つながりの区分バッジの色(議事録要望・つながり一覧で顧客/パートナーを一目で区別)。
+// 温度感の危険色(--color-danger)とは重ならない淡い配色にする。
+const RELATION_BADGE_STYLE: Record<(typeof RELATION_TYPES)[number], { background: string; color: string }> = {
+  つながり: { background: '#f1efe9', color: 'var(--color-text-muted)' },
+  顧客: { background: 'var(--color-primary-light)', color: 'var(--color-primary-dark)' },
+  パートナー: { background: '#e6f2ea', color: 'var(--color-success)' },
+};
 
 export function Home() {
   const navigate = useNavigate();
@@ -94,7 +102,6 @@ export function Home() {
         }}
       >
         {[
-          { label: '今後の予定', value: stats?.upcomingSchedules },
           { label: '今月のアポ', value: stats?.monthAppointments },
           { label: '今月のおさらい', value: stats?.monthOsarai },
           { label: '累計アポ', value: stats?.totalAppointments },
@@ -102,7 +109,6 @@ export function Home() {
           { label: '今月の新規つながり', value: stats?.monthNewCustomers },
           { label: '累計つながり', value: stats?.totalCustomers },
           { label: '今月の会議', value: stats?.monthMeetings },
-          { label: '今後の会議', value: stats?.upcomingMeetings },
         ].map((s) => (
           <div
             key={s.label}
@@ -154,7 +160,7 @@ export function Home() {
           color: 'var(--color-text)',
         }}
       >
-        🤝 あの人について、AIとおさらいしてみる（つながりAI登録）
+        🤝 あの人について、AIとおさらいしてみる
       </button>
 
       <div style={{ display: 'flex', gap: 8, margin: '8px 0 16px' }}>
@@ -198,12 +204,34 @@ export function Home() {
                   color: 'inherit',
                 }}
               >
-                <span>
-                  {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null} {c.name}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null}
+                  {c.name}
+                  {c.relation_type && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        ...RELATION_BADGE_STYLE[c.relation_type as (typeof RELATION_TYPES)[number]],
+                      }}
+                    >
+                      {c.relation_type}
+                    </span>
+                  )}
                 </span>
-                {c.needs && (
-                  <span style={{ color: '#9a9183', fontSize: 13, maxWidth: '50%' }}>{c.needs}</span>
-                )}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '50%' }}>
+                  {c.needs && (
+                    <span style={{ color: '#9a9183', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {c.needs}
+                    </span>
+                  )}
+                  {c.last_met_at && (
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      {new Date(c.last_met_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                    </span>
+                  )}
+                </span>
               </Link>
             </li>
           ))}

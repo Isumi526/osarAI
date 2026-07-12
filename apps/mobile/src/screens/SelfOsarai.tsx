@@ -36,6 +36,13 @@ export function SelfOsarai() {
   const [done, setDone] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AIが考え中でも続けて送信でき、受け取った順に1件ずつ処理する(AiChat.tsxのキュー方式を移植)。
+  // 送信済みの会話は historyRef に確定順で積み、次のリクエストはこれを履歴として使う
+  // (messagesはキュー中の未処理ユーザー発話も含むため、そのまま履歴には使えない)。
+  const [queue, setQueue] = useState<string[]>([]);
+  const processingRef = useRef(false);
+  const historyRef = useRef<Msg[]>([{ role: 'assistant', content: DEFAULT_OPENING }]);
+  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { confirm, dialog: confirmDialog } = useConfirm();
   // ← 戻るボタンの確認条件(未保存の対話中)と同じ基準で、下部ナビタップ時も確認を挟む。
@@ -74,42 +81,78 @@ export function SelfOsarai() {
     }
   }
 
-  async function sendMessage(text: string) {
-    if (!text.trim() || sending || done) return;
+  // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
+  function sendMessage(text: string) {
+    const t = text.trim();
+    if (!t || done) return;
     setError(null);
     setInput('');
     setRemainingSec((s) => (s === null ? 300 : s));
-    const history = messages;
-    setMessages((m) => [...m, { role: 'user', content: text }]);
+    setMessages((m) => [...m, { role: 'user', content: t }]);
+    setQueue((q) => [...q, t]);
+  }
+
+  // キューを1件ずつ順番に処理するワーカー。historyRefを確定順で更新→次の1件へ進む。
+  // processingRefで多重起動を防ぐ(処理中の他state変化は無視)。
+  useEffect(() => {
+    if (processingRef.current || queue.length === 0 || done) return;
+    processingRef.current = true;
+    const text = queue[0]!;
+    const history = historyRef.current;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSending(true);
-    try {
-      const res = await selfOsaraiTurn({ message: text, history });
-      if (res.next_question) {
-        setMessages((m) => [...m, { role: 'assistant', content: res.next_question! }]);
-      }
-      if (res.done) {
-        setDone(true);
-        await persist(res.extracted.notes ?? [], res.extracted.fields);
-      }
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      setInput(text);
-      setMessages((m) => m.slice(0, -1));
-    } finally {
-      setSending(false);
-    }
+    selfOsaraiTurn({ message: text, history }, controller.signal)
+      .then((res) => {
+        historyRef.current = [
+          ...history,
+          { role: 'user', content: text },
+          ...(res.next_question ? [{ role: 'assistant' as const, content: res.next_question }] : []),
+        ];
+        if (res.next_question) {
+          setMessages((m) => [...m, { role: 'assistant', content: res.next_question! }]);
+        }
+        if (res.done) {
+          setDone(true);
+          void persist(res.extracted.notes ?? [], res.extracted.fields);
+          // done後は残りの未処理キュー(もしあれば)は破棄する。返答されないまま残さないため。
+          setQueue([]);
+        } else {
+          setQueue((q) => q.slice(1));
+        }
+      })
+      .catch((e) => {
+        // 停止(abort)はエラー表示しない。停止/エラーともキューを破棄し中断する。
+        if (!controller.signal.aborted) {
+          setError(String(e instanceof Error ? e.message : e));
+        }
+        setQueue([]);
+      })
+      .finally(() => {
+        abortRef.current = null;
+        setSending(false);
+        processingRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, done]);
+
+  // 生成中の停止: 進行中リクエストをabortし、未処理のキューも破棄する。
+  function stopGenerating() {
+    abortRef.current?.abort();
+    setQueue([]);
   }
 
   function send() {
-    void sendMessage(input.trim());
+    sendMessage(input);
   }
 
+  // キューが残っている間(まだ処理中の発話がある間)は、途中の履歴で終えてしまわないよう待つ。
   async function endEarly() {
-    if (sending || done || ending) return;
+    if (sending || done || ending || queue.length > 0) return;
     setEnding(true);
     setError(null);
     try {
-      const res = await selfOsaraiTurn({ message: '', history: messages, forceEnd: true });
+      const res = await selfOsaraiTurn({ message: '', history: historyRef.current, forceEnd: true });
       setDone(true);
       await persist(res.extracted.notes ?? [], res.extracted.fields);
     } catch (e) {
@@ -219,7 +262,7 @@ export function SelfOsarai() {
                 <button
                   key={h.label}
                   type="button"
-                  onClick={() => void sendMessage(h.message)}
+                  onClick={() => sendMessage(h.message)}
                   style={{
                     padding: '8px 14px',
                     background: 'var(--color-primary-light)',
@@ -238,7 +281,7 @@ export function SelfOsarai() {
             <button
               type="button"
               onClick={endEarly}
-              disabled={ending || sending}
+              disabled={ending || sending || queue.length > 0}
               style={{ alignSelf: 'flex-end', background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: 13, textDecoration: 'underline', padding: '4px 0' }}
             >
               {ending ? '保存中…' : 'ここまでで終える'}
@@ -256,10 +299,19 @@ export function SelfOsarai() {
               }}
               placeholder="話したいことを入力…（Cmd/Ctrl+Enterで送信）"
               rows={1}
-              disabled={sending}
               style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid var(--color-border)', resize: 'none', fontFamily: 'inherit', fontSize: 15 }}
             />
-            <button onClick={send} disabled={sending || !input.trim()} style={{ padding: '0 18px', minHeight: 44 }}>
+            {/* 生成中でも送信ボタンは有効(キューに積める)。生成中は停止ボタンも並べる。 */}
+            {sending && (
+              <button
+                onClick={stopGenerating}
+                aria-label="生成を停止"
+                style={{ padding: '0 14px', minHeight: 44, background: 'var(--color-text-muted)' }}
+              >
+                ■
+              </button>
+            )}
+            <button onClick={send} disabled={!input.trim()} style={{ padding: '0 18px', minHeight: 44 }}>
               送信
             </button>
           </div>

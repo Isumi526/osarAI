@@ -1,0 +1,535 @@
+/* osarAI LP（議事録共有デザインの移植・実装内容に合わせて文言調整） */
+.page {
+  font-family: var(--font-body), 'Zen Kaku Gothic New', sans-serif;
+  color: #1e2740;
+  background: #fbf3e7;
+  line-height: 1.85;
+  overflow-x: hidden;
+}
+
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 0;
+}
+
+.logo {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 900;
+  font-size: 1.35rem;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: baseline;
+  gap: 0.15em;
+}
+.logo b {
+  color: #ff7a3d;
+}
+.logo small {
+  font-family: var(--font-body), 'Zen Kaku Gothic New', sans-serif;
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: #46506b;
+  letter-spacing: 0.25em;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  background: #ff7a3d;
+  color: #fffcf7;
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 1.02rem;
+  padding: 1.05em 1.9em;
+  border-radius: 999px;
+  text-decoration: none;
+  box-shadow: 0 14px 30px -10px rgba(234, 94, 30, 0.6);
+}
+.ctaSmall {
+  padding: 0.7em 1.3em;
+  font-size: 0.9rem;
+}
+.ctaLarge {
+  font-size: 1.1rem;
+}
+.arrow {
+  display: inline-block;
+}
+
+.hero {
+  padding: 18px 0 90px;
+  position: relative;
+}
+.heroGrid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 56px;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+.eyebrow {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: #ea5e1e;
+  background: rgba(255, 122, 61, 0.12);
+  padding: 0.5em 1.1em;
+  border-radius: 999px;
+  margin-bottom: 22px;
+}
+.h1 {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 900;
+  font-size: clamp(2.3rem, 4.6vw, 3.5rem);
+  line-height: 1.28;
+  letter-spacing: 0.005em;
+}
+.mark {
+  position: relative;
+  white-space: nowrap;
+  background: linear-gradient(to bottom, transparent 60%, #f2b441 60%);
+  opacity: 0.95;
+}
+.lead {
+  font-size: 1.12rem;
+  color: #46506b;
+  margin: 24px 0 14px;
+  max-width: 30em;
+}
+.target {
+  font-size: 0.92rem;
+  color: #46506b;
+  margin-bottom: 30px;
+  padding-left: 16px;
+  border-left: 3px solid #f2b441;
+}
+.heroCtaRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.note {
+  font-size: 0.82rem;
+  color: #46506b;
+}
+
+.phoneStage {
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+.phone {
+  width: 300px;
+  background: #1e2740;
+  border-radius: 42px;
+  padding: 14px;
+  box-shadow: 0 18px 50px -18px rgba(30, 39, 64, 0.28);
+  position: relative;
+  z-index: 1;
+}
+.phoneScreen {
+  background: #fffcf7;
+  border-radius: 30px;
+  padding: 20px 16px 22px;
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+.appTop {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(30, 39, 64, 0.12);
+  margin-bottom: 16px;
+}
+.appDot {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #ff7a3d, #f2b441);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.appName {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 900;
+  font-size: 0.95rem;
+}
+.appName b {
+  color: #ff7a3d;
+}
+.appSub {
+  font-size: 0.62rem;
+  color: #46506b;
+  letter-spacing: 0.18em;
+}
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.bubble {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  padding: 0.7em 1em;
+  border-radius: 16px;
+  max-width: 84%;
+}
+.bubbleAi {
+  background: #f4e7d2;
+  color: #1e2740;
+  align-self: flex-start;
+  border-bottom-left-radius: 5px;
+}
+.bubbleMe {
+  background: #ff7a3d;
+  color: #fffcf7;
+  align-self: flex-end;
+  border-bottom-right-radius: 5px;
+}
+.bubbleDone {
+  background: rgba(242, 180, 65, 0.22);
+  color: #1e2740;
+  align-self: flex-start;
+  font-weight: 700;
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+}
+.check {
+  width: 18px;
+  height: 18px;
+  background: #ff7a3d;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.sec {
+  padding: 84px 0;
+}
+.secTag {
+  font-family: var(--font-num), Georgia, serif;
+  font-style: italic;
+  font-size: 1.05rem;
+  color: #ea5e1e;
+  margin-bottom: 10px;
+  display: block;
+}
+.h2 {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.7rem, 3.3vw, 2.4rem);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+.secLead {
+  color: #46506b;
+  font-size: 1.05rem;
+  max-width: 40em;
+}
+
+.problem {
+  background: #1e2740;
+  color: #fbf3e7;
+}
+.problem .h2 {
+  color: #fffcf7;
+}
+.problem .secTag {
+  color: #f2b441;
+}
+.painList {
+  display: grid;
+  gap: 14px;
+  margin: 30px 0 28px;
+  max-width: 34em;
+}
+.pain {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  font-size: 1.05rem;
+}
+.pain span {
+  color: #ff7a3d;
+  font-size: 1.3rem;
+  line-height: 1.4;
+  flex: none;
+}
+.statBand {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 26px 28px;
+  max-width: 38em;
+}
+.statBandBig {
+  font-family: var(--font-num), Georgia, serif;
+  font-size: 2.6rem;
+  font-weight: 600;
+  color: #f2b441;
+  line-height: 1;
+}
+.statBand p {
+  color: #fbf3e7;
+  opacity: 0.85;
+  margin-top: 8px;
+}
+.src {
+  font-size: 0.72rem;
+  opacity: 0.55;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 38px;
+}
+.step {
+  background: #fffcf7;
+  border-radius: 22px;
+  padding: 28px 24px;
+  box-shadow: 0 8px 24px -10px rgba(30, 39, 64, 0.25);
+  border: 1px solid rgba(30, 39, 64, 0.12);
+}
+.stepN {
+  font-family: var(--font-num), Georgia, serif;
+  font-size: 1.4rem;
+  color: #ff7a3d;
+  font-weight: 600;
+}
+.step h3 {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin: 8px 0 8px;
+}
+.step p {
+  font-size: 0.92rem;
+  color: #46506b;
+}
+
+.asks {
+  margin: 40px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 40em;
+}
+.ask {
+  position: relative;
+  align-self: flex-end;
+  max-width: 82%;
+  background: #ff7a3d;
+  color: #fffcf7;
+  padding: 0.85em 1.2em;
+  font-size: 1rem;
+  line-height: 1.65;
+  border-radius: 20px;
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 8px 24px -10px rgba(30, 39, 64, 0.25);
+}
+.askAi {
+  position: relative;
+  align-self: flex-start;
+  max-width: 82%;
+  background: #f4e7d2;
+  color: #1e2740;
+  padding: 0.85em 1.2em;
+  font-size: 1rem;
+  line-height: 1.65;
+  border-radius: 20px;
+  border-bottom-left-radius: 6px;
+  box-shadow: 0 8px 24px -10px rgba(30, 39, 64, 0.25);
+  margin-bottom: 10px;
+}
+.askAi .who {
+  display: block;
+  font-size: 0.72rem;
+  color: #ea5e1e;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.ba {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  margin-top: 38px;
+}
+.baCard {
+  border-radius: 24px;
+  padding: 32px 28px;
+}
+.baBefore {
+  background: #f4e7d2;
+}
+.baAfter {
+  background: linear-gradient(160deg, #ff7a3d, #f2b441);
+  color: #fffcf7;
+}
+.baCard h3 {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 900;
+  font-size: 1.2rem;
+  margin-bottom: 18px;
+}
+.baCard ul {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+}
+.baCard li {
+  font-size: 0.98rem;
+  padding-left: 26px;
+  position: relative;
+}
+.baBefore li::before {
+  content: '×';
+  position: absolute;
+  left: 0;
+  color: #46506b;
+  font-weight: 700;
+}
+.baAfter li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+
+.obj {
+  background: #f4e7d2;
+}
+.objGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 36px;
+}
+.objCard {
+  background: #fffcf7;
+  border-radius: 22px;
+  padding: 28px 24px;
+  box-shadow: 0 8px 24px -10px rgba(30, 39, 64, 0.25);
+}
+.objQ {
+  font-family: var(--font-disp), 'Zen Maru Gothic', sans-serif;
+  font-weight: 700;
+  color: #ea5e1e;
+  font-size: 1.05rem;
+  margin-bottom: 10px;
+}
+.objA {
+  font-size: 0.95rem;
+  color: #46506b;
+}
+
+.nums {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 40px;
+}
+.numbox {
+  text-align: center;
+  padding: 30px 20px;
+  border-radius: 22px;
+  background: #fffcf7;
+  box-shadow: 0 8px 24px -10px rgba(30, 39, 64, 0.25);
+  border: 1px solid rgba(30, 39, 64, 0.12);
+}
+.numboxV {
+  font-family: var(--font-num), Georgia, serif;
+  font-size: 2.8rem;
+  font-weight: 600;
+  color: #ff7a3d;
+  line-height: 1;
+}
+.numboxL {
+  font-size: 0.92rem;
+  color: #1e2740;
+  margin-top: 10px;
+  font-weight: 500;
+}
+.numboxS {
+  font-size: 0.72rem;
+  color: #46506b;
+  margin-top: 6px;
+}
+
+.final {
+  background: #1e2740;
+  color: #fffcf7;
+  text-align: center;
+  border-radius: 36px;
+  margin: 0 24px 70px;
+  padding: 72px 24px;
+}
+.final .h2 {
+  color: #fffcf7;
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+}
+.final p {
+  color: #fbf3e7;
+  opacity: 0.8;
+  margin: 14px 0 30px;
+}
+.finalNote {
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 18px;
+}
+
+.footer {
+  text-align: center;
+  padding: 40px 0 60px;
+  color: #46506b;
+  font-size: 0.85rem;
+}
+.footer .logo {
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+@media (max-width: 860px) {
+  .heroGrid {
+    grid-template-columns: 1fr;
+    gap: 44px;
+  }
+  .phoneStage {
+    order: -1;
+  }
+  .steps,
+  .objGrid,
+  .nums {
+    grid-template-columns: 1fr;
+  }
+  .ba {
+    grid-template-columns: 1fr;
+  }
+  .h1 {
+    font-size: 2.1rem;
+  }
+}

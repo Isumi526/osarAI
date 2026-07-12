@@ -24,7 +24,7 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
 const CARD_SCHEMA_DESC =
   '{points: 会話の要点(配列), needs: 相手の要望/困りごと(配列), ' +
   'temperature: 見込み温度(hot/warm/cold), next_actions: 次にやること(配列), ' +
-  'custom_fields: その他特記事項(キー値)}';
+  'custom_fields: その他特記事項(キー値), name: 相手の名前(判明していれば)}';
 
 // Gemini に強制する応答スキーマ（OsaraiTurnResult に対応）
 const TURN_SCHEMA: GeminiSchema = {
@@ -38,6 +38,7 @@ const TURN_SCHEMA: GeminiSchema = {
         temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], nullable: true },
         next_actions: { type: 'array', items: { type: 'string' } },
         custom_fields: { type: 'object', properties: {} },
+        name: { type: 'string', nullable: true },
       },
     },
     next_question: { type: 'string', nullable: true },
@@ -285,8 +286,9 @@ function joinList(v?: string[]): string | null {
   return v.join(' / ');
 }
 
-// custom_fields に名前らしき項目があれば拾う（無ければ null）
+// extracted.name を優先し、無ければ custom_fields に名前らしき項目があれば拾う（無ければ null）
 function inferName(extracted: OsaraiExtracted): string | null {
+  if (typeof extracted.name === 'string' && extracted.name.trim()) return extracted.name.trim();
   const cf = extracted.custom_fields ?? {};
   for (const key of ['name', '名前', '氏名', 'customer_name']) {
     const v = cf[key];

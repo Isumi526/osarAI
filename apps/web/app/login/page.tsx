@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // middlewareがLPの?ref=CODEを保持するCookieを見て、新規登録リンクにも引き継ぐ
+  // (サーバー側の初期描画とhydration不一致を避けるためmount後に反映)。
+  const [signupHref, setSignupHref] = useState('/signup');
+  useEffect(() => {
+    const ref = document.cookie.match(/(?:^|; )osarai_ref=([^;]+)/)?.[1];
+    if (ref) setSignupHref(`/signup?ref=${ref}`);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +57,7 @@ export default function LoginPage() {
         </button>
       </form>
       <p style={{ marginTop: 16 }}>
-        アカウントがない方は <Link href="/signup">新規登録</Link>
+        アカウントがない方は <Link href={signupHref}>新規登録</Link>
       </p>
     </main>
   );

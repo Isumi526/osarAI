@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { enablePush, isPushSupported } from '../lib/push.js';
 import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { useRegisterNavGuard } from '../components/NavGuard.js';
 
 // 目標は「目標内容+いつまでに」を複数登録できるよう別UI(goals)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
@@ -28,6 +29,8 @@ export function Settings() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  // プロフィール項目(userProfile/goals)を未保存で編集中かどうか。BottomNav離脱時の確認ダイアログに使う。
+  const [profileDirty, setProfileDirty] = useState(false);
 
   // 紹介コード（自分のprofiles.idから決定的に導出。別テーブル管理なし）
   const [referralCode, setReferralCode] = useState<string | null>(null);
@@ -63,6 +66,8 @@ export function Settings() {
   ).replace(/\/$/, '');
   const referralUrl = referralCode ? `${lpOrigin}/?ref=${referralCode}` : '';
 
+  useRegisterNavGuard(profileDirty);
+
   async function onCopyReferralCode() {
     if (!referralUrl) return;
     try {
@@ -81,6 +86,7 @@ export function Settings() {
       const cleanGoals = goals.filter((g) => g.text.trim());
       await updateMyUserProfile({ ...userProfile, goals: cleanGoals });
       setProfileMsg('保存しました。');
+      setProfileDirty(false);
     } catch (e) {
       setProfileMsg(String(e instanceof Error ? e.message : e));
     } finally {
@@ -114,30 +120,6 @@ export function Settings() {
         <strong>マイページ</strong>
         <span style={{ width: 48 }} />
       </header>
-
-      <section
-        style={{
-          background: '#fff',
-          border: '1px solid var(--color-border)',
-          borderRadius: 12,
-          padding: 16,
-          marginTop: 16,
-        }}
-      >
-        <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>通知</h2>
-        <p style={{ margin: '0 0 12px', color: '#6b6358', fontSize: 14 }}>
-          人と会ったあと「今日会った人、おさらいする？」を通知でお知らせします（習慣化の中核）。
-        </p>
-        <button onClick={onEnablePush} disabled={busy} style={{ padding: 12, fontSize: 15 }}>
-          {busy ? '設定中…' : '通知をオンにする'}
-        </button>
-        {!isPushSupported() && (
-          <p style={{ margin: '8px 0 0', color: '#9a9183', fontSize: 12 }}>
-            ※プッシュ通知は実機アプリでのみ有効です。
-          </p>
-        )}
-        {pushMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{pushMsg}</p>}
-      </section>
 
       {referralCode && (
         <section
@@ -194,7 +176,10 @@ export function Settings() {
               {f.type === 'select' ? (
                 <select
                   value={userProfile[f.key] ?? ''}
-                  onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
+                  onChange={(e) => {
+                    setUserProfile((p) => ({ ...p, [f.key]: e.target.value }));
+                    setProfileDirty(true);
+                  }}
                   style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
                 >
                   <option value="">未選択</option>
@@ -207,14 +192,20 @@ export function Settings() {
               ) : f.type === 'textarea' ? (
                 <AutoResizeTextarea
                   value={userProfile[f.key] ?? ''}
-                  onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
+                  onChange={(e) => {
+                    setUserProfile((p) => ({ ...p, [f.key]: e.target.value }));
+                    setProfileDirty(true);
+                  }}
                   rows={2}
                   style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
                 />
               ) : (
                 <input
                   value={userProfile[f.key] ?? ''}
-                  onChange={(e) => setUserProfile((p) => ({ ...p, [f.key]: e.target.value }))}
+                  onChange={(e) => {
+                    setUserProfile((p) => ({ ...p, [f.key]: e.target.value }));
+                    setProfileDirty(true);
+                  }}
                   style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
                 />
               )}
@@ -229,20 +220,29 @@ export function Settings() {
                 <div key={i} style={{ display: 'grid', gap: 6, background: 'var(--color-primary-light)', border: '1px solid var(--color-primary-border)', borderRadius: 8, padding: 8 }}>
                   <input
                     value={g.text}
-                    onChange={(e) => setGoals((gs) => gs.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
+                    onChange={(e) => {
+                      setGoals((gs) => gs.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)));
+                      setProfileDirty(true);
+                    }}
                     placeholder="目標（例: 月間契約10件）"
                     style={{ width: '100%', padding: 8, fontSize: 15 }}
                   />
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
                       value={g.by}
-                      onChange={(e) => setGoals((gs) => gs.map((x, j) => (j === i ? { ...x, by: e.target.value } : x)))}
+                      onChange={(e) => {
+                        setGoals((gs) => gs.map((x, j) => (j === i ? { ...x, by: e.target.value } : x)));
+                        setProfileDirty(true);
+                      }}
                       placeholder="いつまでに（例: 2026年内）"
                       style={{ flex: 1, padding: 8, fontSize: 14 }}
                     />
                     <button
                       type="button"
-                      onClick={() => setGoals((gs) => gs.filter((_, j) => j !== i))}
+                      onClick={() => {
+                        setGoals((gs) => gs.filter((_, j) => j !== i));
+                        setProfileDirty(true);
+                      }}
                       style={{ padding: '8px 10px', background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b', fontSize: 13 }}
                     >
                       削除
@@ -252,7 +252,10 @@ export function Settings() {
               ))}
               <button
                 type="button"
-                onClick={() => setGoals((gs) => [...gs, { text: '', by: '' }])}
+                onClick={() => {
+                  setGoals((gs) => [...gs, { text: '', by: '' }]);
+                  setProfileDirty(true);
+                }}
                 style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', fontSize: 13 }}
               >
                 + 目標を追加
@@ -286,6 +289,30 @@ export function Settings() {
         >
           自分をおさらいする
         </Link>
+      </section>
+
+      <section
+        style={{
+          background: '#fff',
+          border: '1px solid var(--color-border)',
+          borderRadius: 12,
+          padding: 16,
+          marginTop: 16,
+        }}
+      >
+        <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>通知</h2>
+        <p style={{ margin: '0 0 12px', color: '#6b6358', fontSize: 14 }}>
+          人と会ったあと「今日会った人、おさらいする？」を通知でお知らせします（習慣化の中核）。
+        </p>
+        <button onClick={onEnablePush} disabled={busy} style={{ padding: 12, fontSize: 15 }}>
+          {busy ? '設定中…' : '通知をオンにする'}
+        </button>
+        {!isPushSupported() && (
+          <p style={{ margin: '8px 0 0', color: '#9a9183', fontSize: 12 }}>
+            ※プッシュ通知は実機アプリでのみ有効です。
+          </p>
+        )}
+        {pushMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{pushMsg}</p>}
       </section>
 
       <button

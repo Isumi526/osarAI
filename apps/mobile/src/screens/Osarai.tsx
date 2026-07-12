@@ -3,7 +3,7 @@
 // ?customerId=... 付きなら既存顧客のおさらい、無ければ新規（done 時に名前から自動でカード生成）。
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { osaraiTurn, transcribeAudio } from '../lib/osarai.js';
+import { osaraiTurn, transcribeAudio, type OsaraiTurnResponse } from '../lib/osarai.js';
 import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
 import { useLiveSpeech } from '../hooks/useLiveSpeech.js';
@@ -24,8 +24,16 @@ const OPENINGS_NEW = [
   'おつかれさまです！今日会った方のこと、思い出しながら聞かせてください。',
   '今日はどんな出会いがありましたか？印象に残っていることから話してもらえますか？',
 ];
+// つながりAI登録（新規カードを対話だけで作る導線・CustomerForm.tsx参照）専用の開始メッセージ。
+// 「振り返り」ではなく「初めて聞く」トーンにする（議事録要望）。
+const OPENINGS_REGISTER = [
+  'はじめまして。これから、新しく出会った方について聞かせてください。まずはどんな方か教えてもらえますか？',
+  '新しいつながりの登録ですね。お名前や、どんな方なのか、知っていることを教えてください。',
+  '新しく出会った方について、AIが聞きながら整理します。まずはどんな出会いだったか教えてください。',
+];
 const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]!;
 const OPENING_NEW = () => pickRandom(OPENINGS_NEW);
+const OPENING_REGISTER = () => pickRandom(OPENINGS_REGISTER);
 const openingForExisting = (name: string) =>
   pickRandom([
     `${name}さんとの話、振り返ってみましょう。今日はどんな話をしましたか？`,
@@ -36,6 +44,15 @@ const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 // APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
 const prefillName = (isNew: boolean, name: string | null) =>
   isNew && name && name !== '新しく会った人' ? name : '';
+// 既存顧客の名前が空/仮名のままかどうか（判明した名前の自動反映に使う）
+const isPlaceholderCustomerName = (name: string | null) => !name || !name.trim() || name === '新しく会った人';
+
+// 相手について自由に話すきっかけになるヒント(バブルUI)。タップするとその話題で話し始められる。
+const HINTS: { label: string; message: string }[] = [
+  { label: '最近の様子について話す', message: '最近の様子について話したいです。' },
+  { label: '困りごとや気になっていることについて話す', message: '困りごとや気になっていることについて話したいです。' },
+  { label: '次回の約束・アクションについて話す', message: '次回の約束やアクションについて話したいです。' },
+];
 
 // 配列⇔複数行テキストの相互変換（サマリ編集フォーム用）
 const toLines = (v?: string[]) => (v ?? []).join('\n');
@@ -45,8 +62,12 @@ export function Osarai() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const customerId = params.get('customerId');
+  // つながりAI登録（CustomerForm.tsxの「AIと対話して登録する」）専用モード。顧客未指定の時のみ意味を持つ。
+  const isRegisterMode = !customerId && params.get('mode') === 'register';
 
-  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: OPENING_NEW() }]);
+  const [messages, setMessages] = useState<Msg[]>([
+    { role: 'assistant', content: isRegisterMode ? OPENING_REGISTER() : OPENING_NEW() },
+  ]);
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
@@ -57,6 +78,10 @@ export function Osarai() {
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState<string | null>(null);
   const lastAudioRef = useRef<Blob | null>(null);
+  // AIが考え中でも続けて送信でき、受け取った順に1件ずつ処理する(AiChat.tsxのキュー方式を移植)。
+  const [queue, setQueue] = useState<string[]>([]);
+  const processingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // サマリ確認・修正フォーム（F-02 AC: 生成されたサマリをユーザーが確認・修正できる）
   const [editPoints, setEditPoints] = useState('');
@@ -67,6 +92,9 @@ export function Osarai() {
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // 既存顧客(customerId指定)の対話開始時点の名前。空/仮名のままなら、判明した名前を自動反映する対象にする。
+  const [existingCustomerName, setExistingCustomerName] = useState<string | null>(null);
+  const [autoNamePrefill, setAutoNamePrefill] = useState(false);
   const recorder = useRecorder();
   const liveSpeech = useLiveSpeech();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -111,10 +139,13 @@ export function Osarai() {
     setEditTemperature(null);
     setEditName('');
     setIsNewCustomer(false);
+    setAutoNamePrefill(false);
+    setExistingCustomerName(null);
     setConfirmed(false);
     setConfirming(false);
     setRemainingSec(null);
     setEnding(false);
+    setQueue([]);
     navigate('/osarai');
   }
 
@@ -128,12 +159,15 @@ export function Osarai() {
     navigate(-1);
   }
 
-  // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）
+  // 既存顧客のおさらいなら、初回の質問を顧客名入りの文言に差し替える（新規は既定文言のまま）。
+  // 現在の名前も控えておき、まだ空/仮名なら対話で判明した名前を自動反映する対象にする（F-02 名前自動反映）。
   useEffect(() => {
     if (!customerId) return;
     getCustomer(customerId)
       .then((c) => {
-        if (c?.name) {
+        if (!c) return;
+        setExistingCustomerName(c.name ?? null);
+        if (c.name) {
           setMessages([{ role: 'assistant', content: openingForExisting(c.name) }]);
         }
       })
@@ -178,59 +212,93 @@ export function Osarai() {
     }
   }
 
-  async function send() {
-    const text = input.trim();
-    if (!text || sending || done) return;
-    setError(null);
-    setInput('');
-    setMessages((m) => [...m, { role: 'user', content: text }]);
-    setSending(true);
-    try {
-      const res = await osaraiTurn({ message: text, sessionId, customerId });
-      setSessionId(res.sessionId);
-      setRemainingSec((s) => (s === null ? 300 : s)); // 最初の送信でタイマー開始（既定5分）
-      if (res.next_question) {
-        setMessages((m) => [...m, { role: 'assistant', content: res.next_question! }]);
-      }
-      if (res.done) {
-        setDone(true);
-        setSavedCustomerId(res.customerId);
-        setSavedInteractionId(res.interactionId);
-        setIsNewCustomer(res.isNewCustomer);
-        setEditName(prefillName(res.isNewCustomer, res.customerName));
-        const ext: OsaraiExtracted = res.extracted ?? {};
-        setEditPoints(toLines(ext.points));
-        setEditNeeds(toLines(ext.needs));
-        setEditNextActions(toLines(ext.next_actions));
-        setEditTemperature(ext.temperature ?? null);
-      }
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      // 失敗したユーザー発話を入力欄に戻す
-      setInput(text);
-      setMessages((m) => m.slice(0, -1));
-    } finally {
-      setSending(false);
-    }
+  // done時の共通処理: サマリ編集フォームへ反映する。既存顧客で名前が空/仮名のままなら、
+  // 対話で判明した名前(extracted.name)を検出してプリフィルする（F-02 名前自動反映・上書きはしない）。
+  function applyDoneCard(res: OsaraiTurnResponse) {
+    setSavedCustomerId(res.customerId);
+    setSavedInteractionId(res.interactionId);
+    setIsNewCustomer(res.isNewCustomer);
+    const ext: OsaraiExtracted = res.extracted ?? {};
+    const detectedName = typeof ext.name === 'string' ? ext.name.trim() : '';
+    const autoName = !res.isNewCustomer && !!detectedName && isPlaceholderCustomerName(existingCustomerName);
+    setAutoNamePrefill(autoName);
+    setEditName(prefillName(res.isNewCustomer, res.customerName) || (autoName ? detectedName : ''));
+    setEditPoints(toLines(ext.points));
+    setEditNeeds(toLines(ext.needs));
+    setEditNextActions(toLines(ext.next_actions));
+    setEditTemperature(ext.temperature ?? null);
   }
 
-  // 明示的な終了（達成感UI）: ここまでの内容で強制的にdone扱いにして保存
+  // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
+  function sendMessage(text: string) {
+    const t = text.trim();
+    if (!t || done) return;
+    setError(null);
+    setInput('');
+    setMessages((m) => [...m, { role: 'user', content: t }]);
+    setQueue((q) => [...q, t]);
+  }
+
+  // キューを1件ずつ順番に処理するワーカー。sessionId更新→再評価で次の1件へ進む。
+  // processingRefで多重起動を防ぐ(処理中のsessionId/customerId変化は無視)。done後はキューを止める。
+  useEffect(() => {
+    if (processingRef.current || queue.length === 0 || done) return;
+    processingRef.current = true;
+    const text = queue[0]!;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setSending(true);
+    osaraiTurn({ message: text, sessionId, customerId }, controller.signal)
+      .then((res) => {
+        setSessionId(res.sessionId);
+        setRemainingSec((s) => (s === null ? 300 : s)); // 最初の送信でタイマー開始（既定5分）
+        if (res.next_question) {
+          setMessages((m) => [...m, { role: 'assistant', content: res.next_question! }]);
+        }
+        if (res.done) {
+          setDone(true);
+          applyDoneCard(res);
+          // done後は残りの未処理キュー(もしあれば)は破棄する。返答されないまま残さないため。
+          setQueue([]);
+        } else {
+          setQueue((q) => q.slice(1));
+        }
+      })
+      .catch((e) => {
+        // 停止(abort)はエラー表示しない。停止/エラーともキューを破棄し中断する。
+        if (!controller.signal.aborted) {
+          setError(String(e instanceof Error ? e.message : e));
+        }
+        setQueue([]);
+      })
+      .finally(() => {
+        abortRef.current = null;
+        setSending(false);
+        processingRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, sessionId, customerId, done]);
+
+  // 生成中の停止: 進行中リクエストをabortし、未処理のキューも破棄する。
+  function stopGenerating() {
+    abortRef.current?.abort();
+    setQueue([]);
+  }
+
+  function send() {
+    sendMessage(input);
+  }
+
+  // 明示的な終了（達成感UI）: ここまでの内容で強制的にdone扱いにして保存。
+  // キューが残っている間(まだ処理中の発話がある間)は、途中の履歴で終えてしまわないよう待つ。
   async function endEarly() {
-    if (!sessionId || sending || done || ending) return;
+    if (!sessionId || sending || done || ending || queue.length > 0) return;
     setError(null);
     setEnding(true);
     try {
       const res = await osaraiTurn({ message: '', sessionId, customerId, forceEnd: true });
       setDone(true);
-      setSavedCustomerId(res.customerId);
-      setSavedInteractionId(res.interactionId);
-      setIsNewCustomer(res.isNewCustomer);
-      setEditName(prefillName(res.isNewCustomer, res.customerName));
-      const ext: OsaraiExtracted = res.extracted ?? {};
-      setEditPoints(toLines(ext.points));
-      setEditNeeds(toLines(ext.needs));
-      setEditNextActions(toLines(ext.next_actions));
-      setEditTemperature(ext.temperature ?? null);
+      applyDoneCard(res);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -253,7 +321,7 @@ export function Osarai() {
         needs: fromLines(editNeeds),
         next_actions: fromLines(editNextActions),
         temperature: editTemperature,
-        ...(isNewCustomer ? { name: editName.trim() } : {}),
+        ...(isNewCustomer || autoNamePrefill ? { name: editName.trim() } : {}),
       });
       setConfirmed(true);
     } catch (e) {
@@ -275,7 +343,7 @@ export function Osarai() {
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
       <header className="screen-header">
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
-        <strong>おさらい</strong>
+        <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
         {remainingSec !== null && !done ? (
           <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
             {formatMMSS(remainingSec)}
@@ -312,8 +380,8 @@ export function Osarai() {
         </div>
       )}
 
-      {/* 対話 */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, padding: '16px 0', alignContent: 'start' }}>
+      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる */}
+      <div style={{ flex: 1, display: 'grid', gap: 10, padding: '20px 0 12px', alignContent: 'start' }}>
         {messages.map((m, i) => (
           <div
             key={i}
@@ -429,9 +497,9 @@ export function Osarai() {
               AIが整理しました。内容を確認・修正してください。
             </p>
 
-            {isNewCustomer && (
+            {(isNewCustomer || autoNamePrefill) && (
               <label style={{ display: 'block', marginBottom: 10 }}>
-                お名前（必須）
+                お名前{isNewCustomer ? '（必須）' : '（対話から自動検出。違っていれば修正してください）'}
                 <input
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
@@ -553,11 +621,33 @@ export function Osarai() {
               </div>
             )}
           </div>
+          {/* まだ話し始めていない時だけヒント(バブル)を出す。タップでその話題から始める。 */}
+          {messages.length === 1 && !sending && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {HINTS.map((h) => (
+                <button
+                  key={h.label}
+                  type="button"
+                  onClick={() => sendMessage(h.message)}
+                  style={{
+                    padding: '8px 14px',
+                    background: 'var(--color-primary-light)',
+                    border: '1px solid var(--color-primary-border)',
+                    borderRadius: 999,
+                    color: 'var(--color-primary)',
+                    fontSize: 13,
+                  }}
+                >
+                  {h.label}
+                </button>
+              ))}
+            </div>
+          )}
           {sessionId && (
             <button
               type="button"
               onClick={endEarly}
-              disabled={ending || sending}
+              disabled={ending || sending || queue.length > 0}
               style={{
                 alignSelf: 'flex-end',
                 background: 'none',
@@ -601,7 +691,7 @@ export function Osarai() {
             onKeyDown={onKeyDown}
             placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…（Cmd/Ctrl+Enterで送信）'}
             rows={1}
-            disabled={sending || recorder.recording}
+            disabled={recorder.recording}
             style={{
               flex: 1,
               padding: 12,
@@ -612,9 +702,19 @@ export function Osarai() {
               fontSize: 15,
             }}
           />
+          {/* 生成中でも送信ボタンは有効(キューに積める)。生成中は停止ボタンも並べる。 */}
+          {sending && (
+            <button
+              onClick={stopGenerating}
+              aria-label="生成を停止"
+              style={{ padding: '0 14px', minHeight: 44, background: 'var(--color-text-muted)' }}
+            >
+              ■
+            </button>
+          )}
           <button
             onClick={send}
-            disabled={sending || transcribing || !input.trim()}
+            disabled={transcribing || !input.trim()}
             style={{ padding: '0 18px', minHeight: 44 }}
           >
             送信

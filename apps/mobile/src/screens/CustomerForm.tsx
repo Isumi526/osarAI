@@ -126,7 +126,7 @@ export function CustomerForm() {
               AI対話登録は既存の顧客おさらい(顧客未指定→完了時に新規カード生成)フローを流用する。 */}
           <button
             type="button"
-            onClick={() => navigate('/osarai')}
+            onClick={() => navigate('/osarai?mode=register')}
             style={{ width: '100%', padding: 12, fontSize: 14, marginTop: 4 }}
           >
             AIと対話して登録する（つながりAI登録）
