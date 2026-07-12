@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { Nav } from './Nav';
+import { NavGate } from './NavGate';
 
 export const metadata: Metadata = {
   title: 'osarAI 〜おさらい〜',
@@ -19,7 +20,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           color: 'var(--color-text)',
         }}
       >
-        <Nav />
+        <NavGate>
+          <Nav />
+        </NavGate>
         {children}
       </body>
     </html>

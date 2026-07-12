@@ -8,7 +8,7 @@ import { Spinner } from '@/components/Spinner';
 // PLANS定義・Stripe Price・checkout APIは変更せず、UIの選択肢のみ絞る。
 const ORDER: PlanId[] = ['standard'];
 
-export function PlanPicker({ code }: { code: string | null }) {
+export function PlanPicker({ code, amountOff }: { code: string | null; amountOff: number | null }) {
   const [loading, setLoading] = useState<PlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,11 +45,26 @@ export function PlanPicker({ code }: { code: string | null }) {
           >
             <h2 style={{ margin: '0 0 12px' }}>{p.name}</h2>
             <p style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px' }}>¥0 / 14日間</p>
-            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 16px', lineHeight: 1.6 }}>
-              15日目以降は¥{p.listPrice.toLocaleString()}/月。
-              <br />
-              14日以内にキャンセルすれば料金はかかりません。
-            </p>
+            {amountOff ? (
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 16px', lineHeight: 1.6 }}>
+                15日目以降は{' '}
+                <span style={{ textDecoration: 'line-through', opacity: 0.6 }}>
+                  ¥{p.listPrice.toLocaleString()}
+                </span>{' '}
+                <span style={{ color: 'var(--color-success)', fontWeight: 700 }}>
+                  ¥{(p.listPrice - amountOff).toLocaleString()}/月
+                </span>{' '}
+                （割引コード適用）
+                <br />
+                14日以内にキャンセルすれば料金はかかりません。
+              </p>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 16px', lineHeight: 1.6 }}>
+                15日目以降は¥{p.listPrice.toLocaleString()}/月。
+                <br />
+                14日以内にキャンセルすれば料金はかかりません。
+              </p>
+            )}
             <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358', margin: '0 0 16px' }}>
               <li>AI対話でのおさらい・顧客管理</li>
               <li>AI相談: {p.aiAdviceLimit === null ? '無制限' : `月${p.aiAdviceLimit}回`}</li>
