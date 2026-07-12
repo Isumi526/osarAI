@@ -49,6 +49,8 @@ export async function POST(req: Request) {
   }
 
   const origin = req.headers.get('origin') ?? 'http://localhost:3000';
+  // 決済完了後はWeb(dashboard)ではなく実際に使うモバイルアプリ側へ誘導する。
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.osarai.app';
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
     metadata: { user_id: user.id, plan, promo_code: appliedCode ?? '' },
     // コードが解決できた時はそれを適用、無ければ手入力欄を出す
     ...(discounts ? { discounts } : { allow_promotion_codes: true }),
-    success_url: `${origin}/dashboard?welcome=1`,
+    success_url: `${appUrl}/?welcome=1`,
     cancel_url: `${origin}/subscribe`,
   });
 
