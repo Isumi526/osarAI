@@ -8,10 +8,15 @@ export async function Nav() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  // middlewareがLPの?ref=CODEをCookieに保持しているため、ヘッダーの新規登録リンクからでも
-  // チャネル紹介コードが引き継がれる。
-  const ref = (await cookies()).get('osarai_ref')?.value;
-  const signupHref = ref ? `/signup?ref=${encodeURIComponent(ref)}` : '/signup';
+  // middlewareがLPの?ref=/?code=をCookieに保持しているため、ヘッダーの新規登録リンクからでも
+  // 紹介コード・チャネル割引コードが引き継がれる。
+  const cookieStore = await cookies();
+  const ref = cookieStore.get('osarai_ref')?.value;
+  const code = cookieStore.get('osarai_code')?.value;
+  const signupParams = new URLSearchParams();
+  if (ref) signupParams.set('ref', ref);
+  if (code) signupParams.set('code', code);
+  const signupHref = signupParams.size > 0 ? `/signup?${signupParams.toString()}` : '/signup';
 
   return (
     <nav
