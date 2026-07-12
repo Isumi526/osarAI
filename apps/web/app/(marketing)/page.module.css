@@ -97,7 +97,8 @@
 }
 .mark {
   position: relative;
-  white-space: nowrap;
+  /* white-space:nowrapは強制的に1行に収めようとし、モバイル幅ではテキストが
+     画面右端で見切れる原因になっていた(実機レビュー指摘)。折り返しを許可する。 */
   background: linear-gradient(to bottom, transparent 60%, #f2b441 60%);
   opacity: 0.95;
 }
@@ -531,5 +532,11 @@
   }
   .h1 {
     font-size: 2.1rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .h1 {
+    font-size: 1.8rem;
   }
 }
