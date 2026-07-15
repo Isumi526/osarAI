@@ -101,15 +101,21 @@ export function formatUserProfile(userProfile: Record<string, unknown> | null): 
     if (goalLines.length > 0) lines.push(`目標:\n${goalLines.join('\n')}`);
   }
 
-  // 扱っている商品（products: {name, price, condition}[]。目標と同じカラム化パターン）。
+  // 扱っている商品（products: {name, price, appeal, target, audience}[]。目標と同じカラム化パターン。
+  // 購入条件(condition)は廃止し、魅力・概要/ターゲット/届けたい相手に置き換えた(議事録要望)）。
   const products = userProfile.products;
   if (Array.isArray(products)) {
     const productLines = products
-      .filter((p): p is { name: string; price?: string; condition?: string } => !!p && typeof p.name === 'string' && p.name.trim())
+      .filter(
+        (p): p is { name: string; price?: string; appeal?: string; target?: string; audience?: string } =>
+          !!p && typeof p.name === 'string' && p.name.trim().length > 0,
+      )
       .map((p) => {
         const parts = [p.name];
         if (p.price?.trim()) parts.push(p.price);
-        if (p.condition?.trim()) parts.push(p.condition);
+        if (p.appeal?.trim()) parts.push(`魅力: ${p.appeal}`);
+        if (p.target?.trim()) parts.push(`ターゲット: ${p.target}`);
+        if (p.audience?.trim()) parts.push(`届けたい相手: ${p.audience}`);
         return `- ${parts.join(' / ')}`;
       });
     if (productLines.length > 0) lines.push(`扱っている商品:\n${productLines.join('\n')}`);
