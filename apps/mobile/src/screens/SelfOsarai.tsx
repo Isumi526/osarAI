@@ -8,6 +8,7 @@ import { saveSelfOsaraiExtraction } from '../lib/db.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -182,7 +183,7 @@ export function SelfOsarai() {
         overflow: 'hidden',
       }}
     >
-      <header className="screen-header" style={{ position: 'static' }}>
+      <ScreenHeader>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
           ← 戻る
         </button>
@@ -194,7 +195,7 @@ export function SelfOsarai() {
         ) : (
           <span style={{ width: 48 }} />
         )}
-      </header>
+      </ScreenHeader>
 
       {remainingSec === 0 && !done && (
         <div
@@ -218,9 +219,7 @@ export function SelfOsarai() {
         </div>
       )}
 
-      {/* バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上マージンを広げる
-          (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
-      <div style={{ flex: 1, overflowY: 'auto', marginTop: 32, padding: '0 0 12px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', marginTop: 12, padding: '0 0 12px' }}>
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div

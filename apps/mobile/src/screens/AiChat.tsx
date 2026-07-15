@@ -7,6 +7,7 @@ import { askAdvice } from '../lib/advice.js';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import type { ChatScope } from '@osarai/shared';
 
@@ -141,11 +142,11 @@ export function AiChat() {
 
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
-      <header className="screen-header">
+      <ScreenHeader>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>AIに相談</strong>
         <span style={{ width: 48 }} />
-      </header>
+      </ScreenHeader>
 
       {/* scope 切替 */}
       <div style={{ display: 'flex', gap: 8, margin: '12px 0', alignItems: 'center' }}>
