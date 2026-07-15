@@ -93,9 +93,12 @@ export default async function DashboardPage() {
         {profile.display_name ?? user.email} さん ・ メンバー{rows.length}名 ・ 顧客{totalCustomers}件 ・
         活動{totalActivity}件
       </p>
-      <p style={{ marginTop: 8 }}>
+      <p style={{ marginTop: 8, display: 'flex', gap: 16 }}>
         <Link href="/dashboard/products" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
           代理店商品リストを管理する →
+        </Link>
+        <Link href="/dashboard/referral-codes" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+          紹介コードを管理する →
         </Link>
       </p>
 
