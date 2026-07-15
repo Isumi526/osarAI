@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import {
   buildOsaraiPrompt,
   OSARAI_SYSTEM_PROMPT,
+  computeAutoTemperature,
   type OsaraiTurnResult,
   type OsaraiExtracted,
   type AiSummary,
@@ -244,7 +245,7 @@ async function persistOnDone(
         owner_id: authorId,
         name: customerName,
         needs: joinList(extracted.needs),
-        temperature: extracted.temperature ?? null,
+        temperature: 'cold', // 新規は履歴が無いためcoldから開始。直後にlast_met_atを踏まえ再計算する。
         custom_fields: (extracted.custom_fields ?? {}) as never,
         last_met_at: now,
       })
@@ -257,12 +258,12 @@ async function persistOnDone(
       .from('customers')
       .update({
         needs: joinList(extracted.needs),
-        temperature: extracted.temperature ?? null,
         last_met_at: now,
         updated_at: now,
       })
       .eq('id', customerId);
   }
+  await recomputeTemperature(supabase, customerId, now);
 
   const aiSummary: AiSummary = {
     points: extracted.points ?? [],
@@ -295,6 +296,24 @@ async function persistOnDone(
 function joinList(v?: string[]): string | null {
   if (!v || v.length === 0) return null;
   return v.join(' / ');
+}
+
+// 温度感(手動設定UI廃止・議事録『review』回答A)を、直近接触日(=now・直前に保存済み)と
+// 直近60日の予定件数(私用除く)から再計算して保存する。
+async function recomputeTemperature(
+  supabase: PersistArgs['supabase'],
+  customerId: string,
+  lastMetAt: string,
+): Promise<void> {
+  const sixtyDaysAgo = new Date(Date.parse(lastMetAt) - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from('schedules')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .gte('start_at', sixtyDaysAgo)
+    .or('category.neq.私用,category.is.null');
+  const temperature = computeAutoTemperature({ lastMetAt, recentMeetingCount: count ?? 0 });
+  await supabase.from('customers').update({ temperature }).eq('id', customerId);
 }
 
 // extracted.name を優先し、無ければ custom_fields に名前らしき項目があれば拾う（無ければ null）

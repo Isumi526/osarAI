@@ -11,12 +11,8 @@ import {
   type CustomerInput,
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
-import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { RequiredMark } from '../components/RequiredMark.js';
-import type { Temperature } from '@osarai/shared';
-
-const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 
 export function CustomerForm() {
   const { id } = useParams();
@@ -30,7 +26,6 @@ export function CustomerForm() {
 
   const [name, setName] = useState('');
   const [relationType, setRelationType] = useState<string>(DEFAULT_RELATION_TYPE);
-  const [temperature, setTemperature] = useState<Temperature | null>(null);
   const [needs, setNeeds] = useState('');
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -49,7 +44,6 @@ export function CustomerForm() {
       const r = await analyzeCustomerText(analyzeText);
       if (r.name) setName(r.name);
       if (r.needs) setNeeds(r.needs);
-      if (r.temperature) setTemperature(r.temperature);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -67,7 +61,6 @@ export function CustomerForm() {
       const r = await analyzeCustomerImage(file);
       if (r.name) setName(r.name);
       if (r.needs) setNeeds(r.needs);
-      if (r.temperature) setTemperature(r.temperature);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -82,7 +75,6 @@ export function CustomerForm() {
         if (!c) return;
         setName(c.name);
         setRelationType((c.relation_type as string | null) ?? DEFAULT_RELATION_TYPE);
-        setTemperature((c.temperature as Temperature | null) ?? null);
         setNeeds(c.needs ?? '');
       })
       .catch((e) => setError(String(e)))
@@ -93,7 +85,7 @@ export function CustomerForm() {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const input: CustomerInput = { name, temperature, needs: needs || null, relationType };
+    const input: CustomerInput = { name, needs: needs || null, relationType };
     try {
       if (isEdit && id) {
         await updateCustomer(id, input);
@@ -222,29 +214,6 @@ export function CustomerForm() {
             ))}
           </select>
         </label>
-
-        <div>
-          温度感
-          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            {TEMPS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTemperature(temperature === t ? null : t)}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  border: temperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                  background: temperature === t ? 'var(--color-primary-light)' : '#fff',
-                  color: 'var(--color-text)',
-                  borderRadius: 8,
-                }}
-              >
-                <TempIcon value={t} /> {TEMP_JA[t]}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <label>
           ニーズ・メモ
