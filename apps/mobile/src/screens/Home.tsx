@@ -248,6 +248,7 @@ export function Home() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null}
                   {c.name}
+                  <span style={{ fontSize: 12 }}>さん</span>
                   {c.relation_type && (
                     <span
                       style={{
