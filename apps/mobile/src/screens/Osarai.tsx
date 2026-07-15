@@ -13,6 +13,7 @@ import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 import type { OsaraiExtracted, Temperature } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -358,7 +359,7 @@ export function Osarai() {
 
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
-      <header className="screen-header" style={{ position: 'static' }}>
+      <ScreenHeader>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
         {remainingSec !== null && !done ? (
@@ -376,11 +377,12 @@ export function Osarai() {
         ) : (
           <span style={{ width: 48 }} />
         )}
-      </header>
+      </ScreenHeader>
 
-      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる
-          (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, marginTop: 32, padding: '0 0 12px', alignContent: 'start' }}>
+      {/* 対話。ScreenHeaderがposition:fixedのためheaderは通常フローから外れる。
+          .screenのpadding-topが--header-height(ScreenHeaderが実測してCSS変数に反映)に
+          追従するため、ここで別途余白を積み増す必要はない。 */}
+      <div style={{ flex: 1, display: 'grid', gap: 10, marginTop: 12, padding: '0 0 12px', alignContent: 'start' }}>
         {messages.map((m, i) => (
           <div
             key={i}

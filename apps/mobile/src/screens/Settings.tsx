@@ -6,6 +6,7 @@ import { enablePush, isPushSupported } from '../lib/push.js';
 import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 
 // 目標・扱っている商品は複数登録できるよう別UI(goals/products)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
@@ -123,11 +124,11 @@ export function Settings() {
 
   return (
     <main className="screen">
-      <header className="screen-header">
+      <ScreenHeader>
         <Link to="/">← ホーム</Link>
         <strong>マイページ</strong>
         <span style={{ width: 48 }} />
-      </header>
+      </ScreenHeader>
 
       {referralCode && (
         <section

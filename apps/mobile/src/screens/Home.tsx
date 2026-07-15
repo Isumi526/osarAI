@@ -5,6 +5,7 @@ import { listCustomers, getMyProfile, RELATION_TYPES, type Customer } from '../l
 import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { TempIcon } from '../components/TempIcon.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 import type { Temperature } from '@osarai/shared';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
@@ -77,7 +78,7 @@ export function Home() {
 
   return (
     <main className="screen">
-      <header className="screen-header">
+      <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 8 }}>
           osarAI
           <span
@@ -94,7 +95,7 @@ export function Home() {
             β版
           </span>
         </h1>
-      </header>
+      </ScreenHeader>
 
       <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
         現在β版として提供しています。不具合や使いづらい点が残っている場合がありますので、ご了承ください。
