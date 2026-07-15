@@ -27,3 +27,16 @@ entries:
       強制されるため、customerIdだけのWHERE句でも他テナントのデータは更新できない。
       Gemini独自レビューの誤判定（クライアント構築箇所を見ずservice_roleと誤認）。
     ticket: 39a0ff81-c56b-81cb-8311-d949f7b034b7
+  - rule: rls-multitenant
+    target: supabase/migrations/0021_referral_codes.sql
+    reason: >
+      対応済み・確認済み（2026-07-15）。0021作成時点のreferral_codes_cud/
+      agency_products_cudポリシーはusing句にcreated_by=auth.uid()が無く、
+      同組織の別leaderが他leaderの行をDELETE/UPDATEできる欠陥があった。
+      同一diff内のmigration 0022(agency_products_referral_codes_own_only)で
+      両ポリシーをdrop&再作成し作成者本人限定に締め済み。実際に適用される
+      最終的なRLSポリシーは0022の内容であり、e2e(agency-products-rls.spec.ts /
+      referral-codes-rls.spec.ts)に「別leaderは他leaderの行を削除できない」
+      回帰テストを追加しpass確認済み。Geminiは0021単体を見て指摘しているが
+      0022で解消されている旨をfinding本文でも認めている。
+    ticket: 39d0ff81-c56b-8130-9683-e53dd0a9d2a5
