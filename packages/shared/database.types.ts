@@ -34,6 +34,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      agency_products: {
+        Row: {
+          appeal: string | null
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          org_id: string
+          price: string | null
+          target: string | null
+          updated_at: string
+        }
+        Insert: {
+          appeal?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          org_id: string
+          price?: string | null
+          target?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appeal?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          org_id?: string
+          price?: string | null
+          target?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_products_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_products_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_chat_messages: {
         Row: {
           chat_id: string
@@ -345,6 +396,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          channel_code: string | null
           created_at: string
           display_name: string | null
           id: string
@@ -355,6 +407,7 @@ export type Database = {
           user_profile: Json
         }
         Insert: {
+          channel_code?: string | null
           created_at?: string
           display_name?: string | null
           id: string
@@ -365,6 +418,7 @@ export type Database = {
           user_profile?: Json
         }
         Update: {
+          channel_code?: string | null
           created_at?: string
           display_name?: string | null
           id?: string

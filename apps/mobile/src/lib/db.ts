@@ -7,6 +7,16 @@ import { computeAutoTemperature } from '@osarai/shared';
 export type Customer = Database['public']['Tables']['customers']['Row'];
 export type Interaction = Database['public']['Tables']['interactions']['Row'];
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type AgencyProduct = Database['public']['Tables']['agency_products']['Row'];
+
+// 代理店(leader)が作成した商品リスト（議事録『review』回答A）。同組織メンバーは
+// RLS(agency_products_select)で閲覧のみ可能。管理(作成/編集/削除)はWeb(/dashboard/products・
+// leaderのみ)で行う。
+export async function listAgencyProducts(): Promise<AgencyProduct[]> {
+  const { data, error } = await supabase.from('agency_products').select('*').order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as AgencyProduct[]) ?? [];
+}
 
 export async function getMyProfile(): Promise<Profile | null> {
   const {

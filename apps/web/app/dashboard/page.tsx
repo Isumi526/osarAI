@@ -93,6 +93,11 @@ export default async function DashboardPage() {
         {profile.display_name ?? user.email} さん ・ メンバー{rows.length}名 ・ 顧客{totalCustomers}件 ・
         活動{totalActivity}件
       </p>
+      <p style={{ marginTop: 8 }}>
+        <Link href="/dashboard/products" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+          代理店商品リストを管理する →
+        </Link>
+      </p>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 24 }}>
         <thead>
