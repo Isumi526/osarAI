@@ -611,8 +611,8 @@ function MonthGrid({
                     style={{
                       marginTop: 1,
                       padding: '1px 3px',
-                      background: 'var(--color-primary-light)',
-                      color: 'var(--color-primary)',
+                      background: categoryColor(s.category),
+                      color: '#fff',
                       border: 'none',
                       borderRadius: 3,
                       fontSize: 9,
