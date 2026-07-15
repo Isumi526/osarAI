@@ -2,6 +2,16 @@
 // フロー: ユーザー発話 → Gemini が(抽出 + 次の質問 + done)を返す → 対話を保存。
 // done になったら抽出を統合して interactions(source=ai_dialogue) を作成し、
 // customers を更新（無ければ抽出した名前で新規作成）、osarai_sessions を done に。
+//
+// 高速化(議事録『review』回答A)の実装方針: Geminiは各ターンで対話履歴全体から
+// 毎回フル再抽出するため(インクリメンタルな抽出キャッシュは無い)、完了操作時にAI呼び出し
+// 自体を短縮する余地はない。一方、完了時にのみ発生するDB書き込み(customer作成/更新・
+// 温度感再計算・interaction作成・session更新)は互いに独立な部分を並列化できるため、
+// 独立クエリ(契約ゲート+profile取得・温度感再計算+interaction作成)をPromise.allで
+// 並列化した。「対話中に顧客/interactionレコードを先行作成しておき完了時は差分更新のみ」
+// という案も検討したが、対話を最後まで終えないユーザーがいた場合に孤児レコードが残る
+// リスクがあり、既存アーキテクチャ(完了時に確定保存)を大きく変える割に効果が限定的
+// (支配的なレイテンシはGemini API呼び出し自体でDB書き込みは数十ms単位)と判断し見送った。
 import { NextResponse } from 'next/server';
 import {
   buildOsaraiPrompt,
@@ -78,18 +88,16 @@ export async function POST(req: Request) {
   const message = (body.message ?? '').trim();
   if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
-  // 契約ゲート（§16 未契約/解約は機能制限）
-  const ent = await getEntitlement(supabase, user.id);
+  // 契約ゲート（§16 未契約/解約は機能制限）＋ 自分の org_id（RLS の insert に必要）。
+  // 互いに独立したクエリのため並列化する（高速化・議事録『review』回答A）。
+  const [ent, profileRes] = await Promise.all([
+    getEntitlement(supabase, user.id),
+    supabase.from('profiles').select('org_id').eq('id', user.id).maybeSingle(),
+  ]);
   if (!ent.active) {
     return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
   }
-
-  // 自分の org_id（RLS の insert に必要）
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('org_id')
-    .eq('id', user.id)
-    .maybeSingle();
+  const profile = profileRes.data;
   if (!profile) return json({ error: 'profile not found' }, 400);
   const orgId = profile.org_id;
 
@@ -263,8 +271,6 @@ async function persistOnDone(
       })
       .eq('id', customerId);
   }
-  await recomputeTemperature(supabase, customerId, now);
-
   const aiSummary: AiSummary = {
     points: extracted.points ?? [],
     needs: extracted.needs ?? [],
@@ -274,20 +280,25 @@ async function persistOnDone(
     .map((m) => `${m.role === 'user' ? 'あなた' : 'AI'}: ${m.content}`)
     .join('\n');
 
-  const { data: interaction, error } = await supabase
-    .from('interactions')
-    .insert({
-      org_id: orgId,
-      customer_id: customerId,
-      author_id: authorId,
-      source: 'ai_dialogue',
-      type: 'text',
-      raw_text: transcript,
-      ai_summary: aiSummary as never,
-      met_at: now,
-    })
-    .select('id')
-    .single();
+  // 温度感の再計算とinteraction作成は互いに独立した書き込みのため並列化する
+  // （高速化・議事録『review』回答A）。
+  const [, { data: interaction, error }] = await Promise.all([
+    recomputeTemperature(supabase, customerId, now),
+    supabase
+      .from('interactions')
+      .insert({
+        org_id: orgId,
+        customer_id: customerId,
+        author_id: authorId,
+        source: 'ai_dialogue',
+        type: 'text',
+        raw_text: transcript,
+        ai_summary: aiSummary as never,
+        met_at: now,
+      })
+      .select('id')
+      .single(),
+  ]);
   if (error || !interaction) return { error: 'interaction create failed' };
 
   return { customerId, interactionId: interaction.id, customerName, isNewCustomer };
