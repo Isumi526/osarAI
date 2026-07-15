@@ -678,7 +678,9 @@ function TimeGrid({
         marginTop: 12,
         display: 'flex',
         width: '100%',
-        maxHeight: 520,
+        // 親(Schedule.tsx側のflex:1ラッパー)の高さいっぱいに伸ばす(画面高さの余白を埋める・議事録要望)。
+        // 親はdisplay:flexではない通常のoverflowY:autoコンテナのため、flex:1ではなくheight:100%で伸ばす。
+        height: '100%',
         overflowY: 'auto',
         border: '1px solid var(--color-border)',
         borderRadius: 10,
