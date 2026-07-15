@@ -305,6 +305,7 @@ async function recomputeTemperature(
   customerId: string,
   lastMetAt: string,
 ): Promise<void> {
+  const { data: current } = await supabase.from('customers').select('temperature').eq('id', customerId).maybeSingle();
   const sixtyDaysAgo = new Date(Date.parse(lastMetAt) - 60 * 24 * 60 * 60 * 1000).toISOString();
   const { count } = await supabase
     .from('schedules')
@@ -313,6 +314,7 @@ async function recomputeTemperature(
     .gte('start_at', sixtyDaysAgo)
     .or('category.neq.私用,category.is.null');
   const temperature = computeAutoTemperature({ lastMetAt, recentMeetingCount: count ?? 0 });
+  if (temperature === current?.temperature) return;
   await supabase.from('customers').update({ temperature }).eq('id', customerId);
 }
 
