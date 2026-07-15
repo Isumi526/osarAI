@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { enablePush, isPushSupported } from '../lib/push.js';
-import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
+import { getMyProfile, updateMyUserProfile, listAgencyProducts, type AgencyProduct } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
@@ -29,6 +29,9 @@ export function Settings() {
   const [userProfile, setUserProfile] = useState<Record<string, string>>({});
   const [goals, setGoals] = useState<Goal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  // 代理店(leader)の商品リストからのインポート(議事録『review』回答A)。
+  const [agencyProducts, setAgencyProducts] = useState<AgencyProduct[]>([]);
+  const [showAgencyPicker, setShowAgencyPicker] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   // プロフィール項目(userProfile/goals)を未保存で編集中かどうか。BottomNav離脱時の確認ダイアログに使う。
@@ -63,7 +66,16 @@ export function Settings() {
         if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 12));
       })
       .catch(() => {});
+    listAgencyProducts()
+      .then(setAgencyProducts)
+      .catch(() => {}); // 代理店リストが無い/権限エラーでも通常のプロフィール編集は継続できるようにする
   }, []);
+
+  function importAgencyProduct(p: AgencyProduct) {
+    setProducts((ps) => [...ps, { name: p.name, price: p.price ?? '', appeal: p.appeal ?? '', target: p.target ?? '' }]);
+    setProfileDirty(true);
+    setShowAgencyPicker(false);
+  }
 
   // 紹介リンクのベースURL。独自ドメイン確定後はVITE_LP_ORIGINを差し替えるだけで済む(回答C・env化)。
   // 未設定時はAPIベース(=Web/LPのオリジン)にフォールバック。
@@ -342,6 +354,30 @@ export function Settings() {
               >
                 + 商品を追加
               </button>
+              {agencyProducts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAgencyPicker((v) => !v)}
+                  style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-primary-border)', color: 'var(--color-primary)', fontSize: 13 }}
+                >
+                  {showAgencyPicker ? '閉じる' : '📋 代理店の商品リストからインポート'}
+                </button>
+              )}
+              {showAgencyPicker && (
+                <div style={{ display: 'grid', gap: 6, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 8 }}>
+                  {agencyProducts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => importAgencyProduct(p)}
+                      style={{ padding: 8, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)', textAlign: 'left', fontSize: 13 }}
+                    >
+                      {p.name}
+                      {p.price ? `（${p.price}）` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
