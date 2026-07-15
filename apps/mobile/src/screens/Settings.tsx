@@ -19,7 +19,7 @@ const PROFILE_FIELDS: { key: string; label: string; type?: 'select' | 'textarea'
 ];
 
 type Goal = { text: string; by: string };
-type Product = { name: string; price: string; appeal: string; target: string; audience: string };
+type Product = { name: string; price: string; appeal: string; target: string };
 
 export function Settings() {
   const [pushMsg, setPushMsg] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function Settings() {
         // 旧: 単一の自由記述文字列 → 新: products配列(名称/金額/購入条件)へ移行。
         if (Array.isArray(rawProducts)) setProducts(rawProducts.filter((x) => x && typeof x.name === 'string'));
         else if (typeof rawProducts === 'string' && rawProducts.trim()) {
-          setProducts([{ name: rawProducts, price: '', appeal: '', target: '', audience: '' }]);
+          setProducts([{ name: rawProducts, price: '', appeal: '', target: '' }]);
         }
         if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 12));
       })
@@ -273,7 +273,9 @@ export function Settings() {
           </div>
 
           {/* 扱っている商品も目標と同様に複数登録できる(議事録要望)。
-              購入条件は廃止し、魅力・概要/ターゲット/届けたい相手を登録できるようにする(議事録要望)。 */}
+              購入条件は廃止し、魅力・概要/ターゲットを登録できるようにする(議事録要望)。
+              当初はターゲット/届けたい相手を別項目にしていたが、/reviewで「1つのデータでOK」と
+              指摘があり統合した(target1本に)。 */}
           <div style={{ fontSize: 13 }}>
             扱っている商品
             <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
@@ -307,23 +309,14 @@ export function Settings() {
                     rows={2}
                     style={{ width: '100%', padding: 8, fontSize: 14 }}
                   />
-                  <input
-                    value={prod.target}
-                    onChange={(e) => {
-                      setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)));
-                      setProfileDirty(true);
-                    }}
-                    placeholder="ターゲット（例: 30〜40代の子育て世帯）"
-                    style={{ width: '100%', padding: 8, fontSize: 14 }}
-                  />
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
-                      value={prod.audience}
+                      value={prod.target}
                       onChange={(e) => {
-                        setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, audience: e.target.value } : x)));
+                        setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)));
                         setProfileDirty(true);
                       }}
-                      placeholder="届けたい相手（例: 保障を見直したいと言っていた人）"
+                      placeholder="ターゲット・届けたい相手（例: 保障を見直したいと言っていた30〜40代の子育て世帯）"
                       style={{ flex: 1, padding: 8, fontSize: 14 }}
                     />
                     <button
@@ -342,7 +335,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => {
-                  setProducts((ps) => [...ps, { name: '', price: '', appeal: '', target: '', audience: '' }]);
+                  setProducts((ps) => [...ps, { name: '', price: '', appeal: '', target: '' }]);
                   setProfileDirty(true);
                 }}
                 style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', fontSize: 13 }}

@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test';
 
-// 商品情報の項目を見直す(購入条件を削除し魅力・概要/ターゲット/届けたい相手を追加する)チケットの回帰。
+// 商品情報の項目を見直す(購入条件を削除し魅力・概要/ターゲット・届けたい相手を追加する)チケットの回帰。
 // apps/mobile/src/screens/Settings.tsx の updateMyUserProfile() が行うのと同じ
-// profiles.user_profile への直接PATCHで、新しいproducts配列の形(name/price/appeal/target/audience)が
+// profiles.user_profile への直接PATCHで、新しいproducts配列の形(name/price/appeal/target)が
 // 保存→読み戻しで正しく永続することを確認する。
+// （ターゲット/届けたい相手は当初別項目だったが、/review指摘でtarget1項目に統合した）
 
 const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321';
 const LOCAL_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 
-test('profiles.user_profile.productsが新フィールド構成(appeal/target/audience)でPATCH保存→読み戻しで永続する', async ({ request }) => {
+test('profiles.user_profile.productsが新フィールド構成(appeal/target)でPATCH保存→読み戻しで永続する', async ({ request }) => {
   const email = `e2e-product-fields-${Date.now()}@example.com`;
   const signupRes = await request.post(`${LOCAL_SUPABASE_URL}/auth/v1/signup`, {
     headers: { apikey: LOCAL_ANON_KEY, 'content-type': 'application/json' },
@@ -24,8 +25,7 @@ test('profiles.user_profile.productsが新フィールド構成(appeal/target/au
         name: 'がん保険',
         price: '月々3,000円〜',
         appeal: '保険料そのままで入院給付が手厚い',
-        target: '30〜40代の子育て世帯',
-        audience: '保障を見直したいと言っていた人',
+        target: '保障を見直したいと言っていた30〜40代の子育て世帯',
       },
     ],
   };
