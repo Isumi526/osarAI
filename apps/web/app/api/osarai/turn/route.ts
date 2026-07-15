@@ -39,7 +39,16 @@ const TURN_SCHEMA: GeminiSchema = {
         needs: { type: 'array', items: { type: 'string' } },
         temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], nullable: true },
         next_actions: { type: 'array', items: { type: 'string' } },
-        custom_fields: { type: 'object', properties: {} },
+        // Geminiのresponse Schemaは宣言されていないプロパティを出力できないため、
+        // custom_fieldsに含めたいキーは明示的に列挙する必要がある(properties:{}のままだと常に空になる)。
+        custom_fields: {
+          type: 'object',
+          properties: {
+            products: { type: 'array', items: { type: 'string' } },
+            age: { type: 'string', nullable: true },
+            gender: { type: 'string', nullable: true },
+          },
+        },
         name: { type: 'string', nullable: true },
       },
     },
