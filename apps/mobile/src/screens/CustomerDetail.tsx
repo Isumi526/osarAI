@@ -111,6 +111,26 @@ export function CustomerDetail() {
           ) : '—'}
         </p>
         {customer.needs && <p style={{ margin: '4px 0' }}>ニーズ: {customer.needs}</p>}
+        {(() => {
+          // おさらい対話のAI抽出で custom_fields に入る想定の商品/年齢/性別（0007の
+          // userProfile.products/age/genderと同じパターン）。値があるものだけ表示。
+          const cf = (customer.custom_fields ?? {}) as Record<string, unknown>;
+          const age = typeof cf.age === 'string' ? cf.age : undefined;
+          const gender = typeof cf.gender === 'string' ? cf.gender : undefined;
+          const products = Array.isArray(cf.products)
+            ? cf.products.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+            : typeof cf.products === 'string' && cf.products.trim()
+              ? [cf.products]
+              : [];
+          if (!age && !gender && products.length === 0) return null;
+          return (
+            <p style={{ margin: '4px 0' }}>
+              {age && <>年齢: {age}　</>}
+              {gender && <>性別: {gender}　</>}
+              {products.length > 0 && <>扱っている商品: {products.join('、')}</>}
+            </p>
+          );
+        })()}
         {customer.last_met_at && (
           <p style={{ margin: '4px 0', color: '#9a9183', fontSize: 13 }}>
             最終接触: {new Date(customer.last_met_at).toLocaleDateString('ja-JP')}
