@@ -33,6 +33,13 @@ export interface OsaraiExtracted {
   custom_fields?: Record<string, unknown>;
   /** 対話中に判明した相手の名前（未言及なら null）。§F-02: 新規/仮名のカードへの自動反映に使う */
   name?: string | null;
+  /**
+   * 対話中にユーザー自身について言及があった場合の構造化情報（相手ではなく本人について）。
+   * 言及が無かった項目はキー自体を含めない（議事録『review』回答A）。
+   * self-osarai(自分をおさらい)のfields抽出と同じ形。merge_user_profile_fields RPCで
+   * profiles.user_profileへ反映する。
+   */
+  self_fields?: { age?: string; gender?: string; job?: string; products?: string; background?: string; goal?: string };
 }
 
 // /api/osarai/turn の応答契約（§8-1）
