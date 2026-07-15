@@ -24,7 +24,9 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
 const CARD_SCHEMA_DESC =
   '{points: 会話の要点(配列), needs: 相手の要望/困りごと(配列), ' +
   'temperature: 見込み温度(hot/warm/cold), next_actions: 次にやること(配列), ' +
-  'custom_fields: その他特記事項(キー値), name: 相手の名前(判明していれば)}';
+  'custom_fields: その他特記事項(キー値。products: 相手が扱っている商品(文字列配列・判明していれば), ' +
+  'age: 相手の年齢(文字列・判明していれば), gender: 相手の性別(文字列・判明していれば)も' +
+  'このキーに含めてよい), name: 相手の名前(判明していれば)}';
 
 // Gemini に強制する応答スキーマ（OsaraiTurnResult に対応）
 const TURN_SCHEMA: GeminiSchema = {
