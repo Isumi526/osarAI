@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 // 代理店が商品リストを作成し紹介ユーザーがアプリでインポートできるようにするチケットの回帰。
-// agency_products テーブルのRLS(0020_agency_products.sql)を検証する:
+// agency_products テーブルのRLS(0020_agency_products.sql・0022で締めた作成者本人限定CUD)を検証する:
 // - leader は作成できる
 // - 同組織の member は閲覧できるが作成はできない(RLSで拒否)
 // - 別組織のユーザーからは見えない(テナント分離)
+// - 同組織の別leaderは他leaderが作成した行を削除できない(0022レビュー指摘の回帰)
 
 const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321';
 const LOCAL_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
@@ -24,6 +25,7 @@ async function signup(request: import('@playwright/test').APIRequestContext, ema
 test('agency_products: leaderは作成可・memberは閲覧のみ可・別組織からは見えない', async ({ request }) => {
   const ts = Date.now();
   const leader = await signup(request, `e2e-agency-leader-${ts}@example.com`);
+  const leader2 = await signup(request, `e2e-agency-leader2-${ts}@example.com`);
   const member = await signup(request, `e2e-agency-member-${ts}@example.com`);
   const outsider = await signup(request, `e2e-agency-outsider-${ts}@example.com`);
 
@@ -33,6 +35,11 @@ test('agency_products: leaderは作成可・memberは閲覧のみ可・別組織
     data: { role: 'leader' },
   });
   expect(promote.ok()).toBeTruthy();
+  const promote2 = await request.patch(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${leader2.userId}`, {
+    headers: svc,
+    data: { role: 'leader' },
+  });
+  expect(promote2.ok()).toBeTruthy();
 
   // outsiderを別組織へ切り出す(テナント分離検証用。通常のsignupは全員LL組織固定のため
   // サービスロールで新規org作成+所属変更を行う)
@@ -81,6 +88,18 @@ test('agency_products: leaderは作成可・memberは閲覧のみ可・別組織
   const outsiderRead = (await outsiderReadRes.json()) as unknown[];
   expect(outsiderRead.length).toBe(0);
 
-  // cleanup
-  await request.delete(`${LOCAL_SUPABASE_URL}/rest/v1/agency_products?id=eq.${product!.id}`, { headers: svc });
+  // 5. 同組織の別leaderは他leaderが作成した行を削除できない(0022レビュー指摘の回帰確認)
+  const leader2DeleteRes = await request.delete(`${LOCAL_SUPABASE_URL}/rest/v1/agency_products?id=eq.${product!.id}`, {
+    headers: { ...leader2.authHeaders, Prefer: 'return=representation' },
+  });
+  const leader2DeleteBody = (await leader2DeleteRes.json().catch(() => [])) as unknown[];
+  expect(leader2DeleteBody.length).toBe(0); // RLSにより実質ゼロ件更新(他者の行は対象外)
+  const stillExistsRes = await request.get(`${LOCAL_SUPABASE_URL}/rest/v1/agency_products?id=eq.${product!.id}&select=id`, { headers: leader.authHeaders });
+  expect(((await stillExistsRes.json()) as unknown[]).length).toBe(1);
+
+  // cleanup（作成者本人=leaderなら削除できることも併せて確認）
+  const ownDeleteRes = await request.delete(`${LOCAL_SUPABASE_URL}/rest/v1/agency_products?id=eq.${product!.id}`, {
+    headers: { ...leader.authHeaders, Prefer: 'return=representation' },
+  });
+  expect(((await ownDeleteRes.json()) as unknown[]).length).toBe(1);
 });
