@@ -25,6 +25,11 @@ export function Home() {
   const [error, setError] = useState<string | null>(null);
   const [subActive, setSubActive] = useState(true); // 判定前は制限を出さない
   const [stats, setStats] = useState<PersonalStats | null>(null);
+  // 繋がり一覧の文字検索(議事録要望)。API呼び出しは行わずクライアント側で名前を部分一致フィルタする。
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredCustomers = searchQuery.trim()
+    ? customers.filter((c) => c.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : customers;
 
   useEffect(() => {
     getPersonalStats()
@@ -207,15 +212,25 @@ export function Home() {
       </div>
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
+      {!loading && customers.length > 0 && (
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="名前で検索"
+          style={{ width: '100%', padding: 10, fontSize: 15, marginBottom: 8 }}
+        />
+      )}
       {loading ? (
         <p>読み込み中…</p>
       ) : customers.length === 0 ? (
         <p style={{ color: '#6b6358' }}>
           まだつながりがいません。「＋つながり」または「おさらいする」から追加できます。
         </p>
+      ) : filteredCustomers.length === 0 ? (
+        <p style={{ color: '#6b6358' }}>「{searchQuery}」に一致するつながりが見つかりません。</p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-          {customers.map((c) => (
+          {filteredCustomers.map((c) => (
             <li key={c.id}>
               <Link
                 to={`/customers/${c.id}`}
