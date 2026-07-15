@@ -37,7 +37,9 @@ const CARD_SCHEMA_DESC =
   'temperature: 見込み温度(hot/warm/cold), next_actions: 次にやること(配列), ' +
   'custom_fields: その他特記事項(キー値。products: 相手が扱っている商品(文字列配列・判明していれば), ' +
   'age: 相手の年齢(文字列・判明していれば), gender: 相手の性別(文字列・判明していれば)も' +
-  'このキーに含めてよい), name: 相手の名前(判明していれば)}';
+  'このキーに含めてよい), name: 相手の名前(判明していれば), ' +
+  'self_fields: 会話中にユーザー自身について言及があった場合の構造化情報' +
+  '(job/products/age/gender/background/goal。相手ではなく本人について。言及が無ければ含めない)}';
 
 // Gemini に強制する応答スキーマ（OsaraiTurnResult に対応）
 const TURN_SCHEMA: GeminiSchema = {
@@ -61,6 +63,17 @@ const TURN_SCHEMA: GeminiSchema = {
           },
         },
         name: { type: 'string', nullable: true },
+        self_fields: {
+          type: 'object',
+          properties: {
+            age: { type: 'string', nullable: true },
+            gender: { type: 'string', nullable: true },
+            job: { type: 'string', nullable: true },
+            products: { type: 'string', nullable: true },
+            background: { type: 'string', nullable: true },
+            goal: { type: 'string', nullable: true },
+          },
+        },
       },
     },
     next_question: { type: 'string', nullable: true },
@@ -280,10 +293,12 @@ async function persistOnDone(
     .map((m) => `${m.role === 'user' ? 'あなた' : 'AI'}: ${m.content}`)
     .join('\n');
 
-  // 温度感の再計算とinteraction作成は互いに独立した書き込みのため並列化する
-  // （高速化・議事録『review』回答A）。
-  const [, { data: interaction, error }] = await Promise.all([
+  // 温度感の再計算・interaction作成・自分自身の情報のプロフィール反映は互いに独立した
+  // 書き込みのため並列化する（高速化・議事録『review』回答A）。
+  const selfFields = cleanSelfFields(extracted.self_fields);
+  const [, , { data: interaction, error }] = await Promise.all([
     recomputeTemperature(supabase, customerId, now),
+    selfFields ? supabase.rpc('merge_user_profile_fields', { new_notes: [], new_fields: selfFields }) : Promise.resolve(),
     supabase
       .from('interactions')
       .insert({
@@ -307,6 +322,16 @@ async function persistOnDone(
 function joinList(v?: string[]): string | null {
   if (!v || v.length === 0) return null;
   return v.join(' / ');
+}
+
+// 会話中にユーザー自身について言及があった場合の構造化情報(self_fields)から、
+// 空文字/未言及を除いたものだけを返す。1件も無ければnull(RPC呼び出し自体をスキップ)。
+function cleanSelfFields(fields?: OsaraiExtracted['self_fields']): Record<string, string> | null {
+  if (!fields) return null;
+  const cleaned = Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => typeof v === 'string' && v.trim().length > 0),
+  );
+  return Object.keys(cleaned).length > 0 ? cleaned : null;
 }
 
 // 温度感(手動設定UI廃止・議事録『review』回答A)を、直近接触日(=now・直前に保存済み)と
