@@ -2,6 +2,7 @@
 // useConfirm() が返す confirm(message) を await すると、ユーザーがOK/キャンセルを
 // 選ぶまで解決しない Promise<boolean> を返す（window.confirm と同じ使い勝手）。
 import { useCallback, useState } from 'react';
+import { useEscapeKey } from './useEscapeKey.js';
 
 interface PendingConfirm {
   message: string;
@@ -19,6 +20,8 @@ export function useConfirm() {
     pending?.resolve(ok);
     setPending(null);
   }
+
+  useEscapeKey(() => answer(false), !!pending);
 
   const dialog = pending ? (
     <div

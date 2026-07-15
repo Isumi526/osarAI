@@ -16,6 +16,7 @@ import {
   type ScheduleInput,
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { useEscapeKey } from '../components/useEscapeKey.js';
 import { RequiredMark } from '../components/RequiredMark.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
@@ -145,6 +146,8 @@ export function SchedulePage() {
   const navigate = useNavigate();
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
+  useEscapeKey(() => setProposeCustomer(null), !!proposeCustomer);
+  useEscapeKey(() => setProposal(null), !!proposal);
   // 月表示の無限スクロール(回答A): 縦に連続表示する月のリスト。上下端で前後の月を継ぎ足す。
   const [monthList, setMonthList] = useState<Date[]>([]);
   const monthScrollRef = useRef<HTMLDivElement>(null);
@@ -863,6 +866,7 @@ function ScheduleForm({
   const [error, setError] = useState<string | null>(null);
   // このフォームでその場で新規登録した顧客(保存後に登録提案モーダルを出すかの判定に使う)。
   const createdCustomerRef = useRef<Customer | null>(null);
+  useEscapeKey(onClose);
 
   // 予定作成のその場で新しい顧客を登録できるようにする(既存顧客一覧に無い相手の場合、
   // 一旦顧客登録画面へ離脱すると入力中の予定内容が失われるため。議事録要望)。
