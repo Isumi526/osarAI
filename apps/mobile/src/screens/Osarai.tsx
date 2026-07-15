@@ -362,40 +362,21 @@ export function Osarai() {
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
         {remainingSec !== null && !done ? (
-          <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
-            {formatMMSS(remainingSec)}
-          </span>
+          remainingSec === 0 ? (
+            <button
+              type="button"
+              onClick={() => setRemainingSec(300)}
+              style={{ padding: '4px 8px', fontSize: 13, whiteSpace: 'nowrap' }}
+            >
+              +5分延長
+            </button>
+          ) : (
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{formatMMSS(remainingSec)}</span>
+          )
         ) : (
           <span style={{ width: 48 }} />
         )}
       </header>
-
-
-      {remainingSec === 0 && !done && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'var(--color-primary-light)',
-            border: '1px solid var(--color-primary-border)',
-            borderRadius: 10,
-            padding: '8px 12px',
-            marginTop: 8,
-            fontSize: 13,
-          }}
-        >
-          <span>予定の5分になりました。続けても、ここで終えても大丈夫です。</span>
-          <button
-            type="button"
-            onClick={() => setRemainingSec(300)}
-            style={{ padding: '6px 10px', fontSize: 13, whiteSpace: 'nowrap' }}
-          >
-            +5分延長
-          </button>
-        </div>
-      )}
 
       {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる
           (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
