@@ -7,14 +7,13 @@ import { osaraiTurn, transcribeAudio, type OsaraiTurnResponse } from '../lib/osa
 import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
 import { useLiveSpeech } from '../hooks/useLiveSpeech.js';
-import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
-import type { OsaraiExtracted, Temperature } from '@osarai/shared';
+import type { OsaraiExtracted } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -51,7 +50,6 @@ const openingForRegister = (name: string) =>
     `${name}さんはどんな方ですか？今までのやり取りや、知っていることを聞かせてください。`,
     `${name}さんとのこれまでを教えてください。話した内容や関係性、知っていることがあれば聞かせてください。`,
   ]);
-const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 // APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
 const prefillName = (isNew: boolean, name: string | null) =>
   isNew && name && name !== '新しく会った人' ? name : '';
@@ -100,7 +98,6 @@ export function Osarai() {
   const [editPoints, setEditPoints] = useState('');
   const [editNeeds, setEditNeeds] = useState('');
   const [editNextActions, setEditNextActions] = useState('');
-  const [editTemperature, setEditTemperature] = useState<Temperature | null>(null);
   const [editName, setEditName] = useState('');
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -149,7 +146,6 @@ export function Osarai() {
     setEditPoints('');
     setEditNeeds('');
     setEditNextActions('');
-    setEditTemperature(null);
     setEditName('');
     setIsNewCustomer(false);
     setAutoNamePrefill(false);
@@ -244,7 +240,6 @@ export function Osarai() {
     setEditPoints(toLines(ext.points));
     setEditNeeds(toLines(ext.needs));
     setEditNextActions(toLines(ext.next_actions));
-    setEditTemperature(ext.temperature ?? null);
   }
 
   // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
@@ -338,7 +333,6 @@ export function Osarai() {
         points: fromLines(editPoints),
         needs: fromLines(editNeeds),
         next_actions: fromLines(editNextActions),
-        temperature: editTemperature,
         ...(isNewCustomer || autoNamePrefill ? { name: editName.trim() } : {}),
       });
       setConfirmed(true);
@@ -509,29 +503,6 @@ export function Osarai() {
                 />
               </label>
             )}
-
-            <div style={{ marginBottom: 10 }}>
-              温度感
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                {TEMPS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setEditTemperature(editTemperature === t ? null : t)}
-                    style={{
-                      flex: 1,
-                      padding: 10,
-                      border: editTemperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                      background: editTemperature === t ? 'var(--color-primary-light)' : '#fff',
-                      color: 'var(--color-text)',
-                      borderRadius: 8,
-                    }}
-                  >
-                    <TempIcon value={t} /> {TEMP_JA[t]}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             <label style={{ display: 'block', marginBottom: 10 }}>
               要点（1行に1つ）

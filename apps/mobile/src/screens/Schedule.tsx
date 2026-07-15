@@ -19,10 +19,8 @@ import { useConfirm } from '../components/ConfirmDialog.js';
 import { useEscapeKey } from '../components/useEscapeKey.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { RequiredMark } from '../components/RequiredMark.js';
-import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { useNavigate } from 'react-router-dom';
-import type { Temperature } from '@osarai/shared';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -852,7 +850,6 @@ function ScheduleForm({
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerNeeds, setNewCustomerNeeds] = useState('');
-  const [newCustomerTemperature, setNewCustomerTemperature] = useState<Temperature | null>(null);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
   // つながりを追加(自己紹介解析): CustomerForm.tsxのテキスト/画像解析と同じAPIを使う簡易版。
@@ -878,7 +875,6 @@ function ScheduleForm({
       const r = await analyzeCustomerText(analyzeText);
       if (r.name) setNewCustomerName(r.name);
       if (r.needs) setNewCustomerNeeds(r.needs);
-      if (r.temperature) setNewCustomerTemperature(r.temperature);
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -896,7 +892,6 @@ function ScheduleForm({
       const r = await analyzeCustomerImage(file);
       if (r.name) setNewCustomerName(r.name);
       if (r.needs) setNewCustomerNeeds(r.needs);
-      if (r.temperature) setNewCustomerTemperature(r.temperature);
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -911,7 +906,7 @@ function ScheduleForm({
     setNewCustomerError(null);
     try {
       const created = await createCustomer(
-        { name, temperature: newCustomerTemperature, needs: newCustomerNeeds.trim() || null, relationType: null },
+        { name, needs: newCustomerNeeds.trim() || null, relationType: null },
         profile,
       );
       onCustomerCreated(created);
@@ -920,7 +915,6 @@ function ScheduleForm({
       setAddingCustomer(false);
       setNewCustomerName('');
       setNewCustomerNeeds('');
-      setNewCustomerTemperature(null);
       setAnalyzeText('');
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
@@ -1066,15 +1060,9 @@ function ScheduleForm({
               </button>
             </div>
             <input ref={analyzeFileRef} type="file" accept="image/*" onChange={onAnalyzeImage} style={{ display: 'none' }} />
-            {(newCustomerNeeds || newCustomerTemperature) && (
+            {newCustomerNeeds && (
               <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                {newCustomerTemperature && (
-                  <>
-                    <TempIcon value={newCustomerTemperature} />
-                    温度感: {TEMP_JA[newCustomerTemperature]}{' '}
-                  </>
-                )}
-                {newCustomerNeeds && `ニーズ: ${newCustomerNeeds}`}
+                {`ニーズ: ${newCustomerNeeds}`}
               </p>
             )}
             {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
@@ -1085,7 +1073,6 @@ function ScheduleForm({
                   setAddingCustomer(false);
                   setNewCustomerName('');
                   setNewCustomerNeeds('');
-                  setNewCustomerTemperature(null);
                   setAnalyzeText('');
                   setNewCustomerError(null);
                 }}

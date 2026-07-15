@@ -2,6 +2,7 @@
 import { supabase } from './supabase.js';
 import type { Database } from '@osarai/shared/database.types';
 import type { CustomerStatus, Temperature } from '@osarai/shared';
+import { computeAutoTemperature } from '@osarai/shared';
 
 export type Customer = Database['public']['Tables']['customers']['Row'];
 export type Interaction = Database['public']['Tables']['interactions']['Row'];
@@ -95,9 +96,35 @@ export const DEFAULT_RELATION_TYPE = 'つながり';
 
 export interface CustomerInput {
   name: string;
-  temperature: Temperature | null;
   needs: string | null;
   relationType: string | null;
+}
+
+// 温度感(hot/warm/cold)は手動設定UIを廃止し、直近接触日+直近アポ件数から自動算出する
+// （議事録『review』回答A）。customers.last_met_at と直近60日の予定件数(私用除く)を見て
+// computeAutoTemperature()で再計算し、変化があれば保存する。おさらい完了時・予定保存時に呼ぶ。
+export async function recomputeCustomerTemperature(customerId: string): Promise<void> {
+  const { data: customer, error: custError } = await supabase
+    .from('customers')
+    .select('last_met_at, temperature')
+    .eq('id', customerId)
+    .maybeSingle();
+  if (custError) throw custError;
+  if (!customer) return;
+
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const { count, error: schedError } = await supabase
+    .from('schedules')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .gte('start_at', sixtyDaysAgo)
+    .or('category.neq.私用,category.is.null');
+  if (schedError) throw schedError;
+
+  const next = computeAutoTemperature({ lastMetAt: customer.last_met_at, recentMeetingCount: count ?? 0 });
+  if (next === customer.temperature) return;
+  const { error: updateError } = await supabase.from('customers').update({ temperature: next }).eq('id', customerId);
+  if (updateError) throw updateError;
 }
 
 export async function createCustomer(
@@ -110,7 +137,7 @@ export async function createCustomer(
       org_id: profile.org_id, // RLS: org_id = current_org_id()
       owner_id: profile.id, //    owner_id = auth.uid()
       name: input.name,
-      temperature: input.temperature,
+      temperature: 'cold' satisfies Temperature, // 新規は履歴が無いためcoldから開始。以後は自動算出。
       needs: input.needs,
       relation_type: input.relationType,
       status: 'active' satisfies CustomerStatus,
@@ -126,7 +153,6 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
     .from('customers')
     .update({
       name: input.name,
-      temperature: input.temperature,
       needs: input.needs,
       relation_type: input.relationType,
       updated_at: new Date().toISOString(),
@@ -148,7 +174,6 @@ export interface SummaryEdit {
   points: string[];
   needs: string[];
   next_actions: string[];
-  temperature: Temperature | null;
   name?: string;
 }
 
@@ -157,6 +182,8 @@ export interface SummaryEdit {
  * turn API側で自動保存済みの interaction/customer を、編集内容で上書きする。
  * RLS(interactions_cud: author_id=auth.uid() / customers_cud: owner_id=auth.uid())が
  * 本人分のみ更新可能であることを担保する。
+ * 温度感は手動入力を廃止したためここでは触らず、保存後にrecomputeCustomerTemperature()で
+ * 自動算出する（last_met_at はturn API側で既に更新済み）。
  */
 export async function updateInteractionSummary(
   interactionId: string,
@@ -174,11 +201,12 @@ export async function updateInteractionSummary(
   const { error: custError } = await supabase
     .from('customers')
     .update({
-      temperature: edit.temperature,
       needs: edit.needs.length ? edit.needs.join(' / ') : null,
       updated_at: new Date().toISOString(),
       ...(edit.name && edit.name.trim() ? { name: edit.name.trim() } : {}),
     })
     .eq('id', customerId);
   if (custError) throw custError;
+
+  await recomputeCustomerTemperature(customerId);
 }
