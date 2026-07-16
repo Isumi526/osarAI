@@ -5,6 +5,7 @@ import { listCustomers, getMyProfile, RELATION_TYPES, type Customer } from '../l
 import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { TempIcon } from '../components/TempIcon.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 import type { Temperature } from '@osarai/shared';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
@@ -24,6 +25,11 @@ export function Home() {
   const [error, setError] = useState<string | null>(null);
   const [subActive, setSubActive] = useState(true); // 判定前は制限を出さない
   const [stats, setStats] = useState<PersonalStats | null>(null);
+  // 繋がり一覧の文字検索(議事録要望)。API呼び出しは行わずクライアント側で名前を部分一致フィルタする。
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredCustomers = searchQuery.trim()
+    ? customers.filter((c) => c.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : customers;
 
   useEffect(() => {
     getPersonalStats()
@@ -77,7 +83,7 @@ export function Home() {
 
   return (
     <main className="screen">
-      <header className="screen-header">
+      <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22, display: 'flex', alignItems: 'center', gap: 8 }}>
           osarAI
           <span
@@ -94,7 +100,7 @@ export function Home() {
             β版
           </span>
         </h1>
-      </header>
+      </ScreenHeader>
 
       <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
         現在β版として提供しています。不具合や使いづらい点が残っている場合がありますので、ご了承ください。
@@ -206,15 +212,25 @@ export function Home() {
       </div>
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
+      {!loading && customers.length > 0 && (
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="名前で検索"
+          style={{ width: '100%', padding: 10, fontSize: 15, marginBottom: 8 }}
+        />
+      )}
       {loading ? (
         <p>読み込み中…</p>
       ) : customers.length === 0 ? (
         <p style={{ color: '#6b6358' }}>
           まだつながりがいません。「＋つながり」または「おさらいする」から追加できます。
         </p>
+      ) : filteredCustomers.length === 0 ? (
+        <p style={{ color: '#6b6358' }}>「{searchQuery}」に一致するつながりが見つかりません。</p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-          {customers.map((c) => (
+          {filteredCustomers.map((c) => (
             <li key={c.id}>
               <Link
                 to={`/customers/${c.id}`}
@@ -232,6 +248,7 @@ export function Home() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null}
                   {c.name}
+                  <span style={{ fontSize: 12 }}>さん</span>
                   {c.relation_type && (
                     <span
                       style={{

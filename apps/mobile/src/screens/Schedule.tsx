@@ -16,11 +16,11 @@ import {
   type ScheduleInput,
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { useEscapeKey } from '../components/useEscapeKey.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 import { RequiredMark } from '../components/RequiredMark.js';
-import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { useNavigate } from 'react-router-dom';
-import type { Temperature } from '@osarai/shared';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -145,6 +145,8 @@ export function SchedulePage() {
   const navigate = useNavigate();
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
+  useEscapeKey(() => setProposeCustomer(null), !!proposeCustomer);
+  useEscapeKey(() => setProposal(null), !!proposal);
   // 月表示の無限スクロール(回答A): 縦に連続表示する月のリスト。上下端で前後の月を継ぎ足す。
   const [monthList, setMonthList] = useState<Date[]>([]);
   const monthScrollRef = useRef<HTMLDivElement>(null);
@@ -271,11 +273,8 @@ export function SchedulePage() {
   return (
     <main className="screen" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
       {/* カレンダーの表示範囲を広げるため、月/3日/日の切替はタブ行を独立させず
-          ヘッダー内に同居させて縦スペースを節約する(議事録要望)。
-          ヘッダーとコンテンツの被り(過去に position:sticky が原因で複数回発生した不具合)
-          を再発させないよう、ヘッダーは position:static のまま・直後の要素にも
-          十分なmarginTopを持たせる。 */}
-      <header className="screen-header" style={{ position: 'static' }}>
+          ヘッダー内に同居させて縦スペースを節約する(議事録要望)。 */}
+      <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
         <div style={{ display: 'flex', gap: 6 }}>
           {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
@@ -294,7 +293,7 @@ export function SchedulePage() {
             </button>
           ))}
         </div>
-      </header>
+      </ScreenHeader>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 8 }}>
         <button onClick={() => shift(-1)} style={{ padding: '0 14px' }}>
@@ -611,8 +610,8 @@ function MonthGrid({
                     style={{
                       marginTop: 1,
                       padding: '1px 3px',
-                      background: 'var(--color-primary-light)',
-                      color: 'var(--color-primary)',
+                      background: categoryColor(s.category),
+                      color: '#fff',
                       border: 'none',
                       borderRadius: 3,
                       fontSize: 9,
@@ -679,7 +678,9 @@ function TimeGrid({
         marginTop: 12,
         display: 'flex',
         width: '100%',
-        maxHeight: 520,
+        // 親(Schedule.tsx側のflex:1ラッパー)の高さいっぱいに伸ばす(画面高さの余白を埋める・議事録要望)。
+        // 親はdisplay:flexではない通常のoverflowY:autoコンテナのため、flex:1ではなくheight:100%で伸ばす。
+        height: '100%',
         overflowY: 'auto',
         border: '1px solid var(--color-border)',
         borderRadius: 10,
@@ -851,7 +852,6 @@ function ScheduleForm({
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerNeeds, setNewCustomerNeeds] = useState('');
-  const [newCustomerTemperature, setNewCustomerTemperature] = useState<Temperature | null>(null);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
   // つながりを追加(自己紹介解析): CustomerForm.tsxのテキスト/画像解析と同じAPIを使う簡易版。
@@ -863,6 +863,7 @@ function ScheduleForm({
   const [error, setError] = useState<string | null>(null);
   // このフォームでその場で新規登録した顧客(保存後に登録提案モーダルを出すかの判定に使う)。
   const createdCustomerRef = useRef<Customer | null>(null);
+  useEscapeKey(onClose);
 
   // 予定作成のその場で新しい顧客を登録できるようにする(既存顧客一覧に無い相手の場合、
   // 一旦顧客登録画面へ離脱すると入力中の予定内容が失われるため。議事録要望)。
@@ -876,7 +877,6 @@ function ScheduleForm({
       const r = await analyzeCustomerText(analyzeText);
       if (r.name) setNewCustomerName(r.name);
       if (r.needs) setNewCustomerNeeds(r.needs);
-      if (r.temperature) setNewCustomerTemperature(r.temperature);
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -894,7 +894,6 @@ function ScheduleForm({
       const r = await analyzeCustomerImage(file);
       if (r.name) setNewCustomerName(r.name);
       if (r.needs) setNewCustomerNeeds(r.needs);
-      if (r.temperature) setNewCustomerTemperature(r.temperature);
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -909,7 +908,7 @@ function ScheduleForm({
     setNewCustomerError(null);
     try {
       const created = await createCustomer(
-        { name, temperature: newCustomerTemperature, needs: newCustomerNeeds.trim() || null, relationType: null },
+        { name, needs: newCustomerNeeds.trim() || null, relationType: null },
         profile,
       );
       onCustomerCreated(created);
@@ -918,7 +917,6 @@ function ScheduleForm({
       setAddingCustomer(false);
       setNewCustomerName('');
       setNewCustomerNeeds('');
-      setNewCustomerTemperature(null);
       setAnalyzeText('');
     } catch (e) {
       setNewCustomerError(String(e instanceof Error ? e.message : e));
@@ -1064,15 +1062,9 @@ function ScheduleForm({
               </button>
             </div>
             <input ref={analyzeFileRef} type="file" accept="image/*" onChange={onAnalyzeImage} style={{ display: 'none' }} />
-            {(newCustomerNeeds || newCustomerTemperature) && (
+            {newCustomerNeeds && (
               <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                {newCustomerTemperature && (
-                  <>
-                    <TempIcon value={newCustomerTemperature} />
-                    温度感: {TEMP_JA[newCustomerTemperature]}{' '}
-                  </>
-                )}
-                {newCustomerNeeds && `ニーズ: ${newCustomerNeeds}`}
+                {`ニーズ: ${newCustomerNeeds}`}
               </p>
             )}
             {newCustomerError && <p style={{ color: '#c0392b', margin: 0, fontSize: 13 }}>{newCustomerError}</p>}
@@ -1083,7 +1075,6 @@ function ScheduleForm({
                   setAddingCustomer(false);
                   setNewCustomerName('');
                   setNewCustomerNeeds('');
-                  setNewCustomerTemperature(null);
                   setAnalyzeText('');
                   setNewCustomerError(null);
                 }}

@@ -39,24 +39,32 @@ body {
 }
 
 .screen {
-  padding: 24px 20px;
+  padding: calc(var(--header-height, 76px) + 20px) 20px 24px;
   max-width: 640px;
   margin: 0 auto;
 }
 
-/* 画面ヘッダー。.screen の左右padding分をネガティブマージンでフルブリードにし、
-   スクロール時に横に隙間が出ないようにする。
-   以前はposition:stickyで画面上部に固定表示していたが、複数画面で直後のコンテンツ
-   (最初のチャットバブル・タブ行等)と被る不具合が繰り返し発生し解消しなかったため、
-   sticky指定を撤去した(通常のドキュメントフローに戻す)。 */
+/* 画面ヘッダー。position:fixedで画面上部に固定表示する。
+   過去にposition:stickyで固定表示を試みたが、直後のコンテンツ(最初のチャットバブル・
+   タブ行等)の上端オフセットをヘッダーの実高さに正しく追従させられず、重なる不具合が
+   複数画面で繰り返し発生し撤去した経緯がある。今回はコンポーネント側(ScreenHeader)で
+   ヘッダーの実高さを測ってCSS変数 --header-height に反映し、.screen の
+   padding-topが常にヘッダーの実高さに追従するようにすることで同じ不具合を避ける
+   （--header-height未反映の初期描画用に既定値76pxをフォールバックとして持つ）。 */
 .screen-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  max-width: 640px;
+  margin: 0 auto;
   background: var(--color-bg);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: -24px -20px 20px;
   padding: calc(24px + env(safe-area-inset-top)) 20px 12px;
   border-bottom: 1px solid var(--color-border);
+  z-index: 50;
 }
 
 /* 共通ボタン基底スタイル（インラインスタイルと併用） */

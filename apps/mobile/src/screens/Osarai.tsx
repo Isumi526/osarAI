@@ -1,19 +1,20 @@
 // Osarai（AI対話おさらい：チャット）★コア — §8-1。
 // 人と会ったあと、AIが1問ずつヒアリング→done で顧客カード(interactions/customers)へ自動反映。
 // ?customerId=... 付きなら既存顧客のおさらい、無ければ新規（done 時に名前から自動でカード生成）。
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { osaraiTurn, transcribeAudio, type OsaraiTurnResponse } from '../lib/osarai.js';
 import { updateInteractionSummary, getCustomer } from '../lib/db.js';
 import { useRecorder } from '../hooks/useRecorder.js';
 import { useLiveSpeech } from '../hooks/useLiveSpeech.js';
-import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { MicIcon } from '../components/MicIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
-import type { OsaraiExtracted, Temperature } from '@osarai/shared';
+import { ScreenHeader } from '../components/ScreenHeader.js';
+import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
+import type { OsaraiExtracted } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -50,7 +51,6 @@ const openingForRegister = (name: string) =>
     `${name}さんはどんな方ですか？今までのやり取りや、知っていることを聞かせてください。`,
     `${name}さんとのこれまでを教えてください。話した内容や関係性、知っていることがあれば聞かせてください。`,
   ]);
-const TEMPS: Temperature[] = ['hot', 'warm', 'cold'];
 // APIの仮名フォールバックはプリフィルせず空にし、必須入力を促す
 const prefillName = (isNew: boolean, name: string | null) =>
   isNew && name && name !== '新しく会った人' ? name : '';
@@ -99,7 +99,6 @@ export function Osarai() {
   const [editPoints, setEditPoints] = useState('');
   const [editNeeds, setEditNeeds] = useState('');
   const [editNextActions, setEditNextActions] = useState('');
-  const [editTemperature, setEditTemperature] = useState<Temperature | null>(null);
   const [editName, setEditName] = useState('');
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -148,7 +147,6 @@ export function Osarai() {
     setEditPoints('');
     setEditNeeds('');
     setEditNextActions('');
-    setEditTemperature(null);
     setEditName('');
     setIsNewCustomer(false);
     setAutoNamePrefill(false);
@@ -243,7 +241,6 @@ export function Osarai() {
     setEditPoints(toLines(ext.points));
     setEditNeeds(toLines(ext.needs));
     setEditNextActions(toLines(ext.next_actions));
-    setEditTemperature(ext.temperature ?? null);
   }
 
   // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
@@ -337,7 +334,6 @@ export function Osarai() {
         points: fromLines(editPoints),
         needs: fromLines(editNeeds),
         next_actions: fromLines(editNextActions),
-        temperature: editTemperature,
         ...(isNewCustomer || autoNamePrefill ? { name: editName.trim() } : {}),
       });
       setConfirmed(true);
@@ -356,50 +352,57 @@ export function Osarai() {
     }
   }
 
+  // 送信フォームをposition:fixedで画面下部に固定する(議事録要望)。ヘッダー固定化
+  // (ScreenHeader)と同じ「実高さを測ってpadding-bottomに反映する」方針を踏襲し、
+  // ハードコードした高さ決め打ちによる重なり不具合の再発を避ける。
+  const formRef = useRef<HTMLDivElement>(null);
+  const [formHeight, setFormHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = formRef.current;
+    if (!el || done) return;
+    const apply = () => setFormHeight(el.offsetHeight);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [done]);
+
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 56px)' }}>
-      <header className="screen-header" style={{ position: 'static' }}>
+    <main
+      className="screen"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 'calc(100dvh - 56px)',
+        // 送信フォームがposition:fixedで画面下部に重なるため、ページ末尾のコンテンツが
+        // 隠れないよう実測したフォーム高さ分の余白を追加する(.screenの既定paddingBottomを上書き)。
+        ...(done ? {} : { paddingBottom: 24 + BOTTOM_NAV_HEIGHT + formHeight }),
+      }}
+    >
+      <ScreenHeader>
         <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
         <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
         {remainingSec !== null && !done ? (
-          <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
-            {formatMMSS(remainingSec)}
-          </span>
+          remainingSec === 0 ? (
+            <button
+              type="button"
+              onClick={() => setRemainingSec(300)}
+              style={{ padding: '4px 8px', fontSize: 13, whiteSpace: 'nowrap' }}
+            >
+              +5分延長
+            </button>
+          ) : (
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{formatMMSS(remainingSec)}</span>
+          )
         ) : (
           <span style={{ width: 48 }} />
         )}
-      </header>
+      </ScreenHeader>
 
-
-      {remainingSec === 0 && !done && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'var(--color-primary-light)',
-            border: '1px solid var(--color-primary-border)',
-            borderRadius: 10,
-            padding: '8px 12px',
-            marginTop: 8,
-            fontSize: 13,
-          }}
-        >
-          <span>予定の5分になりました。続けても、ここで終えても大丈夫です。</span>
-          <button
-            type="button"
-            onClick={() => setRemainingSec(300)}
-            style={{ padding: '6px 10px', fontSize: 13, whiteSpace: 'nowrap' }}
-          >
-            +5分延長
-          </button>
-        </div>
-      )}
-
-      {/* 対話。バグ修正: 1つ目のバルーンが固定ヘッダーと被っていたため、上の余白を広げる
-          (何度修正しても解消しなかったため、position:stickyを外し余白も大きく取り直した) */}
-      <div style={{ flex: 1, display: 'grid', gap: 10, marginTop: 32, padding: '0 0 12px', alignContent: 'start' }}>
+      {/* 対話。ScreenHeaderがposition:fixedのためheaderは通常フローから外れる。
+          .screenのpadding-topが--header-height(ScreenHeaderが実測してCSS変数に反映)に
+          追従するため、ここで別途余白を積み増す必要はない。 */}
+      <div style={{ flex: 1, display: 'grid', gap: 10, marginTop: 12, padding: '0 0 12px', alignContent: 'start' }}>
         {messages.map((m, i) => (
           <div
             key={i}
@@ -526,29 +529,6 @@ export function Osarai() {
                 />
               </label>
             )}
-
-            <div style={{ marginBottom: 10 }}>
-              温度感
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                {TEMPS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setEditTemperature(editTemperature === t ? null : t)}
-                    style={{
-                      flex: 1,
-                      padding: 10,
-                      border: editTemperature === t ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-                      background: editTemperature === t ? 'var(--color-primary-light)' : '#fff',
-                      color: 'var(--color-text)',
-                      borderRadius: 8,
-                    }}
-                  >
-                    <TempIcon value={t} /> {TEMP_JA[t]}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             <label style={{ display: 'block', marginBottom: 10 }}>
               要点（1行に1つ）
@@ -679,7 +659,25 @@ export function Osarai() {
               {ending ? '保存中…' : 'ここまでで終える'}
             </button>
           )}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div
+            ref={formRef}
+            style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'flex-end',
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              // BottomNav(position:fixed・bottom:0・zIndex:100)と重ならないよう、その上に乗せる。
+              bottom: BOTTOM_NAV_HEIGHT,
+              maxWidth: 640,
+              margin: '0 auto',
+              background: 'var(--color-bg)',
+              padding: '8px 20px',
+              borderTop: '1px solid var(--color-border)',
+              zIndex: 50,
+            }}
+          >
           {recorder.supported && (
             <button
               onClick={toggleMic}

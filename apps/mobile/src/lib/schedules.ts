@@ -2,6 +2,7 @@
 import { supabase } from './supabase.js';
 import type { Database } from '@osarai/shared/database.types';
 import type { Profile } from './db.js';
+import { recomputeCustomerTemperature } from './db.js';
 
 export type Schedule = Database['public']['Tables']['schedules']['Row'];
 
@@ -58,6 +59,8 @@ export async function createSchedule(
     .select()
     .single();
   if (error) throw error;
+  // アポ履歴(予定件数)が温度感の算出要素のため、予定に紐づく顧客がいれば再計算する。
+  if (input.customerId) await recomputeCustomerTemperature(input.customerId);
   return data as Schedule;
 }
 
@@ -77,6 +80,7 @@ export async function updateSchedule(id: string, input: ScheduleInput): Promise<
     })
     .eq('id', id);
   if (error) throw error;
+  if (input.customerId) await recomputeCustomerTemperature(input.customerId);
 }
 
 export async function deleteSchedule(id: string): Promise<void> {

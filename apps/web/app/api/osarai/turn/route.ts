@@ -2,10 +2,21 @@
 // フロー: ユーザー発話 → Gemini が(抽出 + 次の質問 + done)を返す → 対話を保存。
 // done になったら抽出を統合して interactions(source=ai_dialogue) を作成し、
 // customers を更新（無ければ抽出した名前で新規作成）、osarai_sessions を done に。
+//
+// 高速化(議事録『review』回答A)の実装方針: Geminiは各ターンで対話履歴全体から
+// 毎回フル再抽出するため(インクリメンタルな抽出キャッシュは無い)、完了操作時にAI呼び出し
+// 自体を短縮する余地はない。一方、完了時にのみ発生するDB書き込み(customer作成/更新・
+// 温度感再計算・interaction作成・session更新)は互いに独立な部分を並列化できるため、
+// 独立クエリ(契約ゲート+profile取得・温度感再計算+interaction作成)をPromise.allで
+// 並列化した。「対話中に顧客/interactionレコードを先行作成しておき完了時は差分更新のみ」
+// という案も検討したが、対話を最後まで終えないユーザーがいた場合に孤児レコードが残る
+// リスクがあり、既存アーキテクチャ(完了時に確定保存)を大きく変える割に効果が限定的
+// (支配的なレイテンシはGemini API呼び出し自体でDB書き込みは数十ms単位)と判断し見送った。
 import { NextResponse } from 'next/server';
 import {
   buildOsaraiPrompt,
   OSARAI_SYSTEM_PROMPT,
+  computeAutoTemperature,
   type OsaraiTurnResult,
   type OsaraiExtracted,
   type AiSummary,
@@ -24,7 +35,11 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
 const CARD_SCHEMA_DESC =
   '{points: 会話の要点(配列), needs: 相手の要望/困りごと(配列), ' +
   'temperature: 見込み温度(hot/warm/cold), next_actions: 次にやること(配列), ' +
-  'custom_fields: その他特記事項(キー値), name: 相手の名前(判明していれば)}';
+  'custom_fields: その他特記事項(キー値。products: 相手が扱っている商品(文字列配列・判明していれば), ' +
+  'age: 相手の年齢(文字列・判明していれば), gender: 相手の性別(文字列・判明していれば)も' +
+  'このキーに含めてよい), name: 相手の名前(判明していれば), ' +
+  'self_fields: 会話中にユーザー自身について言及があった場合の構造化情報' +
+  '(job/products/age/gender/background/goal。相手ではなく本人について。言及が無ければ含めない)}';
 
 // Gemini に強制する応答スキーマ（OsaraiTurnResult に対応）
 const TURN_SCHEMA: GeminiSchema = {
@@ -37,8 +52,28 @@ const TURN_SCHEMA: GeminiSchema = {
         needs: { type: 'array', items: { type: 'string' } },
         temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], nullable: true },
         next_actions: { type: 'array', items: { type: 'string' } },
-        custom_fields: { type: 'object', properties: {} },
+        // Geminiのresponse Schemaは宣言されていないプロパティを出力できないため、
+        // custom_fieldsに含めたいキーは明示的に列挙する必要がある(properties:{}のままだと常に空になる)。
+        custom_fields: {
+          type: 'object',
+          properties: {
+            products: { type: 'array', items: { type: 'string' } },
+            age: { type: 'string', nullable: true },
+            gender: { type: 'string', nullable: true },
+          },
+        },
         name: { type: 'string', nullable: true },
+        self_fields: {
+          type: 'object',
+          properties: {
+            age: { type: 'string', nullable: true },
+            gender: { type: 'string', nullable: true },
+            job: { type: 'string', nullable: true },
+            products: { type: 'string', nullable: true },
+            background: { type: 'string', nullable: true },
+            goal: { type: 'string', nullable: true },
+          },
+        },
       },
     },
     next_question: { type: 'string', nullable: true },
@@ -66,18 +101,16 @@ export async function POST(req: Request) {
   const message = (body.message ?? '').trim();
   if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
-  // 契約ゲート（§16 未契約/解約は機能制限）
-  const ent = await getEntitlement(supabase, user.id);
+  // 契約ゲート（§16 未契約/解約は機能制限）＋ 自分の org_id（RLS の insert に必要）。
+  // 互いに独立したクエリのため並列化する（高速化・議事録『review』回答A）。
+  const [ent, profileRes] = await Promise.all([
+    getEntitlement(supabase, user.id),
+    supabase.from('profiles').select('org_id').eq('id', user.id).maybeSingle(),
+  ]);
   if (!ent.active) {
     return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
   }
-
-  // 自分の org_id（RLS の insert に必要）
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('org_id')
-    .eq('id', user.id)
-    .maybeSingle();
+  const profile = profileRes.data;
   if (!profile) return json({ error: 'profile not found' }, 400);
   const orgId = profile.org_id;
 
@@ -233,7 +266,7 @@ async function persistOnDone(
         owner_id: authorId,
         name: customerName,
         needs: joinList(extracted.needs),
-        temperature: extracted.temperature ?? null,
+        temperature: 'cold', // 新規は履歴が無いためcoldから開始。直後にlast_met_atを踏まえ再計算する。
         custom_fields: (extracted.custom_fields ?? {}) as never,
         last_met_at: now,
       })
@@ -246,13 +279,11 @@ async function persistOnDone(
       .from('customers')
       .update({
         needs: joinList(extracted.needs),
-        temperature: extracted.temperature ?? null,
         last_met_at: now,
         updated_at: now,
       })
       .eq('id', customerId);
   }
-
   const aiSummary: AiSummary = {
     points: extracted.points ?? [],
     needs: extracted.needs ?? [],
@@ -262,20 +293,27 @@ async function persistOnDone(
     .map((m) => `${m.role === 'user' ? 'あなた' : 'AI'}: ${m.content}`)
     .join('\n');
 
-  const { data: interaction, error } = await supabase
-    .from('interactions')
-    .insert({
-      org_id: orgId,
-      customer_id: customerId,
-      author_id: authorId,
-      source: 'ai_dialogue',
-      type: 'text',
-      raw_text: transcript,
-      ai_summary: aiSummary as never,
-      met_at: now,
-    })
-    .select('id')
-    .single();
+  // 温度感の再計算・interaction作成・自分自身の情報のプロフィール反映は互いに独立した
+  // 書き込みのため並列化する（高速化・議事録『review』回答A）。
+  const selfFields = cleanSelfFields(extracted.self_fields);
+  const [, , { data: interaction, error }] = await Promise.all([
+    recomputeTemperature(supabase, customerId, now),
+    selfFields ? supabase.rpc('merge_user_profile_fields', { new_notes: [], new_fields: selfFields }) : Promise.resolve(),
+    supabase
+      .from('interactions')
+      .insert({
+        org_id: orgId,
+        customer_id: customerId,
+        author_id: authorId,
+        source: 'ai_dialogue',
+        type: 'text',
+        raw_text: transcript,
+        ai_summary: aiSummary as never,
+        met_at: now,
+      })
+      .select('id')
+      .single(),
+  ]);
   if (error || !interaction) return { error: 'interaction create failed' };
 
   return { customerId, interactionId: interaction.id, customerName, isNewCustomer };
@@ -284,6 +322,36 @@ async function persistOnDone(
 function joinList(v?: string[]): string | null {
   if (!v || v.length === 0) return null;
   return v.join(' / ');
+}
+
+// 会話中にユーザー自身について言及があった場合の構造化情報(self_fields)から、
+// 空文字/未言及を除いたものだけを返す。1件も無ければnull(RPC呼び出し自体をスキップ)。
+function cleanSelfFields(fields?: OsaraiExtracted['self_fields']): Record<string, string> | null {
+  if (!fields) return null;
+  const cleaned = Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => typeof v === 'string' && v.trim().length > 0),
+  );
+  return Object.keys(cleaned).length > 0 ? cleaned : null;
+}
+
+// 温度感(手動設定UI廃止・議事録『review』回答A)を、直近接触日(=now・直前に保存済み)と
+// 直近60日の予定件数(私用除く)から再計算して保存する。
+async function recomputeTemperature(
+  supabase: PersistArgs['supabase'],
+  customerId: string,
+  lastMetAt: string,
+): Promise<void> {
+  const { data: current } = await supabase.from('customers').select('temperature').eq('id', customerId).maybeSingle();
+  const sixtyDaysAgo = new Date(Date.parse(lastMetAt) - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from('schedules')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .gte('start_at', sixtyDaysAgo)
+    .or('category.neq.私用,category.is.null');
+  const temperature = computeAutoTemperature({ lastMetAt, recentMeetingCount: count ?? 0 });
+  if (temperature === current?.temperature) return;
+  await supabase.from('customers').update({ temperature }).eq('id', customerId);
 }
 
 // extracted.name を優先し、無ければ custom_fields に名前らしき項目があれば拾う（無ければ null）

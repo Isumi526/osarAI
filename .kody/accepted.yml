@@ -13,4 +13,17 @@
 #    osarAI は Supabase Auth + org_id/owner_id RLS が初期から有効な認証アプリで、
 #    sido の「anon公開キー前提・RLS未適用ベースライン」は存在しないため。
 #    既知許容が出たらここに追記する。
-entries: []
+entries:
+  - rule: rls-multitenant
+    target: apps/web/app/api/osarai/turn/route.ts
+    reason: >
+      誤検知として確認済み（2026-07-15）。指摘は「service role クライアントで
+      customer_id のみのWHERE句・テナント分離が無い」というものだが、この関数が
+      受け取る supabase は apps/web/lib/api-auth.ts の authedFromRequest() が返す
+      anonキー+ユーザー自身のBearerトークンで構築したRLSスコープ済みクライアント
+      であり、service_roleは使っていない（同ファイルのコメント「service_role は
+      使わない（テナント/owner 分離は RLS に委ねる・§7）」参照）。customers/schedules
+      テーブルのRLSポリシー(customers_cud: owner_id=auth.uid() 等)がPostgres側で
+      強制されるため、customerIdだけのWHERE句でも他テナントのデータは更新できない。
+      Gemini独自レビューの誤判定（クライアント構築箇所を見ずservice_roleと誤認）。
+    ticket: 39a0ff81-c56b-81cb-8311-d949f7b034b7

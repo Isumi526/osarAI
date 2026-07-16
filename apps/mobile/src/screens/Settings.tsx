@@ -6,6 +6,7 @@ import { enablePush, isPushSupported } from '../lib/push.js';
 import { getMyProfile, updateMyUserProfile } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 
 // 目標・扱っている商品は複数登録できるよう別UI(goals/products)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
@@ -18,7 +19,7 @@ const PROFILE_FIELDS: { key: string; label: string; type?: 'select' | 'textarea'
 ];
 
 type Goal = { text: string; by: string };
-type Product = { name: string; price: string; condition: string };
+type Product = { name: string; price: string; appeal: string; target: string };
 
 export function Settings() {
   const [pushMsg, setPushMsg] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function Settings() {
         // 旧: 単一の自由記述文字列 → 新: products配列(名称/金額/購入条件)へ移行。
         if (Array.isArray(rawProducts)) setProducts(rawProducts.filter((x) => x && typeof x.name === 'string'));
         else if (typeof rawProducts === 'string' && rawProducts.trim()) {
-          setProducts([{ name: rawProducts, price: '', condition: '' }]);
+          setProducts([{ name: rawProducts, price: '', appeal: '', target: '' }]);
         }
         if (p) setReferralCode(p.id.replace(/-/g, '').slice(0, 12));
       })
@@ -123,11 +124,11 @@ export function Settings() {
 
   return (
     <main className="screen">
-      <header className="screen-header">
+      <ScreenHeader>
         <Link to="/">← ホーム</Link>
         <strong>マイページ</strong>
         <span style={{ width: 48 }} />
-      </header>
+      </ScreenHeader>
 
       {referralCode && (
         <section
@@ -271,7 +272,10 @@ export function Settings() {
             </div>
           </div>
 
-          {/* 扱っている商品も目標と同様に「名称+金額+購入条件」を複数登録できる(議事録要望) */}
+          {/* 扱っている商品も目標と同様に複数登録できる(議事録要望)。
+              購入条件は廃止し、魅力・概要/ターゲットを登録できるようにする(議事録要望)。
+              当初はターゲット/届けたい相手を別項目にしていたが、/reviewで「1つのデータでOK」と
+              指摘があり統合した(target1本に)。 */}
           <div style={{ fontSize: 13 }}>
             扱っている商品
             <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
@@ -295,14 +299,24 @@ export function Settings() {
                     placeholder="金額（例: 月々3,000円〜）"
                     style={{ width: '100%', padding: 8, fontSize: 14 }}
                   />
+                  <AutoResizeTextarea
+                    value={prod.appeal}
+                    onChange={(e) => {
+                      setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, appeal: e.target.value } : x)));
+                      setProfileDirty(true);
+                    }}
+                    placeholder="魅力・概要（例: 保険料そのままで入院給付が手厚い）"
+                    rows={2}
+                    style={{ width: '100%', padding: 8, fontSize: 14 }}
+                  />
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
-                      value={prod.condition}
+                      value={prod.target}
                       onChange={(e) => {
-                        setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, condition: e.target.value } : x)));
+                        setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)));
                         setProfileDirty(true);
                       }}
-                      placeholder="購入条件（例: 満20歳〜）"
+                      placeholder="ターゲット・届けたい相手（例: 保障を見直したいと言っていた30〜40代の子育て世帯）"
                       style={{ flex: 1, padding: 8, fontSize: 14 }}
                     />
                     <button
@@ -321,7 +335,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => {
-                  setProducts((ps) => [...ps, { name: '', price: '', condition: '' }]);
+                  setProducts((ps) => [...ps, { name: '', price: '', appeal: '', target: '' }]);
                   setProfileDirty(true);
                 }}
                 style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-border)', color: 'var(--color-primary)', fontSize: 13 }}

@@ -38,6 +38,7 @@ export async function buildContext(
       `温度感: ${c.temperature ?? '未設定'}`,
       `ニーズ: ${c.needs ?? '未把握'}`,
       `最終接触: ${c.last_met_at ? new Date(c.last_met_at).toLocaleDateString('ja-JP') : '未記録'}`,
+      ...formatCustomerFieldLines(c.custom_fields as Record<string, unknown> | null),
       `履歴:\n${timeline || '（履歴なし）'}`,
     ].join('\n');
   }
@@ -56,6 +57,25 @@ export async function buildContext(
       return `- ${c.name}（温度: ${c.temperature ?? '?'} / ニーズ: ${c.needs ?? '未把握'} / 最終接触: ${when}）`;
     })
     .join('\n');
+}
+
+// customers.custom_fields内の商品/年齢/性別（おさらい対話でのAI抽出先。0007_profile_user_context.sql
+// のuserProfile(products/age/gender)と同じパターンを顧客側にも適用）。
+function formatCustomerFieldLines(customFields: Record<string, unknown> | null): string[] {
+  if (!customFields) return [];
+  const lines: string[] = [];
+  const age = customFields.age;
+  if (typeof age === 'string' && age.trim()) lines.push(`年齢: ${age}`);
+  const gender = customFields.gender;
+  if (typeof gender === 'string' && gender.trim()) lines.push(`性別: ${gender}`);
+  const products = customFields.products;
+  if (Array.isArray(products)) {
+    const productLines = products.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+    if (productLines.length > 0) lines.push(`扱っている商品: ${productLines.join('、')}`);
+  } else if (typeof products === 'string' && products.trim()) {
+    lines.push(`扱っている商品: ${products}`);
+  }
+  return lines;
 }
 
 const USER_PROFILE_LABEL: Record<string, string> = {
@@ -81,15 +101,21 @@ export function formatUserProfile(userProfile: Record<string, unknown> | null): 
     if (goalLines.length > 0) lines.push(`目標:\n${goalLines.join('\n')}`);
   }
 
-  // 扱っている商品（products: {name, price, condition}[]。目標と同じカラム化パターン）。
+  // 扱っている商品（products: {name, price, appeal, target}[]。目標と同じカラム化パターン。
+  // 購入条件(condition)は廃止し、魅力・概要/ターゲット・届けたい相手に置き換えた(議事録要望。
+  // ターゲットと届けたい相手は当初別項目だったが、/review指摘で1項目(target)に統合)）。
   const products = userProfile.products;
   if (Array.isArray(products)) {
     const productLines = products
-      .filter((p): p is { name: string; price?: string; condition?: string } => !!p && typeof p.name === 'string' && p.name.trim())
+      .filter(
+        (p): p is { name: string; price?: string; appeal?: string; target?: string } =>
+          !!p && typeof p.name === 'string' && p.name.trim().length > 0,
+      )
       .map((p) => {
         const parts = [p.name];
         if (p.price?.trim()) parts.push(p.price);
-        if (p.condition?.trim()) parts.push(p.condition);
+        if (p.appeal?.trim()) parts.push(`魅力: ${p.appeal}`);
+        if (p.target?.trim()) parts.push(`ターゲット・届けたい相手: ${p.target}`);
         return `- ${parts.join(' / ')}`;
       });
     if (productLines.length > 0) lines.push(`扱っている商品:\n${productLines.join('\n')}`);
