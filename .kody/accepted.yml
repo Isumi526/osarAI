@@ -62,4 +62,16 @@ entries:
       連打/再送で二重作成されうる指摘だが、クライアント側(AgencyProductsManager.tsx)
       で送信中はボタンをdisabledにするガードが実装済み。DB側unique制約までは
       本チケット(および前チケット)のスコープ外と判断(§0スコープ厳守)。
+  - rule: idempotency
+    target: apps/mobile/src/screens/Settings.tsx
+    reason: >
+      誤検知として確認済み(2026-07-17)。指摘は「全て追加」ボタン連打で
+      importAllAgencyProductsが複数回実行され重複追加されうるというものだが、
+      この関数はネットワーク往復を挟まない同期的なローカルstate更新で、末尾で
+      setShowAgencyPicker(false)を呼びボタン自体を含むピッカーパネルを即座に
+      アンマウントする(既存の1件ずつのimportAgencyProductも同じ設計で、
+      これまで問題視されていない)。ブラウザのクリックイベントは離散的であり、
+      同一関数呼び出し内の状態更新が次のクリックが可能になる前に反映されるため、
+      実質的にべき等(2回目のクリックはボタンが既に存在せず発生しない)。
+    ticket: 39e0ff81-c56b-8105-9c43-d678d852294e
     ticket: 39e0ff81-c56b-8172-abbe-e7cc07ebb5bf
