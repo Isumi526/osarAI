@@ -10,10 +10,13 @@ import {
   findFreeSlots,
   formatScheduleProposalText,
   listLocationHistory,
+  proposalSettingsFromUserProfile,
+  saveProposalDefaults,
   SCHEDULE_CATEGORIES,
   SCHEDULE_MODES,
   type Schedule,
   type ScheduleInput,
+  type ScheduleProposalSettings,
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useEscapeKey } from '../components/useEscapeKey.js';
@@ -145,6 +148,10 @@ export function SchedulePage() {
   const navigate = useNavigate();
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposalSettings, setProposalSettings] = useState<ScheduleProposalSettings>(() =>
+    proposalSettingsFromUserProfile(null),
+  );
+  const [proposalSettingsSaved, setProposalSettingsSaved] = useState(false);
   useEscapeKey(() => setProposeCustomer(null), !!proposeCustomer);
   useEscapeKey(() => setProposal(null), !!proposal);
   // 月表示の無限スクロール(回答A): 縦に連続表示する月のリスト。上下端で前後の月を継ぎ足す。
@@ -183,26 +190,41 @@ export function SchedulePage() {
   }
 
   useEffect(() => {
-    getMyProfile().then(setProfile);
+    getMyProfile().then((p) => {
+      setProfile(p);
+      setProposalSettings(proposalSettingsFromUserProfile(p?.user_profile));
+    });
     listCustomers({ status: 'active' }).then(setCustomers).catch(() => undefined);
     listLocationHistory().then(setLocationHistory).catch(() => undefined);
   }, []);
 
-  // 日程調整の文章生成(議事録『review』人力回答A寄り): 表示中のビューに関わらず、
-  // 「今」から直近7日間の予定を取得して空き時間を探す(AIは使わず既存データからの計算)。
+  // 日程調整の文章生成(議事録『review』人力回答A寄り・再作成): 表示中のビューに関わらず、
+  // 「今」から対象の日付範囲/時間範囲(既定 or 保存済みデフォルト)の予定を取得して空き時間を探す
+  // (AIは使わず既存データからの計算)。
   async function openProposal() {
     setProposalLoading(true);
     setError(null);
+    setProposalSettingsSaved(false);
     try {
       const now = new Date();
-      const to = addDays(now, 7);
+      const from = addDays(now, proposalSettings.startOffsetDays);
+      const to = addDays(from, proposalSettings.days);
       const upcoming = await listSchedules({ from: now.toISOString(), to: to.toISOString() });
-      const slots = findFreeSlots(upcoming, now);
+      const slots = findFreeSlots(upcoming, now, proposalSettings);
       setProposal({ text: formatScheduleProposalText(slots), copyMsg: null });
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
       setProposalLoading(false);
+    }
+  }
+
+  async function onSaveProposalDefaults() {
+    try {
+      await saveProposalDefaults(proposalSettings);
+      setProposalSettingsSaved(true);
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -480,11 +502,88 @@ export function SchedulePage() {
           >
             <strong>日程調整の文章</strong>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
-              直近7日間の空き時間から候補を作成しました。コピーしてLINE等で送れます。
+              指定した日付範囲・時間範囲の空き時間から候補を作成しました。その場で編集してコピーし、LINE等で送れます。
             </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                検索開始
+                <select
+                  value={proposalSettings.startOffsetDays}
+                  onChange={(e) => {
+                    setProposalSettings((s) => ({ ...s, startOffsetDays: Number(e.target.value) }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                >
+                  <option value={0}>今日から</option>
+                  <option value={1}>明日から</option>
+                  <option value={2}>明後日から</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                検索日数
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={proposalSettings.days}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setProposalSettings((s) => ({ ...s, days: v > 0 ? v : s.days }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                開始時刻
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={proposalSettings.startHour}
+                  onChange={(e) => {
+                    setProposalSettings((s) => ({ ...s, startHour: Number(e.target.value) }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                終了時刻
+                <input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={proposalSettings.endHour}
+                  onChange={(e) => {
+                    setProposalSettings((s) => ({ ...s, endHour: Number(e.target.value) }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={openProposal}
+                disabled={proposalLoading}
+                style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }}
+              >
+                {proposalLoading ? '作成中…' : 'この条件で作り直す'}
+              </button>
+              <button
+                type="button"
+                onClick={onSaveProposalDefaults}
+                style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid var(--color-primary-border)', color: 'var(--color-primary)', fontSize: 13 }}
+              >
+                {proposalSettingsSaved ? '✓ デフォルトに保存済み' : 'デフォルトとして保存'}
+              </button>
+            </div>
             <textarea
-              readOnly
               value={proposal.text}
+              onChange={(e) => setProposal({ ...proposal, text: e.target.value })}
               rows={8}
               style={{ width: '100%', padding: 10, fontSize: 14, lineHeight: 1.6, resize: 'none' }}
             />

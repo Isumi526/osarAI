@@ -118,36 +118,55 @@ export async function listLocationHistory(limit = 20): Promise<string[]> {
   return history;
 }
 
-// ========== 日程調整文章生成（議事録『review』人力回答A寄り） ==========
-// 自分の既存予定から空いている時間帯(候補日時)を探し、コピーしてLINE等で送れる
-// 文章を生成する。AIは使わず、既存スケジュールデータからの純粋な計算(低コスト・低リスク)。
+// ========== 日程調整文章生成（議事録『review』人力回答A寄り・再作成） ==========
+// 自分の既存予定から空いている時間帯(候補日時)を探し、コピー/その場で編集してLINE等で
+// 送れる文章を生成する。AIは使わず、既存スケジュールデータからの純粋な計算(低コスト・低リスク)。
 
-const BUSINESS_START_HOUR = 9;
-const BUSINESS_END_HOUR = 19;
+export const BUSINESS_START_HOUR = 9;
+export const BUSINESS_END_HOUR = 19;
 const SLOT_HOURS = 1;
 const MAX_CANDIDATES = 3;
-const SEARCH_DAYS = 7;
+export const SEARCH_DAYS = 7;
 
 export interface FreeSlot {
   start: Date;
   end: Date;
 }
 
-// 平日(月〜金)・営業時間内(9-19時)で、既存予定と重ならない1時間枠を探す。
-// 直近7日間から最大3件、日をなるべく分散させて選ぶ。
-export function findFreeSlots(existing: Schedule[], now: Date = new Date()): FreeSlot[] {
+export interface FindFreeSlotsOptions {
+  /** 検索開始オフセット(日数。0=今日から・1=明日から等) */
+  startOffsetDays?: number;
+  /** 検索日数 */
+  days?: number;
+  /** 対象の時間範囲(時) */
+  startHour?: number;
+  endHour?: number;
+}
+
+// 平日(月〜金)・指定の時間範囲内で、既存予定と重ならない1時間枠を探す。
+// 指定の日付範囲から最大3件、日をなるべく分散させて選ぶ。
+export function findFreeSlots(existing: Schedule[], now: Date = new Date(), opts: FindFreeSlotsOptions = {}): FreeSlot[] {
+  const startOffsetDays = opts.startOffsetDays ?? 0;
+  const days = opts.days && opts.days > 0 ? opts.days : SEARCH_DAYS;
+  const startHour = opts.startHour ?? BUSINESS_START_HOUR;
+  const endHour = opts.endHour ?? BUSINESS_END_HOUR;
+
   const busy = existing
     .map((s) => ({ start: new Date(s.start_at), end: new Date(s.end_at) }))
     .sort((a, b) => +a.start - +b.start);
 
   const candidates: FreeSlot[] = [];
-  for (let dayOffset = 0; dayOffset < SEARCH_DAYS && candidates.length < MAX_CANDIDATES; dayOffset++) {
+  for (
+    let dayOffset = startOffsetDays;
+    dayOffset < startOffsetDays + days && candidates.length < MAX_CANDIDATES;
+    dayOffset++
+  ) {
     const day = new Date(now);
     day.setDate(day.getDate() + dayOffset);
     if (day.getDay() === 0 || day.getDay() === 6) continue; // 平日のみ
 
     let foundOnThisDay = false;
-    for (let hour = BUSINESS_START_HOUR; hour + SLOT_HOURS <= BUSINESS_END_HOUR; hour++) {
+    for (let hour = startHour; hour + SLOT_HOURS <= endHour; hour++) {
       const slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0);
       const slotEnd = new Date(slotStart.getTime() + SLOT_HOURS * 60 * 60 * 1000);
       if (slotStart < now) continue; // 過去の時間帯は候補にしない
@@ -163,9 +182,47 @@ export function findFreeSlots(existing: Schedule[], now: Date = new Date()): Fre
   return candidates;
 }
 
+// ---- デフォルト設定(日付範囲/時間範囲)の保存・読み込み ----
+// profiles.user_profile(jsonb)の schedule_proposal_defaults キーに保存する。
+// Settings.tsx等の他画面が管理する項目を壊さないよう、既存値の全体上書きではなく
+// merge_user_profile_fields(0013・アトミックなjsonbマージRPC)経由でこのキーだけを更新する。
+export interface ScheduleProposalSettings {
+  startOffsetDays: number;
+  days: number;
+  startHour: number;
+  endHour: number;
+}
+
+export const DEFAULT_PROPOSAL_SETTINGS: ScheduleProposalSettings = {
+  startOffsetDays: 0,
+  days: SEARCH_DAYS,
+  startHour: BUSINESS_START_HOUR,
+  endHour: BUSINESS_END_HOUR,
+};
+
+export function proposalSettingsFromUserProfile(userProfile: unknown): ScheduleProposalSettings {
+  const raw = (userProfile as Record<string, unknown> | null | undefined)?.schedule_proposal_defaults as
+    | Partial<ScheduleProposalSettings>
+    | undefined;
+  return {
+    startOffsetDays: typeof raw?.startOffsetDays === 'number' ? raw.startOffsetDays : DEFAULT_PROPOSAL_SETTINGS.startOffsetDays,
+    days: typeof raw?.days === 'number' && raw.days > 0 ? raw.days : DEFAULT_PROPOSAL_SETTINGS.days,
+    startHour: typeof raw?.startHour === 'number' ? raw.startHour : DEFAULT_PROPOSAL_SETTINGS.startHour,
+    endHour: typeof raw?.endHour === 'number' ? raw.endHour : DEFAULT_PROPOSAL_SETTINGS.endHour,
+  };
+}
+
+export async function saveProposalDefaults(settings: ScheduleProposalSettings): Promise<void> {
+  const { error } = await supabase.rpc('merge_user_profile_fields', {
+    new_notes: [],
+    new_fields: { schedule_proposal_defaults: settings } as never,
+  });
+  if (error) throw error;
+}
+
 export function formatScheduleProposalText(slots: FreeSlot[]): string {
   if (slots.length === 0) {
-    return '直近1週間で空いている候補が見つかりませんでした。日程を調整してもう一度お試しください。';
+    return '指定した期間・時間帯で空いている候補が見つかりませんでした。日付範囲や時間範囲を変えてもう一度お試しください。';
   }
   const lines = slots.map((s) => {
     const dateLabel = s.start.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
