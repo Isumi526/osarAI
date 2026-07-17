@@ -1,6 +1,6 @@
 'use client';
 
-// 代理店(leader)の紹介コード管理UI。/api/referral-codes 経由でCRUDする。
+// 代理店(LL・agencyロール)の紹介コード管理UI。/api/referral-codes 経由でCRUDする。
 import { useState } from 'react';
 
 interface ReferralCode {

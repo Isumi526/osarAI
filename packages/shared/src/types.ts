@@ -1,7 +1,7 @@
 // ドメイン共通型（§6 データモデルに対応する手書きの軽量型）
 // 注意：これは UI/ロジック用の薄い型。DBの正本型は database.types.ts（自動生成）を使う。
 
-export type Role = 'member' | 'leader';
+export type Role = 'member' | 'leader' | 'agency';
 
 export type CustomerStatus = 'active' | 'archived';
 export type Temperature = 'hot' | 'warm' | 'cold';
@@ -14,7 +14,7 @@ export type OsaraiSessionStatus = 'in_progress' | 'done';
 export type ChatScope = 'all' | 'customer';
 export type ChatRole = 'user' | 'assistant';
 
-export type PlanId = 'light' | 'standard' | 'pro';
+export type PlanId = 'light' | 'standard' | 'pro' | 'leader' | 'member';
 export type SubscriptionStatus =
   | 'trialing'
   | 'active'

@@ -24,6 +24,11 @@ export function priceIdForPlan(plan: PlanId): string {
       return process.env.STRIPE_PRICE_STANDARD ?? '';
     case 'pro':
       return process.env.STRIPE_PRICE_PRO ?? '';
+    case 'leader':
+    case 'member':
+      // leader/memberは自己申込チェックアウト非対応(価格未確定・招待経由のみ)。
+      // 空文字を返しcheckout routeの`if (!priceId)`フェイルセーフで500にする。
+      return '';
   }
 }
 

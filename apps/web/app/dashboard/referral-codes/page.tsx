@@ -1,4 +1,7 @@
-// 代理店(leader)が紹介コードを管理する画面（議事録『review』回答A）。
+// 代理店(LL・agencyロール)が紹介コードを管理する画面
+// （【要設計判断】代理店/リーダー再設計・回答A）。
+// 旧: profiles.role='leader'の流用だったが、LLはprofiles/subscriptionsを持つ
+// 「ユーザー」ではあるものの、契約(subscriptions)は持たない専用ロール(agency)として扱う。
 // 【重要】ここではStripe側のPromotion Code発行は行わない（記録・使用状況追跡のみ。
 // 実際のStripe発行は運営者がCLIで行う運用を維持する。CLAUDE.md §0 B-1 参照）。
 import Link from 'next/link';
@@ -21,11 +24,11 @@ export default async function ReferralCodesPage() {
     .eq('id', user.id)
     .single<{ role: string; org_id: string }>();
 
-  if (profile?.role !== 'leader') {
+  if (profile?.role !== 'agency') {
     return (
       <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px' }}>
         <h1>紹介コード管理</h1>
-        <p style={{ color: '#6b6358' }}>この画面は leader ロールのみ利用できます。</p>
+        <p style={{ color: '#6b6358' }}>この画面は agency ロールのみ利用できます。</p>
       </main>
     );
   }

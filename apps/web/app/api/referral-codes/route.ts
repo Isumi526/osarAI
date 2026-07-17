@@ -1,4 +1,4 @@
-// 代理店(leader)の紹介コード管理（議事録『review』回答A）。
+// 代理店(LL・agencyロール)の紹介コード管理（【要設計判断】代理店/リーダー再設計・回答A）。
 // 【重要】ここではStripe側のPromotion Code発行は行わない（コード文字列の記録・使用状況
 // 追跡のみ。実際のStripe発行は運営者がCLIで行う運用を維持。詳細はmigrationのコメント参照）。
 import { NextResponse } from 'next/server';
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase.from('profiles').select('org_id, role').eq('id', user.id).maybeSingle();
   if (!profile) return NextResponse.json({ error: 'profile not found' }, { status: 400 });
-  if (profile.role !== 'leader') return NextResponse.json({ error: 'leader only' }, { status: 403 });
+  if (profile.role !== 'agency') return NextResponse.json({ error: 'agency only' }, { status: 403 });
 
   const body = (await req.json()) as { code?: string; label?: string };
   const code = (body.code ?? '').trim();

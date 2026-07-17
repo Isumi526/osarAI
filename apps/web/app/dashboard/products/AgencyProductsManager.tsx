@@ -1,6 +1,6 @@
 'use client';
 
-// 代理店(leader)が商品リストを作成・削除するクライアント側UI。
+// リーダープラン契約者が商品リストを作成・削除するクライアント側UI。
 // /api/agency-products 経由でCRUDする(apps/web/app/billing/BillingPortalButton.tsxと同じ
 // API route + cookieセッション認証のパターンに統一)。
 import { useState } from 'react';

@@ -1,7 +1,8 @@
-// 代理店(leader)の商品リスト管理（議事録『review』回答A）。
-// GET: 同組織メンバー全員が閲覧可(RLS: agency_products_select)。
-// POST: leaderのみ作成可(RLS: agency_products_cud)。RLSが最終防衛だが、無駄なinsert試行を
-// 避けるためrole確認もここで行う。
+// 「リーダー」課金プラン契約者の商品リスト管理（【要設計判断】代理店/リーダー再設計・回答A）。
+// GET: 自分の商品(リーダー本人) または 自分を招待したリーダーの商品(招待メンバー)のみ
+// (RLS: agency_products_select・org全体スコープではない)。
+// POST: 有効なLeaderプラン契約者のみ作成可(RLS: agency_products_cud)。RLSが最終防衛だが、
+// 無駄なinsert試行を避けるためここでも確認する。
 import { NextResponse } from 'next/server';
 import { authedFromRequest } from '@/lib/api-auth';
 
@@ -21,9 +22,11 @@ export async function POST(req: Request) {
   if (!ctx) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   const { supabase, user } = ctx;
 
-  const { data: profile } = await supabase.from('profiles').select('org_id, role').eq('id', user.id).maybeSingle();
+  const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', user.id).maybeSingle();
   if (!profile) return NextResponse.json({ error: 'profile not found' }, { status: 400 });
-  if (profile.role !== 'leader') return NextResponse.json({ error: 'leader only' }, { status: 403 });
+  const { data: sub } = await supabase.from('subscriptions').select('plan, status').eq('user_id', user.id).maybeSingle();
+  const isActiveLeader = sub?.plan === 'leader' && (sub.status === 'trialing' || sub.status === 'active');
+  if (!isActiveLeader) return NextResponse.json({ error: 'active leader plan only' }, { status: 403 });
 
   const body = (await req.json()) as { name?: string; price?: string; appeal?: string; target?: string };
   const name = (body.name ?? '').trim();

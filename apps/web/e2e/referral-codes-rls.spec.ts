@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 // 代理店が紹介コードを管理できる画面を追加するチケットの回帰。
-// referral_codes テーブルのRLS(0021_referral_codes.sql)を検証する:
-// - leader は作成できる（org内でコードが重複していれば失敗する = unique制約）
-// - member は閲覧できるが作成はできない
+// 【要設計判断】代理店/リーダー再設計(回答A・0024)後のreferral_codes RLSを検証する:
+// - agencyロール(LL本体)は作成できる（org内でコードが重複していれば失敗する = unique制約。
+//   旧: profiles.role='leader'の流用だったが、LLは専用のagencyロールに変更）
+// - member は閲覧できるが作成はできない(閲覧範囲は変更していない)
 // - 別組織のユーザーからは見えない
 
 const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321';
@@ -21,16 +22,16 @@ async function signup(request: import('@playwright/test').APIRequestContext, ema
   return { userId: user.id, authHeaders: { apikey: LOCAL_ANON_KEY, Authorization: `Bearer ${access_token}`, 'content-type': 'application/json' } };
 }
 
-test('referral_codes: leaderは作成可・memberは閲覧のみ可・別組織からは見えない・org内で一意', async ({ request }) => {
+test('referral_codes: agencyロールは作成可・memberは閲覧のみ可・別組織からは見えない・org内で一意', async ({ request }) => {
   const ts = Date.now();
   const code = `E2ECODE${ts}`;
-  const leader = await signup(request, `e2e-referral-leader-${ts}@example.com`);
-  const leader2 = await signup(request, `e2e-referral-leader2-${ts}@example.com`);
+  const leader = await signup(request, `e2e-referral-agency-${ts}@example.com`);
+  const leader2 = await signup(request, `e2e-referral-agency2-${ts}@example.com`);
   const member = await signup(request, `e2e-referral-member-${ts}@example.com`);
   const outsider = await signup(request, `e2e-referral-outsider-${ts}@example.com`);
 
-  await request.patch(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${leader.userId}`, { headers: svc, data: { role: 'leader' } });
-  await request.patch(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${leader2.userId}`, { headers: svc, data: { role: 'leader' } });
+  await request.patch(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${leader.userId}`, { headers: svc, data: { role: 'agency' } });
+  await request.patch(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${leader2.userId}`, { headers: svc, data: { role: 'agency' } });
 
   const otherOrgRes = await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/organizations`, {
     headers: { ...svc, Prefer: 'return=representation' },

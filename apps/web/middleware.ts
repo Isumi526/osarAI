@@ -33,13 +33,22 @@ export async function middleware(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const { data: sub } = await supabase
-        .from('subscriptions')
-        .select('status')
-        .eq('user_id', user.id)
-        .maybeSingle<{ status: string | null }>();
-      if (!sub || !ACTIVE_STATUSES.has(sub.status ?? '')) {
-        return NextResponse.redirect(new URL('/subscribe', request.url));
+      // agency(LL代理店本体)はprofiles/subscriptionsを持つ「ユーザー」ではなく契約もしない
+      // アクターのため、課金ゲートの対象外にする（【要設計判断】代理店/リーダー再設計・回答A）。
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle<{ role: string | null }>();
+      if (profile?.role !== 'agency') {
+        const { data: sub } = await supabase
+          .from('subscriptions')
+          .select('status')
+          .eq('user_id', user.id)
+          .maybeSingle<{ status: string | null }>();
+        if (!sub || !ACTIVE_STATUSES.has(sub.status ?? '')) {
+          return NextResponse.redirect(new URL('/subscribe', request.url));
+        }
       }
     }
   }
