@@ -158,6 +158,11 @@ export function SchedulePage() {
   const [monthList, setMonthList] = useState<Date[]>([]);
   const monthScrollRef = useRef<HTMLDivElement>(null);
   const prependAdjustRef = useRef<number | null>(null);
+  // 月表示に入った直後、prevMonth(前月)ブロックがscrollTop:0で一瞬見えてから現在月へ
+  // 補正される不具合の修正: 現在月ブロックへの参照とrefを持ち、monthList初期化直後に
+  // 初期スクロール位置を合わせる(既存のprepend時スクロール補正とは別のuseLayoutEffect)。
+  const currentMonthBlockRef = useRef<HTMLDivElement>(null);
+  const initialMonthScrollPendingRef = useRef(false);
   // 前後移動(</>)のたびに一覧を丸ごとブランクにすると体感の遅延・ちらつきが大きいため、
   // 初回読み込みの時だけ「読み込み中…」を出し、以降の再取得は前の表示を残したまま裏で
   // 差し替える(議事録要望: 前後移動時のもたつき軽減)。
@@ -169,6 +174,7 @@ export function SchedulePage() {
     if (view !== 'month') return;
     const base = startOfMonth(anchor);
     setMonthList([addMonths(base, -1), base, addMonths(base, 1)]);
+    initialMonthScrollPendingRef.current = true;
   }, [view, anchor]);
 
   // prepend(上方向の月追加)後にスクロール位置を補正し、表示のジャンプを防ぐ。
@@ -177,6 +183,18 @@ export function SchedulePage() {
     const el = monthScrollRef.current;
     el.scrollTop += el.scrollHeight - prependAdjustRef.current;
     prependAdjustRef.current = null;
+  }, [monthList]);
+
+  // 月表示に入った直後の初期表示位置を現在月ブロックへ合わせる(前月が一瞬見える不具合の修正)。
+  // ペイント前に実行するuseLayoutEffectのため、ユーザーには前月は見えない。
+  useLayoutEffect(() => {
+    if (!initialMonthScrollPendingRef.current) return;
+    const container = monthScrollRef.current;
+    const target = currentMonthBlockRef.current;
+    if (!container || !target) return;
+    const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    container.scrollTop = offset;
+    initialMonthScrollPendingRef.current = false;
   }, [monthList]);
 
   function onMonthScroll(e: React.UIEvent<HTMLDivElement>) {
@@ -345,7 +363,7 @@ export function SchedulePage() {
           style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: 16 }}
         >
           {monthList.map((m) => (
-            <div key={monthKey(m)}>
+            <div key={monthKey(m)} ref={monthKey(m) === monthKey(startOfMonth(anchor)) ? currentMonthBlockRef : undefined}>
               {/* 上部の今日/前後移動バーの年月表示と紛らわしく見える(実機レビュー指摘)ため、
                   背景色/枠で区別できるチップ状にして「今表示中の月」ラベルだと分かるようにする。 */}
               <div
