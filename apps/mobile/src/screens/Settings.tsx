@@ -370,7 +370,7 @@ export function Settings() {
                   onClick={() => setShowAgencyPicker((v) => !v)}
                   style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-primary-border)', color: 'var(--color-primary)', fontSize: 13 }}
                 >
-                  {showAgencyPicker ? '閉じる' : '📋 代理店の商品リストからインポート'}
+                  {showAgencyPicker ? '閉じる' : '📋 チームの商品リストからインポート'}
                 </button>
               )}
               {showAgencyPicker && (

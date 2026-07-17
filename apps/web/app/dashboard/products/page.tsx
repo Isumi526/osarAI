@@ -27,7 +27,7 @@ export default async function AgencyProductsPage() {
   if (!isActiveLeader) {
     return (
       <main style={{ maxWidth: 960, margin: '0 auto', padding: '48px 24px' }}>
-        <h1>代理店商品リスト</h1>
+        <h1>チーム商品リスト</h1>
         <p style={{ color: '#6b6358' }}>この画面は有効な Leader プラン契約者のみ利用できます。</p>
       </main>
     );
@@ -43,7 +43,7 @@ export default async function AgencyProductsPage() {
       <Link href="/dashboard" style={{ color: 'var(--color-primary)' }}>
         ← ダッシュボード
       </Link>
-      <h1 style={{ marginBottom: 4 }}>代理店商品リスト</h1>
+      <h1 style={{ marginBottom: 4 }}>チーム商品リスト</h1>
       <p style={{ color: '#6b6358', marginTop: 0 }}>
         ここで作成した商品リストは、あなたの紹介で登録したメンバーがアプリのマイページから自分の「扱っている商品」にインポートできます。
       </p>

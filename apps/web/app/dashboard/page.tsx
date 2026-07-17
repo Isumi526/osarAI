@@ -95,7 +95,7 @@ export default async function DashboardPage() {
       </p>
       <p style={{ marginTop: 8, display: 'flex', gap: 16 }}>
         <Link href="/dashboard/products" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-          代理店商品リストを管理する →
+          チーム商品リストを管理する →
         </Link>
         <Link href="/dashboard/referral-codes" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
           紹介コードを管理する →
