@@ -358,7 +358,6 @@ export function SchedulePage() {
                   setAnchor(d);
                   setView('day');
                 }}
-                onSelectSchedule={(s) => setEditing(s)}
               />
             </div>
           ))}
@@ -518,13 +517,11 @@ function MonthGrid({
   anchor,
   schedules,
   onSelectDay,
-  onSelectSchedule,
   fixedHeight = false,
 }: {
   anchor: Date;
   schedules: Schedule[];
   onSelectDay: (d: Date) => void;
-  onSelectSchedule: (s: Schedule) => void;
   // 無限スクロール(複数月を縦に積む)時は各月を固定高にする。単月表示時はflex:1で画面いっぱい。
   fixedHeight?: boolean;
 }) {
@@ -604,8 +601,10 @@ function MonthGrid({
                   <button
                     key={`${s.id}-${key}`}
                     onClick={(e) => {
+                      // 月表示のタップ操作を日付ブロックタップと統一(日表示へ遷移)。
+                      // 個別予定の編集は日表示側から行う。
                       e.stopPropagation();
-                      onSelectSchedule(s);
+                      onSelectDay(d);
                     }}
                     style={{
                       marginTop: 1,
