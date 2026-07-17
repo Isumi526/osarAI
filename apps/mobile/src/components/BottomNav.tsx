@@ -3,7 +3,7 @@
 // /schedule 配下は予定タブ）。対話画面(Osarai/AiChat/SelfOsarai)は main の高さを
 // ナビ分減らしているため入力欄がナビと干渉しない。
 import { useLocation, useNavigate } from 'react-router-dom';
-import { HomeIcon, ScheduleIcon, ChatIcon, SettingsIcon } from './NavIcons.js';
+import { HomeIcon, ScheduleIcon, OsaraiIcon, ChatIcon, SettingsIcon } from './NavIcons.js';
 import { useNavGuardDirty } from './NavGuard.js';
 import { useConfirm } from './ConfirmDialog.js';
 
@@ -11,6 +11,7 @@ export const BOTTOM_NAV_HEIGHT = 56;
 
 const TABS = [
   { path: '/', label: 'ホーム', Icon: HomeIcon },
+  { path: '/osarai', label: 'おさらい', Icon: OsaraiIcon },
   { path: '/schedule', label: '予定', Icon: ScheduleIcon },
   { path: '/chat', label: '相談', Icon: ChatIcon },
   { path: '/settings', label: 'マイページ', Icon: SettingsIcon },

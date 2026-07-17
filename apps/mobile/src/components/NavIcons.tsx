@@ -24,6 +24,15 @@ export function ScheduleIcon({ active }: IconProps) {
   );
 }
 
+export function OsaraiIcon({ active }: IconProps) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor(active)} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" />
+      <path d="M18 4v3h-3M6 20v-3h3" />
+    </svg>
+  );
+}
+
 export function ChatIcon({ active }: IconProps) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor(active)} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
