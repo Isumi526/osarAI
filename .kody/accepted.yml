@@ -40,3 +40,26 @@ entries:
       回帰テストを追加しpass確認済み。Geminiは0021単体を見て指摘しているが
       0022で解消されている旨をfinding本文でも認めている。
     ticket: 39d0ff81-c56b-8130-9683-e53dd0a9d2a5
+  - rule: migration-safety
+    target: supabase/migrations/0024_agency_leader_redesign.sql
+    reason: >
+      誤検知/ルールの過剰適用として確認済み（2026-07-17）。指摘は
+      「DROP CONSTRAINT / DROP POLICY を含む破壊的変更」というものだが、
+      migration-safety.md自体の定義は「column削除／rename、default無しの
+      NOT NULL追加、既存型の変更(ALTER...TYPE)」を破壊的とするもので、
+      CHECK制約の許容値を広げるDROP CONSTRAINT+ADD CONSTRAINT(既存の
+      'member'/'leader'や'light'/'standard'/'pro'は引き続き有効な値のまま、
+      'agency'/'leader'/'member'を追加するだけ)や、RLSポリシーを修正する
+      DROP POLICY+CREATE POLICY(同一migration内で即座に再作成・行やデータは
+      一切削除しない)は定義に含まれない。後者のパターンは既存の0022
+      (agency_products_referral_codes_own_only)で既に使われており前例がある。
+      データ損失は無く、ロールバックもrevert 1コミットで安全(§16 DoD相当)。
+    ticket: 39e0ff81-c56b-8172-abbe-e7cc07ebb5bf
+  - rule: idempotency
+    target: apps/web/app/api/agency-products/route.ts
+    reason: >
+      既知・許容済み(前チケットで指摘され非ブロックと判断済み)。商品作成APIの
+      連打/再送で二重作成されうる指摘だが、クライアント側(AgencyProductsManager.tsx)
+      で送信中はボタンをdisabledにするガードが実装済み。DB側unique制約までは
+      本チケット(および前チケット)のスコープ外と判断(§0スコープ厳守)。
+    ticket: 39e0ff81-c56b-8172-abbe-e7cc07ebb5bf
