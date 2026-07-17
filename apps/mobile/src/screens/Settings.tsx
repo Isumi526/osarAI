@@ -130,6 +130,25 @@ export function Settings() {
         <span style={{ width: 48 }} />
       </ScreenHeader>
 
+      <Link
+        to="/self-osarai"
+        style={{
+          display: 'block',
+          textAlign: 'center',
+          marginTop: 16,
+          padding: 12,
+          borderRadius: 'var(--btn-radius)',
+          background: 'var(--color-primary)',
+          color: '#fff',
+          textDecoration: 'none',
+        }}
+      >
+        自分をおさらいする
+      </Link>
+      <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+        整頓された項目だけでなく、AIとの対話であなた自身を深掘りすることもできます。
+      </p>
+
       {referralCode && (
         <section
           style={{
@@ -354,24 +373,6 @@ export function Settings() {
           {profileSaving ? '保存中…' : '保存'}
         </button>
         {profileMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{profileMsg}</p>}
-        <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-          整頓された項目だけでなく、AIとの対話であなた自身を深掘りすることもできます。
-        </p>
-        <Link
-          to="/self-osarai"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            marginTop: 8,
-            padding: 12,
-            borderRadius: 'var(--btn-radius)',
-            background: 'var(--color-primary)',
-            color: '#fff',
-            textDecoration: 'none',
-          }}
-        >
-          自分をおさらいする
-        </Link>
       </section>
 
       <section
