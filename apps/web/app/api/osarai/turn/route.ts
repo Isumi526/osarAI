@@ -275,14 +275,19 @@ async function persistOnDone(
     if (error || !c) return { error: 'customer create failed' };
     customerId = c.id;
   } else {
-    await supabase
-      .from('customers')
-      .update({
-        needs: joinList(extracted.needs),
-        last_met_at: now,
-        updated_at: now,
-      })
-      .eq('id', customerId);
+    // custom_fieldsは複数ターンにまたがって判明することが多いため、既存値に新規抽出分を
+    // アトミックにマージして保存する（0013のmerge_user_profile_fieldsと同じパターン。
+    // 上書きすると前ターンで判明済みの項目が消える/一切保存されないバグがあった）。
+    await Promise.all([
+      supabase.rpc('merge_customer_custom_fields', {
+        target_customer_id: customerId,
+        new_fields: (extracted.custom_fields ?? {}) as never,
+      }),
+      supabase
+        .from('customers')
+        .update({ needs: joinList(extracted.needs), last_met_at: now, updated_at: now })
+        .eq('id', customerId),
+    ]);
   }
   const aiSummary: AiSummary = {
     points: extracted.points ?? [],
