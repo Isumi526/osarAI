@@ -299,24 +299,25 @@ export function Settings() {
                     placeholder="金額（例: 月々3,000円〜）"
                     style={{ width: '100%', padding: 8, fontSize: 14 }}
                   />
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>魅力、あなたとのストーリー</div>
                   <AutoResizeTextarea
                     value={prod.appeal}
                     onChange={(e) => {
                       setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, appeal: e.target.value } : x)));
                       setProfileDirty(true);
                     }}
-                    placeholder="魅力・概要（例: 保険料そのままで入院給付が手厚い）"
                     rows={2}
                     style={{ width: '100%', padding: 8, fontSize: 14 }}
                   />
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>ターゲット・届けたい相手</div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <AutoResizeTextarea
                       value={prod.target}
                       onChange={(e) => {
                         setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)));
                         setProfileDirty(true);
                       }}
-                      placeholder="ターゲット・届けたい相手（例: 保障を見直したいと言っていた30〜40代の子育て世帯）"
+                      rows={2}
                       style={{ flex: 1, padding: 8, fontSize: 14 }}
                     />
                     <button
