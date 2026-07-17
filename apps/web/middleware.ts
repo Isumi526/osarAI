@@ -5,6 +5,11 @@ import { updateSession } from './lib/supabase/middleware';
 const REF_COOKIE = 'osarai_ref';
 const CODE_COOKIE = 'osarai_code';
 const ACTIVE_STATUSES = new Set(['trialing', 'active']);
+// past_due(自動課金失敗・支払い方法更新待ち)は「未契約」と区別する。実際の機能制限は
+// モバイルアプリ側のentitlement(isSubscriptionActive・変更なし)が別途担うため、この
+// Web側ゲートではpast_dueを/subscribeへ弾かず/dashboard・/billing等へ通す
+// (「プランを選んでください」ではなく/billingの再決済導線へ自然に辿り着けるようにする)。
+const BILLING_ISSUE_STATUSES = new Set(['past_due']);
 // 未契約/解約ユーザーでも触れる必要がある画面(課金導線そのもの・認証・公開ページ)。
 const PLAN_GATE_EXEMPT = ['/subscribe', '/billing', '/login', '/signup', '/terms', '/api'];
 
@@ -46,7 +51,8 @@ export async function middleware(request: NextRequest) {
           .select('status')
           .eq('user_id', user.id)
           .maybeSingle<{ status: string | null }>();
-        if (!sub || !ACTIVE_STATUSES.has(sub.status ?? '')) {
+        const status = sub?.status ?? '';
+        if (!sub || (!ACTIVE_STATUSES.has(status) && !BILLING_ISSUE_STATUSES.has(status))) {
           return NextResponse.redirect(new URL('/subscribe', request.url));
         }
       }

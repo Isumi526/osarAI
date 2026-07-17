@@ -44,6 +44,12 @@ export default function LoginPage() {
       .eq('user_id', data.user!.id)
       .maybeSingle<{ status: string | null }>();
     const isActive = sub?.status === 'trialing' || sub?.status === 'active';
+    // past_due(自動課金失敗・支払い方法更新待ち)は「未契約」と区別し、/subscribeの
+    // 「プランを選んでください」ではなく/dashboard経由で再決済導線(/billing)へ誘導する。
+    if (sub?.status === 'past_due') {
+      window.location.assign('/dashboard');
+      return;
+    }
     if (!isActive) {
       window.location.assign('/subscribe');
       return;
