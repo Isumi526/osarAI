@@ -659,8 +659,12 @@ function TimeGrid({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // 初期スクロール位置を8時付近に(全日表示だが業務時間帯が見えるように)
-    scrollRef.current?.scrollTo({ top: HOUR_HEIGHT * 7 });
+    // 初期スクロール位置を現在時刻付近に(全日表示だが「今」が見えるように)。
+    // 現在時刻が画面最上部ぎりぎりにならないよう1時間分手前から見せる。
+    const now = new Date();
+    const targetHour = now.getHours() + now.getMinutes() / 60;
+    const leadInHours = 1;
+    scrollRef.current?.scrollTo({ top: Math.max(0, HOUR_HEIGHT * (targetHour - leadInHours)) });
   }, [days[0]?.toDateString()]);
 
   const today = new Date();
