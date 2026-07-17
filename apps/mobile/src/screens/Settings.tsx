@@ -77,6 +77,16 @@ export function Settings() {
     setShowAgencyPicker(false);
   }
 
+  // 一括インポート(1件ずつのimportAgencyProductは維持したまま追加)。
+  function importAllAgencyProducts() {
+    setProducts((ps) => [
+      ...ps,
+      ...agencyProducts.map((p) => ({ name: p.name, price: p.price ?? '', appeal: p.appeal ?? '', target: p.target ?? '' })),
+    ]);
+    setProfileDirty(true);
+    setShowAgencyPicker(false);
+  }
+
   // 紹介リンクのベースURL。独自ドメイン確定後はVITE_LP_ORIGINを差し替えるだけで済む(回答C・env化)。
   // 未設定時はAPIベース(=Web/LPのオリジン)にフォールバック。
   const lpOrigin = (
@@ -365,6 +375,13 @@ export function Settings() {
               )}
               {showAgencyPicker && (
                 <div style={{ display: 'grid', gap: 6, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 8 }}>
+                  <button
+                    type="button"
+                    onClick={importAllAgencyProducts}
+                    style={{ padding: 8, background: '#fff', border: '1px solid var(--color-primary-border)', color: 'var(--color-primary)', textAlign: 'left', fontSize: 13, fontWeight: 600 }}
+                  >
+                    ✅ 全て追加（{agencyProducts.length}件）
+                  </button>
                   {agencyProducts.map((p) => (
                     <button
                       key={p.id}
