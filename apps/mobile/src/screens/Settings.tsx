@@ -130,6 +130,25 @@ export function Settings() {
         <span style={{ width: 48 }} />
       </ScreenHeader>
 
+      <Link
+        to="/self-osarai"
+        style={{
+          display: 'block',
+          textAlign: 'center',
+          marginTop: 16,
+          padding: 12,
+          borderRadius: 'var(--btn-radius)',
+          background: 'var(--color-primary)',
+          color: '#fff',
+          textDecoration: 'none',
+        }}
+      >
+        自分をおさらいする
+      </Link>
+      <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+        整頓された項目だけでなく、AIとの対話であなた自身を深掘りすることもできます。
+      </p>
+
       {referralCode && (
         <section
           style={{
@@ -299,24 +318,25 @@ export function Settings() {
                     placeholder="金額（例: 月々3,000円〜）"
                     style={{ width: '100%', padding: 8, fontSize: 14 }}
                   />
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>魅力、あなたとのストーリー</div>
                   <AutoResizeTextarea
                     value={prod.appeal}
                     onChange={(e) => {
                       setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, appeal: e.target.value } : x)));
                       setProfileDirty(true);
                     }}
-                    placeholder="魅力・概要（例: 保険料そのままで入院給付が手厚い）"
                     rows={2}
                     style={{ width: '100%', padding: 8, fontSize: 14 }}
                   />
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>ターゲット・届けたい相手</div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <AutoResizeTextarea
                       value={prod.target}
                       onChange={(e) => {
                         setProducts((ps) => ps.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)));
                         setProfileDirty(true);
                       }}
-                      placeholder="ターゲット・届けたい相手（例: 保障を見直したいと言っていた30〜40代の子育て世帯）"
+                      rows={2}
                       style={{ flex: 1, padding: 8, fontSize: 14 }}
                     />
                     <button
@@ -353,24 +373,6 @@ export function Settings() {
           {profileSaving ? '保存中…' : '保存'}
         </button>
         {profileMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{profileMsg}</p>}
-        <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-          整頓された項目だけでなく、AIとの対話であなた自身を深掘りすることもできます。
-        </p>
-        <Link
-          to="/self-osarai"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            marginTop: 8,
-            padding: 12,
-            borderRadius: 'var(--btn-radius)',
-            background: 'var(--color-primary)',
-            color: '#fff',
-            textDecoration: 'none',
-          }}
-        >
-          自分をおさらいする
-        </Link>
       </section>
 
       <section

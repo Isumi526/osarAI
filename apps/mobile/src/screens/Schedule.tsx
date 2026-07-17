@@ -358,7 +358,6 @@ export function SchedulePage() {
                   setAnchor(d);
                   setView('day');
                 }}
-                onSelectSchedule={(s) => setEditing(s)}
               />
             </div>
           ))}
@@ -518,13 +517,11 @@ function MonthGrid({
   anchor,
   schedules,
   onSelectDay,
-  onSelectSchedule,
   fixedHeight = false,
 }: {
   anchor: Date;
   schedules: Schedule[];
   onSelectDay: (d: Date) => void;
-  onSelectSchedule: (s: Schedule) => void;
   // 無限スクロール(複数月を縦に積む)時は各月を固定高にする。単月表示時はflex:1で画面いっぱい。
   fixedHeight?: boolean;
 }) {
@@ -604,8 +601,10 @@ function MonthGrid({
                   <button
                     key={`${s.id}-${key}`}
                     onClick={(e) => {
+                      // 月表示のタップ操作を日付ブロックタップと統一(日表示へ遷移)。
+                      // 個別予定の編集は日表示側から行う。
                       e.stopPropagation();
-                      onSelectSchedule(s);
+                      onSelectDay(d);
                     }}
                     style={{
                       marginTop: 1,
@@ -660,8 +659,12 @@ function TimeGrid({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    // 初期スクロール位置を8時付近に(全日表示だが業務時間帯が見えるように)
-    scrollRef.current?.scrollTo({ top: HOUR_HEIGHT * 7 });
+    // 初期スクロール位置を現在時刻付近に(全日表示だが「今」が見えるように)。
+    // 現在時刻が画面最上部ぎりぎりにならないよう1時間分手前から見せる。
+    const now = new Date();
+    const targetHour = now.getHours() + now.getMinutes() / 60;
+    const leadInHours = 1;
+    scrollRef.current?.scrollTo({ top: Math.max(0, HOUR_HEIGHT * (targetHour - leadInHours)) });
   }, [days[0]?.toDateString()]);
 
   const today = new Date();
