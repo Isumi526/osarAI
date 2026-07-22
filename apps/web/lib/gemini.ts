@@ -240,10 +240,13 @@ async function callGenerate(prompt: string, opts: GenerateOpts): Promise<string>
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: opts.temperature ?? 0.7,
-      // gemini-flash-latest(2.5 Flash)は既定でthinkingが有効になり、対話1ターンごとに
-      // 数秒〜十数秒の余計な遅延が乗る。おさらい対話/自分をおさらいは1問1答の抽出＋短い
-      // 次の質問生成が主でありthinkingの恩恵が薄いため、0にして体感速度を優先する。
-      thinkingConfig: { thinkingBudget: 0 },
+      // gemini-flash-latest/gemini-flash-lite-latestは既定でthinkingが有効になり、対話1
+      // ターンごとに数秒〜十数秒の余計な遅延が乗る。おさらい対話/自分をおさらいは1問1答の
+      // 抽出＋短い次の質問生成が主でthinkingの恩恵が薄いため、体感速度を優先し最小に絞る。
+      // 注意: thinkingBudget=0は2026-07時点で"-latest"エイリアスの参照先モデルが変わって
+      // 以降 400 INVALID_ARGUMENT で拒否される（本番のAIチャット全滅の実障害原因）。
+      // 1(最小の非ゼロ値)なら現行モデルで受理されることを実APIで確認済み。
+      thinkingConfig: { thinkingBudget: 1 },
       ...(opts.jsonSchema
         ? { responseMimeType: 'application/json', responseSchema: opts.jsonSchema }
         : {}),
