@@ -2,7 +2,6 @@
 description: 議事録(会議/電話で複数タスク発生)を分解し、重複を避けて未整理チケットを生成→出所リンク。実装はしない(/runへ)
 argument-hint: "[empty|<議事録ページURL/ID>|--paste]"
 disable-model-invocation: true
-model: sonnet
 ---
 
 # /intake — 議事録を分解して「未整理」チケットを生成（出所リンク付き）。実装は /run へ

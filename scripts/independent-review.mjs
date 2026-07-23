@@ -9,6 +9,9 @@
 //    node scripts/independent-review.mjs [<diff範囲>] [--json] [--dry-run]
 //        [--ticket-id <NotionページID>] [--ticket-file <要件mdパス>]   (要件は stdin でも可)
 //    既定 diff範囲 = origin/main...HEAD
+//  計画レビューモード（/review-plan から呼ばれる。diff ではなく計画mdファイルをレビュー）:
+//    node scripts/independent-review.mjs --plan-file <計画mdパス> [--json] [--dry-run] [--ticket-id ...]
+//    DESIGN-RATIONALE.md / VISION.md を判断基準として渡し、findings.rule に条番号（例: 第8条）を出させる。
 //  env(.env): GEMINI_REVIEW_API_KEY(必須), GEMINI_REVIEW_MODEL(任意), NOTION_TOKEN(Notion更新時)
 // ============================================================
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -25,9 +28,11 @@ const has = (f) => argv.includes(f)
 const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined }
 const DRY = has('--dry-run'); const JSON_ONLY = has('--json')
 const TICKET_ID = val('--ticket-id'); const TICKET_FILE = val('--ticket-file')
+const PLAN_FILE = val('--plan-file')
+const PLAN_MODE = Boolean(PLAN_FILE)
 const RUNS = Math.max(1, Number(val('--runs')) || 1)   // N回実行して findings を union（gateの非決定性対策）
 const RUNS_VAL = val('--runs')
-const RANGE = argv.find((a) => !a.startsWith('--') && a !== TICKET_ID && a !== TICKET_FILE && a !== RUNS_VAL) || 'origin/main...HEAD'
+const RANGE = argv.find((a) => !a.startsWith('--') && a !== TICKET_ID && a !== TICKET_FILE && a !== PLAN_FILE && a !== RUNS_VAL) || 'origin/main...HEAD'
 
 const API_KEY = process.env.GEMINI_REVIEW_API_KEY || env.GEMINI_REVIEW_API_KEY
 const MODEL = process.env.GEMINI_REVIEW_MODEL || env.GEMINI_REVIEW_MODEL || 'gemini-3.5-flash'   // docs現行。env上書き可
@@ -67,23 +72,46 @@ function matchAccepted(f) {
     return ruleMatch && targetMatch
   })
 }
-// diff
+// diff（plan-modeでは計画mdファイルをcontentとして使う。diffは取得しない）
 let diff = ''
-try { diff = execSync(`git diff ${RANGE}`, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024 }).toString() }
-catch (e) { console.error(`✗ git diff ${RANGE} 失敗: ${e.message}`); process.exit(2) }
-if (!diff.trim()) { console.error(`（diff が空: ${RANGE}）レビュー対象なし。`); process.exit(0) }
-// ticket要件（intent照合②）
+let content = ''
 let ticket = ''
-if (TICKET_FILE && existsSync(TICKET_FILE)) ticket = readFileSync(TICKET_FILE, 'utf8')
-else { try { ticket = readFileSync(0, 'utf8') } catch {} }   // stdin
-const intentNote = ticket.trim() ? '' : '※ticket要件が未指定のため、意図照合(②)はスキップ。ルール照合(①)のみ実施。'
+let intentNote = ''
+if (PLAN_MODE) {
+  if (!existsSync(PLAN_FILE)) { console.error(`✗ --plan-file が見つからない: ${PLAN_FILE}`); process.exit(2) }
+  content = readFileSync(PLAN_FILE, 'utf8')
+  if (!content.trim()) { console.error(`（計画ファイルが空: ${PLAN_FILE}）レビュー対象なし。`); process.exit(0) }
+} else {
+  try { diff = execSync(`git diff ${RANGE}`, { cwd: ROOT, maxBuffer: 20 * 1024 * 1024 }).toString() }
+  catch (e) { console.error(`✗ git diff ${RANGE} 失敗: ${e.message}`); process.exit(2) }
+  if (!diff.trim()) { console.error(`（diff が空: ${RANGE}）レビュー対象なし。`); process.exit(0) }
+  content = diff
+  // ticket要件（intent照合②）
+  if (TICKET_FILE && existsSync(TICKET_FILE)) ticket = readFileSync(TICKET_FILE, 'utf8')
+  else { try { ticket = readFileSync(0, 'utf8') } catch {} }   // stdin
+  intentNote = ticket.trim() ? '' : '※ticket要件が未指定のため、意図照合(②)はスキップ。ルール照合(①)のみ実施。'
+}
 
-const SYSTEM = [
+// plan-modeの判断基準: DESIGN-RATIONALE.md / VISION.md（.kody/rules があれば併用）
+const planRules = PLAN_MODE ? [
+  existsSync(resolve(ROOT, 'DESIGN-RATIONALE.md')) ? `# DESIGN-RATIONALE.md\n${readFileSync(resolve(ROOT, 'DESIGN-RATIONALE.md'), 'utf8')}` : '',
+  existsSync(resolve(ROOT, 'VISION.md')) ? `# VISION.md\n${readFileSync(resolve(ROOT, 'VISION.md'), 'utf8')}` : '',
+].filter(Boolean).join('\n\n') : ''
+const combinedRules = [rules, planRules].filter(Boolean).join('\n\n')
+
+const SYSTEM = PLAN_MODE ? [
+  'あなたは独立した計画レビュアー（Claude以外）。実装者の思考過程は見ていない。DESIGN-RATIONALE.md の各条・VISION.md（あれば.kody/rules）に照らして、提示された計画（実装コードではなくプラン文書）のみを批判的にレビューする。',
+  '計画には一切手を加えず、指摘のみを返す。findings の rule には必ず該当する条番号（例: 第8条）を入れる。特定の条に紐付かない一般的な懸念は rule に "general" を入れる。',
+  '「良い計画です」で終わらせず、最低3件は指摘すること。指摘すべき点が本当に無い場合のみ、message に「指摘なし: 第N条との整合を確認済み」の形で条番号ごとの確認結果を書くこと。',
+  '出力は必ず次の形の JSON のみ（値は実際の内容で埋める）: {"findings":[{"severity":"critical|high|medium|low","file":"plan","line":0,"rule":"第N条 または general","message":"指摘内容"}],"accessRuleEnforced":"該当なし(計画レビューのため)","verdictSuggestion":"block|warn|pass"}',
+].join('\n') : [
   'あなたは独立したコードレビュアー（Claude以外）。下記のレビュールールと（あれば）チケット要件に照らして diff をレビューする。',
   'コードは一切書き換えず、指摘のみを返す。曖昧な憶測指摘より、ルール・要件に明確に反するものを優先。',
   '出力は必ず次の形の JSON のみ（値は実際の内容で埋める）: {"findings":[{"severity":"critical|high|medium|low","file":"path","line":0,"rule":"ルール名","message":"指摘内容"}],"accessRuleEnforced":"外部/anon導線のトークン照合が diff 内でどう担保されているかを1行で（該当なければ その旨）","verdictSuggestion":"block|warn|pass"}',
 ].join('\n')
-const USER = `# レビュールール\n${rules || '(なし)'}\n\n# チケット要件(意図照合用)\n${ticket.trim() || '(未指定)'}\n${intentNote}\n\n# 対象 diff (${RANGE})\n\`\`\`diff\n${diff.slice(0, 600000)}\n\`\`\``
+const USER = PLAN_MODE
+  ? `# レビュー基準 (DESIGN-RATIONALE.md / VISION.md / .kody/rules)\n${combinedRules || '(なし)'}\n\n# レビュー対象の計画 (${PLAN_FILE})\n\`\`\`markdown\n${content.slice(0, 600000)}\n\`\`\``
+  : `# レビュールール\n${rules || '(なし)'}\n\n# チケット要件(意図照合用)\n${ticket.trim() || '(未指定)'}\n${intentNote}\n\n# 対象 diff (${RANGE})\n\`\`\`diff\n${content.slice(0, 600000)}\n\`\`\``
 
 async function callGemini() {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
@@ -110,7 +138,7 @@ async function flagNotion(crit, summary) {
   const callout = { object: 'block', type: 'callout', callout: { rich_text: [{ type: 'text', text: { content: body.slice(0, 1900) } }], icon: { type: 'emoji', emoji: '🔴' } } }
   const r = await fetch(`https://api.notion.com/v1/blocks/${TICKET_ID}/children`, { method: 'PATCH', headers: H, body: JSON.stringify({ children: [callout] }) })
   console.log(`  Notion要人間verdict: ${r.ok ? 'ok' : 'NG ' + (await r.text()).slice(0, 120)}`)
-  try { execSync(`node ${resolve(ROOT, 'scripts/notify-humanball.mjs')} --kind 要人間verdict --task "独立レビュー" --detail ${JSON.stringify(`critical ${crit.length}件(${RANGE})。要人間verdict。`)}`, { stdio: 'ignore' }) } catch {}
+  try { execSync(`node ${resolve(ROOT, 'scripts/notify-humanball.mjs')} --kind 要人間verdict --task "独立レビュー" --detail ${JSON.stringify(`critical ${crit.length}件(${PLAN_MODE ? `plan-file:${PLAN_FILE}` : RANGE})。要人間verdict。`)}`, { stdio: 'ignore' }) } catch {}
 }
 
 // N回実行して findings を union（rule|file|severity でdedup）。どれか1回でも未accept🔴が出れば
@@ -152,15 +180,16 @@ const KW_RAW = ((process.env.REVIEW_HIGH_RISK_KEYWORDS || env.REVIEW_HIGH_RISK_K
 let KW_RE
 try { KW_RE = new RegExp(KW_RAW, 'i') } catch { KW_RE = new RegExp(KW_BASE, 'i') }
 function computeRisk() {
-  const hi = /supabase\/migrations\//.test(diff)
-    || /supabase\/functions\//.test(diff)
-    || (/config\.toml/.test(diff) && /verify_jwt/.test(diff))
-    || KW_RE.test(diff)
+  const hi = /supabase\/migrations\//.test(content)
+    || /supabase\/functions\//.test(content)
+    || (/config\.toml/.test(content) && /verify_jwt/.test(content))
+    || KW_RE.test(content)
     || unacceptedSevere.length > 0
   return hi ? 'high' : 'low'
 }
 const riskClass = computeRisk()
 const acceptedSummary = acceptedFindings.map((f) => `${f.rule}:${f._accepted.target}(tracked:${f._accepted.ticket})`)
+const LABEL = PLAN_MODE ? `plan-file:${PLAN_FILE}` : RANGE
 
 result.verdict = verdict
 result.riskClass = riskClass
@@ -168,7 +197,7 @@ result.accepted = acceptedSummary
 
 if (JSON_ONLY) { console.log(JSON.stringify(result)); }
 else {
-  console.log(`\n=== 独立レビュー (Gemini ${MODEL}) ${RANGE} ===`)
+  console.log(`\n=== 独立レビュー (Gemini ${MODEL}) ${LABEL} ===`)
   if (intentNote) console.log(intentNote)
   console.log(`findings: 🔴critical ${crit.length}(未accept ${unacceptedCrit.length}) / high ${high.length} / 計 ${findings.length}`)
   for (const f of findings) console.log(`  [${f.severity}]${f._accepted ? ' accepted(tracked:' + f._accepted.ticket + ')' : ''} ${f.file}:${f.line} (${f.rule}) ${f.message}`)

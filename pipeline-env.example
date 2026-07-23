@@ -1,0 +1,26 @@
+# cc-pipeline パイプライン用 .env キー（各リポの .env に追記。値はプロジェクト固有）
+# ── Notion 統合バックログ ──
+NOTION_TOKEN=
+BACKLOG_PROJECT_ID=          # 自案件の page_id
+BACKLOG_DS_ID=a7f5a28f-22af-4bc1-a512-4d427a934f31
+BACKLOG_DATA_SOURCE_ID=a7f5a28f-22af-4bc1-a512-4d427a934f31
+# ── 自走パラメータ ──
+AUTO_MERGE_TARGET=dev
+AUTO_TIER=低
+MAX_WALL=180
+PROD_BRANCH=main
+DEV_URL=http://localhost:3000
+LOCAL_DB_URL=                # 別ポートのローカルDB時のみ（例 postgresql://postgres:postgres@127.0.0.1:55322/postgres）。標準54322なら空でよい
+# ── Gemini 二重レビュー ──
+GEMINI_REVIEW_API_KEY=
+GEMINI_REVIEW_MODEL=gemini-2.5-pro
+REVIEW_HIGH_RISK_KEYWORDS=   # | 区切りの機微キーワード（未設定なら共通ベース）。例 stripe|payment|webhook|service_role|customers|line|liff
+# ── LINE 人ボール通知 ──
+HUMANBALL_WEBHOOK_URL=
+HUMANBALL_WEBHOOK_SECRET=
+NOTIFY_PREFIX=               # 例 [Garage] / [sido] / [osarAI]（同一LINEチャンネルでの判別）
+NOTIFY_PROJECT=              # 例 garage-connect / sido / osarAI（GASラベル）
+# ── 本番反映 ──
+SUPABASE_PROD_DB_URL=        # 本番migration適用用（値はログに残さない）
+DEPLOY_TRIGGER=              # auto-on-merge | manual-cli
+DEPLOY_CMD=                  # manual-cli時のデプロイコマンド（例 vercel --prod --scope stism）
