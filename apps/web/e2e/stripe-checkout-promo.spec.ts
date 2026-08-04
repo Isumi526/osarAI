@@ -12,7 +12,8 @@ import { test, expect } from '@playwright/test';
 async function signUpAndReachSubscribe(page: import('@playwright/test').Page, code: string) {
   const email = `e2e-a4-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
   await page.goto(`/signup?code=${code}`);
-  await page.getByPlaceholder('お名前').fill('E2E Tester');
+  // 「名前→ニックネーム」文言変更(2026-07-11)にspecが追随していなかったため修正
+  await page.getByPlaceholder('ニックネーム').fill('E2E Tester');
   await page.getByPlaceholder('メールアドレス').fill(email);
   await page.getByPlaceholder('パスワード（8文字以上）').fill('testpassword123');
   await page.getByRole('checkbox').check();
