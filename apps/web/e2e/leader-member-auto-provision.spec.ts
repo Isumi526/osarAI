@@ -54,6 +54,31 @@ test('有効なLeaderプラン契約者の?ref=経由signupは無料memberプラ
   expect(sub!.status).toBe('active');
 });
 
+test('自動発行済みmemberが/subscribeを開くとプラン選択を出さず/billingへリダイレクトされる', async ({ page, request }) => {
+  // 人力レビュー(2026-08-04)で発見: サインアップ後の遷移先/subscribeが契約状態を見ずに
+  // プラン選択を表示し、無料member(自動発行済み)が不要なStripeトライアルを開始できてしまった。
+  const ts = Date.now();
+  const email = `e2e-autoprovision-redirect-${ts}@example.com`;
+  const leader = await signup(request, `e2e-autoprovision-redirect-leader-${ts}@example.com`);
+  await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/subscriptions`, {
+    headers: { ...svc, Prefer: 'return=representation' },
+    data: { user_id: leader.userId, plan: 'leader', status: 'active' },
+  });
+  await signup(request, email, { ref: refCodeOf(leader.userId) });
+
+  await page.goto('/login');
+  await page.getByPlaceholder('メールアドレス').fill(email);
+  await page.getByPlaceholder('パスワード').fill('testpassword123');
+  await page.getByRole('button', { name: 'ログイン' }).click();
+  // ログイン成功後はセッション引き継ぎ付きでアプリ側(NEXT_PUBLIC_APP_URL=このE2E環境では
+  // localhost:3055)へwindow.location.assignされる。その遷移が完了する前にgotoすると
+  // ERR_ABORTEDで競合するため、/loginを離れるまで待ってから/subscribeへ向かう。
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 15000, waitUntil: 'commit' });
+
+  await page.goto('/subscribe');
+  await page.waitForURL(/\/billing/, { timeout: 15000, waitUntil: 'commit' });
+});
+
 test('Leaderプラン未契約者の?ref=経由signupではmemberプランは自動発行されない', async ({ request }) => {
   const ts = Date.now();
   // 通常のmember(Leaderプランを持たない)を紹介元にする
