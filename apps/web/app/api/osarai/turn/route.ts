@@ -78,9 +78,18 @@ const TURN_SCHEMA: GeminiSchema = {
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },
+    end_reason: { type: 'string', enum: ['user_request', 'time_up', 'enough'], nullable: true },
   },
   required: ['extracted', 'next_question', 'done'],
 };
+
+// 残り時間があるのにAIが早期終了(done=true)した場合に、対話を継続させるための代替質問。
+// プロンプト遵守が揺らいだ時の決定的なフォールバック（AC1: 時間内はAI側から終わらせない）。
+const CONTINUE_FALLBACK_QUESTION =
+  '他にも印象に残ったことや、話しておきたいことはありますか？😊';
+
+// 残り30秒以下は「実質時間切れ」として通常のdone判定を許容する（直後にタイマーが切れるため）
+const EARLY_END_GUARD_MIN_SEC = 30;
 
 export function OPTIONS() {
   return corsPreflight();
@@ -96,8 +105,11 @@ export async function POST(req: Request) {
     customerId?: string | null;
     message?: string;
     forceEnd?: boolean;
+    /** クライアントのタイマー残り秒数。時間がある間はAI側から終了させない（早期終了防止） */
+    remainingSec?: number | null;
   };
   const forceEnd = body.forceEnd === true;
+  const remainingSec = typeof body.remainingSec === 'number' ? body.remainingSec : null;
   const message = (body.message ?? '').trim();
   if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
@@ -161,7 +173,11 @@ export async function POST(req: Request) {
 
   // --- Gemini 1ターン ---
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
-  const prompt = buildOsaraiPrompt({ schema: CARD_SCHEMA_DESC, customerJson, history });
+  const timeContext =
+    remainingSec !== null && remainingSec > 0
+      ? `約${Math.floor(remainingSec / 60)}分${remainingSec % 60}秒（この時間いっぱいまで対話を続ける）`
+      : undefined;
+  const prompt = buildOsaraiPrompt({ schema: CARD_SCHEMA_DESC, customerJson, history, timeContext });
 
   let result: OsaraiTurnResult;
   try {
@@ -175,6 +191,22 @@ export async function POST(req: Request) {
   // 明示的な終了操作は、Geminiの done 判定にかかわらずここまでの抽出内容で必ず完了させる
   if (forceEnd) {
     result = { ...result, done: true, next_question: null };
+  }
+  // 早期終了防止ガード: 残り時間があるのに、ユーザーの終了要望以外の理由で done になった場合は
+  // 取り消して対話を継続させる（プロンプト遵守が揺らいでもAC1をサーバー側で決定的に担保する）。
+  if (
+    !forceEnd &&
+    result.done &&
+    remainingSec !== null &&
+    remainingSec > EARLY_END_GUARD_MIN_SEC &&
+    result.end_reason !== 'user_request'
+  ) {
+    result = {
+      ...result,
+      done: false,
+      end_reason: null,
+      next_question: result.next_question ?? CONTINUE_FALLBACK_QUESTION,
+    };
   }
 
   // AI の質問を履歴に追加（done のときは next_question=null）
