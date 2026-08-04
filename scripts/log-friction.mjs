@@ -14,9 +14,17 @@
 import { spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { notionToken } from './notion-token.mjs';   // env → keychain（/ball の導線が動くように・2026-07-30）
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const FRICTION_DS = '5cf53ea8-75df-41c2-8818-6ab47613fde4'; // 摩擦ログ data source（Phase 2）
+const FRICTION_DS = '5cf53ea8-75df-41c2-8818-6ab47613fde4'; // 摩擦ログ **data source** id（MCP 経路で使う）
+// 摩擦ログ **database** id（REST 経路で使う）。
+//   ⚠ 2026-07-29 まで REST の `parent.database_id` に上の data source id を渡しており、
+//     **Notion が 404 を返して1件も記録できていなかった**（既存12件はすべて MCP 経路で投入されたもの）。
+//     data source と database は別 ID 体系であり、`Notion-Version: 2022-06-28` の
+//     `parent` は **database_id** を要求する。実データで確認して確定:
+//     collection://5cf53ea8… の url は https://app.notion.com/p/8377e77e4bfa4e9dbc49f67bf4213203
+const FRICTION_DB = '8377e77e-4bfa-4e9d-bc49-f67bf4213203';
 // MASTER-PROMPT Loop F 対応表 8型＋創発2型＋catch-all（review-constitution 🔴1で一本化）
 const TYPES = ['判断待ちが発生', '見た目', '類似箇所が残った', '止まった・英語化', '手戻り', '正本と実装の乖離', '計画と報告の乖離', '憲法定義の矛盾', '第19条フォーク', 'セッション中断', 'その他'];
 
@@ -39,7 +47,7 @@ function notifyFailure(reason) {
     '--task', 'log-friction: 摩擦記録に失敗', '--detail', `${reason} / 型=${type} / cmd=${command}`], { stdio: 'inherit' });
 }
 
-const TOKEN = process.env.NOTION_TOKEN;
+const TOKEN = notionToken();
 if (!TOKEN) {
   // token 未設定: MCP 経由で投入するための payload を出力（本番は env 経由）。silent 成功にしない。
   console.log(JSON.stringify({ status: 'no-token', note: 'NOTION_TOKEN 未設定。下記 payload を MCP notion-create-pages で投入（本番は env 直POST）', payload }));
@@ -51,7 +59,7 @@ try {
     method: 'POST',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      parent: { database_id: FRICTION_DS },
+      parent: { database_id: FRICTION_DB },
       properties: {
         内容: { title: [{ text: { content } }] },
         型: { multi_select: [{ name: type }] },
