@@ -51,8 +51,8 @@ export function ReferralCodesManager({ initialCodes }: { initialCodes: ReferralC
   return (
     <div>
       <form onSubmit={onAdd} style={{ display: 'grid', gap: 8, marginBottom: 24, maxWidth: 480 }}>
-        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="コード（例: LL2026）" style={{ padding: 10 }} />
-        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="メモ（例: リベラルライフ福利厚生価格）" style={{ padding: 10 }} />
+        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="コード（例: CODE2026）" style={{ padding: 10 }} />
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="メモ（例: 提携先向け割引価格）" style={{ padding: 10 }} />
         <button type="submit" disabled={saving} style={{ padding: 12 }}>
           {saving ? '追加中…' : '+ コードを記録'}
         </button>

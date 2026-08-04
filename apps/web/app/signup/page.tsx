@@ -13,7 +13,7 @@ import { PasswordInput } from '@/components/PasswordInput';
 
 function SignupForm() {
   const searchParams = useSearchParams();
-  // チャネル割引コード（LL案内リンクに ?code=LL2026 で埋め込まれる）を引き継ぐ
+  // チャネル割引コード（提携先の案内リンクに ?code=<チャネルコード> で埋め込まれる）を引き継ぐ
   const code = searchParams.get('code');
   const subscribeHref = code ? `/subscribe?code=${encodeURIComponent(code)}` : '/subscribe';
   // 紹介コード（LP等から ?ref=CODE で引き継がれる）。signUpのメタデータに乗せ、

@@ -1,5 +1,5 @@
 // プラン選択 → Stripe Checkout（§11）。サインアップ後にここへ来る。
-// チャネル割引は ?code=LL2026 のように埋め込まれたコードを引き継ぐ。
+// チャネル割引は ?code=<チャネルコード> のように埋め込まれたコードを引き継ぐ。
 import { redirect } from 'next/navigation';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
