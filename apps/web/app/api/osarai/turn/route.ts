@@ -134,10 +134,11 @@ export async function POST(req: Request) {
   let sessionId = body.sessionId;
   let messages: ChatMessage[] = [];
   let customerId: string | null = body.customerId ?? null;
-  // 対話中に判明した構造化情報のセッション累積（0025）。Geminiは毎ターン履歴全体から
-  // 再抽出するが、ターンによって一部の項目を落として返すため、最終ターンの結果だけを
-  // 保存すると先に判明していた商品/年齢/性別が失われる。ここへ都度マージして保持する。
-  let accumulatedFields: Record<string, unknown> = {};
+  // 対話中に判明した内容のセッション累積（0025）。Geminiは毎ターン履歴全体から再抽出するが、
+  // ターンによって一部の項目を落として返すため、最終ターンの結果だけを保存すると先に判明して
+  // いた情報（商品/年齢/性別＝custom_fields、および要点/ニーズ/次アクション）が失われる。
+  // ここへ都度マージして保持する。
+  let accumulated: AccumulatedExtraction = {};
 
   if (sessionId) {
     const { data: sess, error } = await supabase
@@ -150,7 +151,7 @@ export async function POST(req: Request) {
     if (sess.status === 'done') return json({ error: 'session already done' }, 409);
     messages = (sess.messages as ChatMessage[]) ?? [];
     customerId = sess.customer_id ?? customerId;
-    accumulatedFields = (sess.accumulated_fields as Record<string, unknown> | null) ?? {};
+    accumulated = (sess.accumulated_fields as AccumulatedExtraction | null) ?? {};
   } else if (forceEnd) {
     return json({ error: 'no session to end' }, 400);
   } else {
@@ -198,9 +199,18 @@ export async function POST(req: Request) {
     return json({ error: 'ai failed', detail: String(e) }, 502);
   }
   // このターンの抽出を累積へマージし、以降は累積値を「対話で判明した情報」として扱う
-  // （値が空/未判明のキーは既存の累積を消さない）。
-  accumulatedFields = mergeFields(accumulatedFields, result.extracted?.custom_fields);
-  result = { ...result, extracted: { ...result.extracted, custom_fields: accumulatedFields } };
+  // （このターンで拾えなかった項目は既存の累積を消さない）。
+  accumulated = mergeExtraction(accumulated, result.extracted);
+  result = {
+    ...result,
+    extracted: {
+      ...result.extracted,
+      custom_fields: accumulated.custom_fields ?? {},
+      points: accumulated.points ?? [],
+      needs: accumulated.needs ?? [],
+      next_actions: accumulated.next_actions ?? [],
+    },
+  };
 
   // 明示的な終了操作は、Geminiの done 判定にかかわらずここまでの抽出内容で必ず完了させる
   if (forceEnd) {
@@ -257,7 +267,7 @@ export async function POST(req: Request) {
       customer_id: customerId,
       status: result.done ? 'done' : 'in_progress',
       resulting_interaction_id: resultingInteractionId,
-      accumulated_fields: accumulatedFields as unknown as never,
+      accumulated_fields: accumulated as unknown as never,
     })
     .eq('id', sessionId)
     .eq('user_id', user.id);
@@ -376,9 +386,17 @@ function joinList(v?: string[]): string | null {
   return v.join(' / ');
 }
 
-// 対話で判明した構造化情報のターン間マージ（0025 accumulated_fields 用）。
-// 新しい抽出のうち「実際に値があるキー」だけを上書きし、null/空文字/空配列は無視する
-// （Geminiがそのターンで拾えなかった項目で、既に判明している値を消さないため）。
+// セッション(osarai_sessions.accumulated_fields・0025)に保持する累積抽出の形。
+interface AccumulatedExtraction {
+  custom_fields?: Record<string, unknown>;
+  points?: string[];
+  needs?: string[];
+  next_actions?: string[];
+}
+
+// 対話で判明した構造化情報のターン間マージ。新しい抽出のうち「実際に値があるキー」だけを
+// 上書きし、null/空文字/空配列は無視する（そのターンで拾えなかった項目で、既に判明している
+// 値を消さないため）。
 function mergeFields(
   base: Record<string, unknown>,
   incoming?: Record<string, unknown>,
@@ -392,6 +410,31 @@ function mergeFields(
     merged[key] = value;
   }
   return merged;
+}
+
+// 要点/ニーズ/次アクションのターン間マージ。既出の項目を保ったまま新規分を足す（和集合）。
+// 同一文言の重複だけ除く（言い回しの揺れによる重複はユーザーが保存前のサマリ編集で直せる。
+// 落ちて消えるより、多めに残る方を選ぶ）。
+function mergeList(base?: string[], incoming?: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of [...(base ?? []), ...(incoming ?? [])]) {
+    const t = typeof v === 'string' ? v.trim() : '';
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+function mergeExtraction(base: AccumulatedExtraction, incoming?: OsaraiExtracted): AccumulatedExtraction {
+  if (!incoming) return base;
+  return {
+    custom_fields: mergeFields(base.custom_fields ?? {}, incoming.custom_fields),
+    points: mergeList(base.points, incoming.points),
+    needs: mergeList(base.needs, incoming.needs),
+    next_actions: mergeList(base.next_actions, incoming.next_actions),
+  };
 }
 
 // 会話中にユーザー自身について言及があった場合の構造化情報(self_fields)から、
