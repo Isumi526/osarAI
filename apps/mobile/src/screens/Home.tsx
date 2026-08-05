@@ -1,6 +1,6 @@
 // Home（顧客リスト＋フィルタ＋おさらい導線）。§10。
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getMyProfile } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
@@ -53,6 +53,10 @@ export function Home() {
     <main className="screen">
       <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
+        {/* 使い方はいつでも見返せるよう右上に常設する（ITに不慣れなユーザー向け） */}
+        <Link to="/tutorial" style={{ fontSize: 13, color: 'var(--color-primary)', textDecoration: 'none' }}>
+          使い方
+        </Link>
       </ScreenHeader>
 
       {!subActive && (
