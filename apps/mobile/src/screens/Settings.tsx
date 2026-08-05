@@ -152,24 +152,27 @@ export function Settings() {
         <span style={{ width: 48 }} />
       </ScreenHeader>
 
+      {/* 「自分をおさらいする」の入口はAIチャットへ集約したため、ここからは削除
+          （2026-08-06 UI/UX刷新。チャットの「自分のことについて話す」から入る）。
+          代わりに、ホームから外したつながり一覧への導線をここに置く。 */}
       <Link
-        to="/self-osarai"
+        to="/customers"
         style={{
-          display: 'block',
-          textAlign: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           marginTop: 16,
-          padding: 12,
-          borderRadius: 'var(--btn-radius)',
-          background: 'var(--color-primary)',
-          color: '#fff',
+          padding: '14px 16px',
+          borderRadius: 10,
+          background: '#fff',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text)',
           textDecoration: 'none',
         }}
       >
-        自分をおさらいする
+        つながり一覧
+        <span style={{ color: 'var(--color-text-muted)' }}>›</span>
       </Link>
-      <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-        整頓された項目だけでなく、AIとの対話であなた自身を深掘りすることもできます。
-      </p>
 
       {referralCode && (
         <section

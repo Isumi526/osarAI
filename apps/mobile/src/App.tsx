@@ -5,6 +5,7 @@ import { registerPushIfGranted } from './lib/push.js';
 import { Login } from './screens/Login.js';
 import { Home } from './screens/Home.js';
 import { Osarai } from './screens/Osarai.js';
+import { CustomerList } from './screens/CustomerList.js';
 import { CustomerDetail } from './screens/CustomerDetail.js';
 import { CustomerForm } from './screens/CustomerForm.js';
 import { AiChat } from './screens/AiChat.js';
@@ -23,6 +24,7 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/osarai" element={<Osarai />} />
+          <Route path="/customers" element={<CustomerList />} />
           <Route path="/customers/new" element={<CustomerForm />} />
           <Route path="/customers/:id/edit" element={<CustomerForm />} />
           <Route path="/customers/:id" element={<CustomerDetail />} />
