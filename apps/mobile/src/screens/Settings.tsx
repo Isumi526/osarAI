@@ -393,7 +393,7 @@ export function Settings() {
                   onClick={() => setShowAgencyPicker((v) => !v)}
                   style={{ padding: 8, background: '#fff', border: '1px dashed var(--color-primary-border)', color: 'var(--color-primary)', fontSize: 13 }}
                 >
-                  {showAgencyPicker ? '閉じる' : '📋 チームの商品リストからインポート'}
+                  {showAgencyPicker ? '閉じる' : 'チームの商品リストからインポート'}
                 </button>
               )}
               {showAgencyPicker && (
@@ -403,7 +403,7 @@ export function Settings() {
                     onClick={importAllAgencyProducts}
                     style={{ padding: 8, background: '#fff', border: '1px solid var(--color-primary-border)', color: 'var(--color-primary)', textAlign: 'left', fontSize: 13, fontWeight: 600 }}
                   >
-                    ✅ 全て追加（{agencyProducts.length}件）
+                    全て追加（{agencyProducts.length}件）
                   </button>
                   {agencyProducts.map((p) => (
                     <button
