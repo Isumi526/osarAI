@@ -14,6 +14,13 @@ import {
   saveProposalDefaults,
   SCHEDULE_CATEGORIES,
   SCHEDULE_MODES,
+  WEEKDAY_LABELS,
+  toTimeInputValue,
+  parseTimeInputValue,
+  relativeDayLabel,
+  DEFAULT_PROPOSAL_INTRO,
+  offsetToDateInputValue,
+  dateInputValueToOffset,
   type Schedule,
   type ScheduleInput,
   type ScheduleProposalSettings,
@@ -229,7 +236,7 @@ export function SchedulePage() {
       const to = addDays(from, proposalSettings.days);
       const upcoming = await listSchedules({ from: now.toISOString(), to: to.toISOString() });
       const slots = findFreeSlots(upcoming, now, proposalSettings);
-      setProposal({ text: formatScheduleProposalText(slots), copyMsg: null });
+      setProposal({ text: formatScheduleProposalText(slots, proposalSettings.introText), copyMsg: null });
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
@@ -522,31 +529,38 @@ export function SchedulePage() {
               指定した日付範囲・時間範囲の空き時間から候補を作成しました。その場で編集してコピーし、LINE等で送れます。
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {/* 開始日・終了日はカレンダーで選ぶが、保存するのは今日からの相対日数。
+                  後日開き直した時に過去日で固定されず、同じ長さの期間が自動でセットされる。 */}
               <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                検索開始
-                <select
-                  value={proposalSettings.startOffsetDays}
+                開始日（{relativeDayLabel(proposalSettings.startOffsetDays)}）
+                <input
+                  type="date"
+                  value={offsetToDateInputValue(proposalSettings.startOffsetDays)}
                   onChange={(e) => {
-                    setProposalSettings((s) => ({ ...s, startOffsetDays: Number(e.target.value) }));
+                    const offset = dateInputValueToOffset(e.target.value, proposalSettings.startOffsetDays);
+                    setProposalSettings((s) => {
+                      // 終了日より後ろに動かした場合は、期間の長さを保ったまま終了日も一緒にずらす
+                      const endOffset = s.startOffsetDays + s.days - 1;
+                      const days = offset > endOffset ? s.days : endOffset - offset + 1;
+                      return { ...s, startOffsetDays: offset, days: Math.max(1, days) };
+                    });
                     setProposalSettingsSaved(false);
                   }}
                   style={{ padding: 8, fontSize: 14 }}
-                >
-                  <option value={0}>今日から</option>
-                  <option value={1}>明日から</option>
-                  <option value={2}>明後日から</option>
-                </select>
+                />
               </label>
               <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                検索日数
+                終了日（{proposalSettings.days}日間）
                 <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={proposalSettings.days}
+                  type="date"
+                  min={offsetToDateInputValue(proposalSettings.startOffsetDays)}
+                  value={offsetToDateInputValue(proposalSettings.startOffsetDays + proposalSettings.days - 1)}
                   onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setProposalSettings((s) => ({ ...s, days: v > 0 ? v : s.days }));
+                    const endOffset = dateInputValueToOffset(
+                      e.target.value,
+                      proposalSettings.startOffsetDays + proposalSettings.days - 1,
+                    );
+                    setProposalSettings((s) => ({ ...s, days: Math.max(1, endOffset - s.startOffsetDays + 1) }));
                     setProposalSettingsSaved(false);
                   }}
                   style={{ padding: 8, fontSize: 14 }}
@@ -555,12 +569,16 @@ export function SchedulePage() {
               <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
                 開始時刻
                 <input
-                  type="number"
-                  min={0}
-                  max={23}
-                  value={proposalSettings.startHour}
+                  type="time"
+                  step={900}
+                  value={toTimeInputValue(proposalSettings.startHour, proposalSettings.startMinute)}
                   onChange={(e) => {
-                    setProposalSettings((s) => ({ ...s, startHour: Number(e.target.value) }));
+                    const { hour, minute } = parseTimeInputValue(
+                      e.target.value,
+                      proposalSettings.startHour,
+                      proposalSettings.startMinute,
+                    );
+                    setProposalSettings((s) => ({ ...s, startHour: hour, startMinute: minute }));
                     setProposalSettingsSaved(false);
                   }}
                   style={{ padding: 8, fontSize: 14 }}
@@ -569,23 +587,72 @@ export function SchedulePage() {
               <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
                 終了時刻
                 <input
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={proposalSettings.endHour}
+                  type="time"
+                  step={900}
+                  value={toTimeInputValue(proposalSettings.endHour, proposalSettings.endMinute)}
                   onChange={(e) => {
-                    setProposalSettings((s) => ({ ...s, endHour: Number(e.target.value) }));
+                    const { hour, minute } = parseTimeInputValue(
+                      e.target.value,
+                      proposalSettings.endHour,
+                      proposalSettings.endMinute,
+                    );
+                    setProposalSettings((s) => ({ ...s, endHour: hour, endMinute: minute }));
                     setProposalSettingsSaved(false);
                   }}
                   style={{ padding: 8, fontSize: 14 }}
                 />
               </label>
             </div>
+            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              最初のあいさつ文（候補一覧の前に入ります・空にすると候補だけになります）
+              <input
+                type="text"
+                value={proposalSettings.introText}
+                placeholder={DEFAULT_PROPOSAL_INTRO}
+                onChange={(e) => {
+                  setProposalSettings((s) => ({ ...s, introText: e.target.value }));
+                  setProposalSettingsSaved(false);
+                }}
+                style={{ padding: 8, fontSize: 14 }}
+              />
+            </label>
+            <div style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              候補に入れる曜日
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {WEEKDAY_LABELS.map((label, dow) => {
+                  const on = proposalSettings.weekdays.includes(dow);
+                  return (
+                    <button
+                      key={dow}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        setProposalSettings((s) => ({
+                          ...s,
+                          weekdays: on ? s.weekdays.filter((d) => d !== dow) : [...s.weekdays, dow].sort(),
+                        }));
+                        setProposalSettingsSaved(false);
+                      }}
+                      style={{
+                        minWidth: 40,
+                        padding: '6px 0',
+                        fontSize: 13,
+                        background: on ? 'var(--color-primary)' : '#fff',
+                        color: on ? '#fff' : 'var(--color-text)',
+                        border: `1px solid ${on ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
                 onClick={openProposal}
-                disabled={proposalLoading}
+                disabled={proposalLoading || proposalSettings.weekdays.length === 0}
                 style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }}
               >
                 {proposalLoading ? '作成中…' : 'この条件で作り直す'}
