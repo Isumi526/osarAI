@@ -220,3 +220,31 @@ export async function updateInteractionSummary(
 
   await recomputeCustomerTemperature(customerId);
 }
+
+// 表記揺れで二重登録されたつながりを1つにまとめる（0027 merge_customers RPC）。
+// interactions / schedules / tasks / osarai_sessions / ai_chats の customer_id を
+// まとめてサーバー側で付け替えるため、履歴が欠けることはない。
+export async function mergeCustomers(sourceId: string, targetId: string): Promise<void> {
+  const { error } = await supabase.rpc('merge_customers', { source_id: sourceId, target_id: targetId });
+  if (error) throw error;
+}
+
+/** 表記揺れを吸収した比較キー（全角半角・敬称・空白を無視）。重複候補の検出に使う。 */
+export function normalizeCustomerName(name: string): string {
+  return name
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .replace(/(さん|様|さま|氏|くん|ちゃん)$/u, '')
+    .toLowerCase();
+}
+
+/** 同一人物とみられるつながりの組を返す（正規化名が一致するもの）。 */
+export function findDuplicateGroups(customers: Customer[]): Customer[][] {
+  const byKey = new Map<string, Customer[]>();
+  for (const c of customers) {
+    const key = normalizeCustomerName(c.name);
+    if (!key) continue;
+    byKey.set(key, [...(byKey.get(key) ?? []), c]);
+  }
+  return [...byKey.values()].filter((g) => g.length > 1);
+}

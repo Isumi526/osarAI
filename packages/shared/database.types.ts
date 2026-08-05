@@ -801,6 +801,10 @@ export type Database = {
         Args: { new_fields: Json; target_customer_id: string }
         Returns: undefined
       }
+      merge_customers: {
+        Args: { source_id: string; target_id: string }
+        Returns: undefined
+      }
       merge_user_profile_fields: {
         Args: { new_fields: Json; new_notes: string[] }
         Returns: undefined

@@ -2,10 +2,11 @@
 // ホームはダッシュボード＋AIチャット入口に専念し、一覧はマイページ配下から辿る。
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listCustomers, RELATION_TYPES, type Customer } from '../lib/db.js';
+import { listCustomers, mergeCustomers, findDuplicateGroups, RELATION_TYPES, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { TempIcon } from '../components/TempIcon.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
+import { useConfirm } from '../components/ConfirmDialog.js';
 import type { Temperature } from '@osarai/shared';
 
 // つながりの区分バッジの色。温度感の危険色(--color-danger)とは重ならない淡い配色にする。
@@ -22,21 +23,49 @@ export function CustomerList() {
   const [error, setError] = useState<string | null>(null);
   const [subActive, setSubActive] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [merging, setMerging] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+  // 表記揺れで二重登録されたつながりの候補（正規化名が一致する組）
+  const duplicateGroups = findDuplicateGroups(customers);
   const filtered = searchQuery.trim()
     ? customers.filter((c) => c.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : customers;
 
-  useEffect(() => {
-    let active = true;
+  async function reload() {
     setLoading(true);
-    listCustomers({ status: 'active' })
-      .then((rows) => active && setCustomers(rows))
-      .catch((e) => active && setError(String(e)))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
+    try {
+      setCustomers(await listCustomers({ status: 'active' }));
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void reload();
   }, []);
+
+  // 重複候補をまとめる。履歴(interactions/予定/タスク)はサーバー側で統合先へ付け替わる。
+  async function onMerge(group: Customer[]) {
+    const [target, ...rest] = group;
+    if (!target) return;
+    const ok = await confirm(
+      `「${target.name}」さんが${group.length}件に分かれて登録されています。1つにまとめますか？\n` +
+        '会話履歴・予定・タスクはすべて残ります。',
+    );
+    if (!ok) return;
+    setMerging(true);
+    try {
+      for (const src of rest) await mergeCustomers(src.id, target.id);
+      await reload();
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setMerging(false);
+    }
+  }
 
   useEffect(() => {
     getEntitlement()
@@ -53,6 +82,33 @@ export function CustomerList() {
       </ScreenHeader>
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
+
+      {/* 同じ人が表記揺れで二重登録されている場合の統合導線（2026-08-06） */}
+      {duplicateGroups.map((g) => (
+        <div
+          key={g[0]!.id}
+          style={{
+            background: 'var(--color-primary-light)',
+            border: '1px solid var(--color-primary-border)',
+            borderRadius: 10,
+            padding: 12,
+            marginTop: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            fontSize: 13,
+          }}
+        >
+          <span>
+            「{g[0]!.name}」さんが{g.length}件に分かれています
+          </span>
+          <button type="button" onClick={() => onMerge(g)} disabled={merging} style={{ padding: '6px 12px', fontSize: 13 }}>
+            {merging ? '統合中…' : '1つにまとめる'}
+          </button>
+        </div>
+      ))}
+
       {!loading && customers.length > 0 && (
         <input
           value={searchQuery}
@@ -140,6 +196,7 @@ export function CustomerList() {
       >
         ＋
       </button>
+      {confirmDialog}
     </main>
   );
 }
