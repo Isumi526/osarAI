@@ -864,6 +864,12 @@ function TimeGrid({
       style={{
         marginTop: 12,
         display: 'flex',
+        // 既定の align-items:stretch だと、各列(時刻ラベル列・日列)の高さがコンテナの
+        // 表示高さ(=画面高)に固定され、24時間ぶんの中身(HOUR_HEIGHT*24)がその箱から
+        // はみ出す。結果、日列のborderRight(縦罫線)が画面高の分しか描かれず、
+        // 日付ヘッダー(position:sticky)も箱の下端で止まって途中から消えていた。
+        // flex-startにして各列を中身の高さに合わせる（2026-08-05 人力レビューで再発を確認）。
+        alignItems: 'flex-start',
         width: '100%',
         // 親(Schedule.tsx側のflex:1ラッパー)の高さいっぱいに伸ばす(画面高さの余白を埋める・議事録要望)。
         // 親はdisplay:flexではない通常のoverflowY:autoコンテナのため、flex:1ではなくheight:100%で伸ばす。
