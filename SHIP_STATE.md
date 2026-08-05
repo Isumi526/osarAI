@@ -231,6 +231,8 @@ export HUMANBALL_WEBHOOK_URL="http://127.0.0.1:3999/mock-humanball"
 export HUMANBALL_WEBHOOK_SECRET="e2e-mock-secret"
 export NOTIFY_PREFIX="[osarAI-e2e]"
 export NOTIFY_PROJECT="osarAI"
+# ログイン後のアプリ引き継ぎ遷移(login/page.tsx)を本番app.osarai.appへ飛ばさずlocalに留める(E2E必須)
+export NEXT_PUBLIC_APP_URL="http://localhost:3055"
 export NEXT_DIST_DIR=".next-e2e"
 npx next dev -p 3055 &
 

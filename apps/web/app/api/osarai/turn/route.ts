@@ -54,6 +54,9 @@ const TURN_SCHEMA: GeminiSchema = {
         next_actions: { type: 'array', items: { type: 'string' } },
         // Geminiのresponse Schemaは宣言されていないプロパティを出力できないため、
         // custom_fieldsに含めたいキーは明示的に列挙する必要がある(properties:{}のままだと常に空になる)。
+        // custom_fieldsは毎ターン必ず出力させる（requiredで強制）。Geminiはターンによって
+        // このキーごと省略することがあり、新規顧客の作成時は最終ターンの抽出結果をそのまま
+        // insertするため、省略されると対話中に判明した商品/年齢/性別が丸ごと失われていた。
         custom_fields: {
           type: 'object',
           properties: {
@@ -75,12 +78,22 @@ const TURN_SCHEMA: GeminiSchema = {
           },
         },
       },
+      required: ['points', 'needs', 'next_actions', 'custom_fields'],
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },
+    end_reason: { type: 'string', enum: ['user_request', 'time_up', 'enough'], nullable: true },
   },
   required: ['extracted', 'next_question', 'done'],
 };
+
+// 残り時間があるのにAIが早期終了(done=true)した場合に、対話を継続させるための代替質問。
+// プロンプト遵守が揺らいだ時の決定的なフォールバック（AC1: 時間内はAI側から終わらせない）。
+const CONTINUE_FALLBACK_QUESTION =
+  '他にも印象に残ったことや、話しておきたいことはありますか？😊';
+
+// 残り30秒以下は「実質時間切れ」として通常のdone判定を許容する（直後にタイマーが切れるため）
+const EARLY_END_GUARD_MIN_SEC = 30;
 
 export function OPTIONS() {
   return corsPreflight();
@@ -96,8 +109,11 @@ export async function POST(req: Request) {
     customerId?: string | null;
     message?: string;
     forceEnd?: boolean;
+    /** クライアントのタイマー残り秒数。時間がある間はAI側から終了させない（早期終了防止） */
+    remainingSec?: number | null;
   };
   const forceEnd = body.forceEnd === true;
+  const remainingSec = typeof body.remainingSec === 'number' ? body.remainingSec : null;
   const message = (body.message ?? '').trim();
   if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
@@ -118,11 +134,16 @@ export async function POST(req: Request) {
   let sessionId = body.sessionId;
   let messages: ChatMessage[] = [];
   let customerId: string | null = body.customerId ?? null;
+  // 対話中に判明した内容のセッション累積（0025）。Geminiは毎ターン履歴全体から再抽出するが、
+  // ターンによって一部の項目を落として返すため、最終ターンの結果だけを保存すると先に判明して
+  // いた情報（商品/年齢/性別＝custom_fields、および要点/ニーズ/次アクション）が失われる。
+  // ここへ都度マージして保持する。
+  let accumulated: AccumulatedExtraction = {};
 
   if (sessionId) {
     const { data: sess, error } = await supabase
       .from('osarai_sessions')
-      .select('id, messages, customer_id, status')
+      .select('id, messages, customer_id, status, accumulated_fields')
       .eq('id', sessionId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -130,6 +151,7 @@ export async function POST(req: Request) {
     if (sess.status === 'done') return json({ error: 'session already done' }, 409);
     messages = (sess.messages as ChatMessage[]) ?? [];
     customerId = sess.customer_id ?? customerId;
+    accumulated = (sess.accumulated_fields as AccumulatedExtraction | null) ?? {};
   } else if (forceEnd) {
     return json({ error: 'no session to end' }, 400);
   } else {
@@ -161,7 +183,11 @@ export async function POST(req: Request) {
 
   // --- Gemini 1ターン ---
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
-  const prompt = buildOsaraiPrompt({ schema: CARD_SCHEMA_DESC, customerJson, history });
+  const timeContext =
+    remainingSec !== null && remainingSec > 0
+      ? `約${Math.floor(remainingSec / 60)}分${remainingSec % 60}秒（この時間いっぱいまで対話を続ける）`
+      : undefined;
+  const prompt = buildOsaraiPrompt({ schema: CARD_SCHEMA_DESC, customerJson, history, timeContext });
 
   let result: OsaraiTurnResult;
   try {
@@ -172,9 +198,39 @@ export async function POST(req: Request) {
   } catch (e) {
     return json({ error: 'ai failed', detail: String(e) }, 502);
   }
+  // このターンの抽出を累積へマージし、以降は累積値を「対話で判明した情報」として扱う
+  // （このターンで拾えなかった項目は既存の累積を消さない）。
+  accumulated = mergeExtraction(accumulated, result.extracted);
+  result = {
+    ...result,
+    extracted: {
+      ...result.extracted,
+      custom_fields: accumulated.custom_fields ?? {},
+      points: accumulated.points ?? [],
+      needs: accumulated.needs ?? [],
+      next_actions: accumulated.next_actions ?? [],
+    },
+  };
+
   // 明示的な終了操作は、Geminiの done 判定にかかわらずここまでの抽出内容で必ず完了させる
   if (forceEnd) {
     result = { ...result, done: true, next_question: null };
+  }
+  // 早期終了防止ガード: 残り時間があるのに、ユーザーの終了要望以外の理由で done になった場合は
+  // 取り消して対話を継続させる（プロンプト遵守が揺らいでもAC1をサーバー側で決定的に担保する）。
+  if (
+    !forceEnd &&
+    result.done &&
+    remainingSec !== null &&
+    remainingSec > EARLY_END_GUARD_MIN_SEC &&
+    result.end_reason !== 'user_request'
+  ) {
+    result = {
+      ...result,
+      done: false,
+      end_reason: null,
+      next_question: result.next_question ?? CONTINUE_FALLBACK_QUESTION,
+    };
   }
 
   // AI の質問を履歴に追加（done のときは next_question=null）
@@ -211,6 +267,7 @@ export async function POST(req: Request) {
       customer_id: customerId,
       status: result.done ? 'done' : 'in_progress',
       resulting_interaction_id: resultingInteractionId,
+      accumulated_fields: accumulated as unknown as never,
     })
     .eq('id', sessionId)
     .eq('user_id', user.id);
@@ -275,14 +332,19 @@ async function persistOnDone(
     if (error || !c) return { error: 'customer create failed' };
     customerId = c.id;
   } else {
-    await supabase
-      .from('customers')
-      .update({
-        needs: joinList(extracted.needs),
-        last_met_at: now,
-        updated_at: now,
-      })
-      .eq('id', customerId);
+    // custom_fieldsは複数ターンにまたがって判明することが多いため、既存値に新規抽出分を
+    // アトミックにマージして保存する（0013のmerge_user_profile_fieldsと同じパターン。
+    // 上書きすると前ターンで判明済みの項目が消える/一切保存されないバグがあった）。
+    await Promise.all([
+      supabase.rpc('merge_customer_custom_fields', {
+        target_customer_id: customerId,
+        new_fields: (extracted.custom_fields ?? {}) as never,
+      }),
+      supabase
+        .from('customers')
+        .update({ needs: joinList(extracted.needs), last_met_at: now, updated_at: now })
+        .eq('id', customerId),
+    ]);
   }
   const aiSummary: AiSummary = {
     points: extracted.points ?? [],
@@ -322,6 +384,57 @@ async function persistOnDone(
 function joinList(v?: string[]): string | null {
   if (!v || v.length === 0) return null;
   return v.join(' / ');
+}
+
+// セッション(osarai_sessions.accumulated_fields・0025)に保持する累積抽出の形。
+interface AccumulatedExtraction {
+  custom_fields?: Record<string, unknown>;
+  points?: string[];
+  needs?: string[];
+  next_actions?: string[];
+}
+
+// 対話で判明した構造化情報のターン間マージ。新しい抽出のうち「実際に値があるキー」だけを
+// 上書きし、null/空文字/空配列は無視する（そのターンで拾えなかった項目で、既に判明している
+// 値を消さないため）。
+function mergeFields(
+  base: Record<string, unknown>,
+  incoming?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!incoming) return base;
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'string' && value.trim() === '') continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    merged[key] = value;
+  }
+  return merged;
+}
+
+// 要点/ニーズ/次アクションのターン間マージ。既出の項目を保ったまま新規分を足す（和集合）。
+// 同一文言の重複だけ除く（言い回しの揺れによる重複はユーザーが保存前のサマリ編集で直せる。
+// 落ちて消えるより、多めに残る方を選ぶ）。
+function mergeList(base?: string[], incoming?: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of [...(base ?? []), ...(incoming ?? [])]) {
+    const t = typeof v === 'string' ? v.trim() : '';
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+function mergeExtraction(base: AccumulatedExtraction, incoming?: OsaraiExtracted): AccumulatedExtraction {
+  if (!incoming) return base;
+  return {
+    custom_fields: mergeFields(base.custom_fields ?? {}, incoming.custom_fields),
+    points: mergeList(base.points, incoming.points),
+    needs: mergeList(base.needs, incoming.needs),
+    next_actions: mergeList(base.next_actions, incoming.next_actions),
+  };
 }
 
 // 会話中にユーザー自身について言及があった場合の構造化情報(self_fields)から、

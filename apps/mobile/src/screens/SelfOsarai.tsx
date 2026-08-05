@@ -52,6 +52,11 @@ export function SelfOsarai() {
   // 顧客向けおさらいと同じ、時間指定の深掘りセッション（既定5分・延長可）。
   // 最初の発話が送られてから計測開始。
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  // ターン送信時に最新の残り秒数を読むためのref（AI側の早期終了防止: 残り時間をサーバーへ渡す）
+  const remainingSecRef = useRef<number | null>(null);
+  useEffect(() => {
+    remainingSecRef.current = remainingSec;
+  }, [remainingSec]);
 
   useEffect(() => {
     if (remainingSec === null || done) return;
@@ -103,7 +108,11 @@ export function SelfOsarai() {
     const controller = new AbortController();
     abortRef.current = controller;
     setSending(true);
-    selfOsaraiTurn({ message: text, history }, controller.signal)
+    selfOsaraiTurn(
+      // 初回送信はまだタイマー未開始(null)のため、既定の5分(300秒)として送る
+      { message: text, history, remainingSec: remainingSecRef.current ?? 300 },
+      controller.signal,
+    )
       .then((res) => {
         historyRef.current = [
           ...history,

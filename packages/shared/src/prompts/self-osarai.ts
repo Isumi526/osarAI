@@ -32,11 +32,19 @@ export const SELF_OSARAI_SYSTEM_PROMPT = `あなたは「自分をおさらい�
   （例: 既に「保険営業の仕事をしている」と分かっていれば、改めて職業は聞かず
   「その仕事のどんなところにやりがいを感じますか？」のように一歩進める）。
   蓄積が空の場合は初対面として自然に始める。
-- 3〜5往復ほど対話したら done=true にしてよい（ユーザーが明示的に終了することもある）。
+- 【終了判定・重要】下記に「残り時間」が渡され、まだ残り時間がある間は、ユーザーが明示的に
+  終了を望んだ場合（「もう無い」「終わりたい」「大丈夫です」等）を除き done=true にしない。
+  残り時間いっぱいまで対話を続ける: 既に出た話題の深掘り（その時の気持ち・きっかけ・
+  具体的なエピソード）や、まだ触れていない関連話題（仕事のやりがい・最近の出来事・
+  大事にしていること・夢や目標）へ質問を広げる。同じ質問は繰り返さない。
+- done=true にする場合は end_reason を必ず設定する:
+  ユーザーが明示的に終了を望んだ場合='user_request' ／ 残り時間が尽きた場合='time_up' ／
+  それ以外で十分と判断した場合='enough'。
+- 残り時間が渡されない・または残り0の場合は、3〜5往復ほど対話したら done=true にしてよい。
 - 【読みやすさ】next_questionが長くなる場合は、適度に改行や段落分けを入れて読みやすくする
   （1つの吹き出しに文章が詰まって読みづらくならないように）。改行は実際の改行文字を使うこと。
   「\n」という文字自体（バックスラッシュ＋エヌ）をテキストとして出力しないこと。
-- 出力は必ずJSONのみ（{extracted: {notes: string[], fields: {job?, products?, age?, gender?, background?, goal?}}, next_question, done}）。`;
+- 出力は必ずJSONのみ（{extracted: {notes: string[], fields: {job?, products?, age?, gender?, background?, goal?}}, next_question, done, end_reason}）。`;
 
 export interface SelfOsaraiTurnResult {
   extracted: {
@@ -45,4 +53,6 @@ export interface SelfOsaraiTurnResult {
   };
   next_question: string | null;
   done: boolean;
+  /** done=true の理由（osarai側 OsaraiTurnResult.end_reason と同じ規約） */
+  end_reason?: 'user_request' | 'time_up' | 'enough' | null;
 }

@@ -1,6 +1,7 @@
 // プラン選択 → Stripe Checkout（§11）。サインアップ後にここへ来る。
-// チャネル割引は ?code=LL2026 のように埋め込まれたコードを引き継ぐ。
+// チャネル割引は ?code=<チャネルコード> のように埋め込まれたコードを引き継ぐ。
 import { redirect } from 'next/navigation';
+import { isSubscriptionActive } from '@osarai/shared';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
 import { PlanPicker } from './PlanPicker';
@@ -30,6 +31,16 @@ export default async function SubscribePage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+
+  // 既に有効な契約がある場合はプラン選択を出さない（招待経由の無料memberがサインアップ後に
+  // ここへ誘導されてしまい、不要なStripeトライアルを開始できてしまう問題の修正）。
+  // past_dueはactive扱いにならないため従来どおりここへ来られる（再決済導線は/billing）。
+  const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('status')
+    .eq('user_id', user.id)
+    .maybeSingle<{ status: string | null }>();
+  if (isSubscriptionActive(sub?.status ?? null)) redirect('/billing');
 
   const amountOff = code ? await resolveAmountOff(code) : null;
 

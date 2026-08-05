@@ -560,11 +560,11 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 | **PLAYWRIGHT_PROJECTS** | `apps/web/playwright.config.ts`（chromium・`workers:1`固定） | `apps/web/e2e/*.spec.ts` 全9件（Stripe checkout/webhook/billing/JST境界）。既定baseURLはlocal Supabase向け専用devインスタンス(3055)。起動手順は `SHIP_STATE.md` 参照 |
 | **LOCAL_STACK** | supabase | `supabase/`（config.toml: API 54321 / DB 54322 / Studio 54323）。`supabase start --ignore-health-check`で起動（このCLIバージョンはlogflare/analyticsが恒常的にunhealthy化するため`[analytics] enabled=false`済）。**注意: `pnpm dev:web`(port3000)は`.env.local`経由でホスト型Supabase(`apiagxfbazxmdqcbynxk`)に接続しており、local stackを見ていない**（signup等の書き込みテストはport3000に向けない） |
 | **MIGRATIONS_DIR** | `supabase/migrations` | 0001_init / 0002_rls / 0003_auth_seed / 0004_storage_recordings / 0005_webhook_idempotency。RLSは org_id + owner_id(auth.uid()) スコープ |
-| **DEPLOY_PLATFORM** | Vercel（人確認・2026-07-08。**未セットアップ**） | `vercel.json`等の設定ファイルはまだ無い・Vercelプロジェクト未作成/未リンク。実際のリンク・デプロイ実行は人の明示指示が必要（deny壁維持） |
+| **DEPLOY_PLATFORM** | Vercel（**稼働中**・2026-08-05 実構成を確認） | プロジェクト2つ: `web`→https://osarai.app（root=apps/web・Next.js）/ `mobile`→https://app.osarai.app（root=apps/mobile・Vite）。scope=`stism`。`apps/web/.vercel`・`apps/mobile/.vercel` に個別リンク済み。**GitHub webhook 無し＝Git連携なし → Merge では自動デプロイされない（`DEPLOY_TRIGGER=manual-cli`）**。デプロイは各ディレクトリで `npx vercel --prod --scope stism` |
 | **DEV_URL** | `http://localhost:3000` | apps/web の `next dev -p 3000`（.env にも記載） |
 | **PROD_BRANCH** | `main`（確定） | 2026-06-29 phase5-customers HEAD を `main` に昇格し origin へ push。`dev` も `main` から分岐して push 済。通常feature=dev基点／緊急=main派生hotfix。`.env` PROD_BRANCH=main 同期済 |
 | **PROD_SUPABASE** | 既存プロジェクト `apiagxfbazxmdqcbynxk`（人確認・2026-07-08） | 新規本番プロジェクトは作らず、現行の開発用Supabaseプロジェクトをそのまま本番として使う方針。2026-07-08時点で`profiles`は0件と確認済み（クリーン。Stripe課金負債台帳修正時のPlaywright E2Eは全てlocal Supabase専用インスタンス(3055)に向けており、この既存プロジェクトへは一切書き込んでいない）。`SUPABASE_PROD_DB_URL` はまだ未設定（rls-audit本番監査用・設定は人が実施）。**このプロジェクトのmigration適用状況は未確認**（0001-0005が本番相当として適用済みかは次フェーズで要確認。`supabase db push`は常時禁止のためCCは適用しない） |
-| **DOMAIN** | Vercel既定ドメイン（人確認・2026-07-08） | 独自ドメインはまだ無し。`*.vercel.app` で運用開始 |
+| **DOMAIN** | 独自ドメイン運用中（2026-08-05 確認） | Web=`osarai.app` / モバイル=`app.osarai.app` |
 
 ### マルチテナント / RLS（rls-multitenant ルールの adapt 先）
 - テナント = `org_id`（profiles.org_id = current_org_id()）、所有者 = `owner_id`/`author_id`/`user_id` = `auth.uid()`。
@@ -575,8 +575,8 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 - 確認方針: UI/ロジックは原則ブラウザ。**ネイティブ依存（プッシュ通知の実機体裁・カメラ・APNS/FCM・課金の実機フロー）は `⚠実機確認`**（ブラウザで足りる範囲は承認可）。
 - 画面パス例: `/customers`(顧客) `/sessions`(おさらい) `/billing`(課金/サブスク) `/settings/notifications`(通知設定) `/`(ホーム) ※実パスは apps/web ルーティングに合わせる。
 - 外部送信媒体＝**プッシュ通知(APNS/FCM)・メール・Stripe課金**（実送信は自分宛・隔離）。複合一意の例＝`push_tokens(user_id, token)`・`subscriptions(user_id PK)`。
-- 本番: DEPLOY_PLATFORM=Vercel（人確認・2026-07-08。未セットアップ）・本番未リリース。スモークの認可ガード対象＝Stripe webhook / 公開リンク等。`NOTIFY_PREFIX=[osarAI]`（notify-humanball が付与）。
-- ※osarAI は ship.md を配置しない（本番リリース基盤未確立）。/run・/review のみ運用。
+- 本番: DEPLOY_PLATFORM=Vercel・**本番リリース済み/稼働中**（osarai.app・app.osarai.app）。スモークの認可ガード対象＝Stripe webhook / 公開リンク等。`NOTIFY_PREFIX=[osarAI]`（notify-humanball が付与）。
+- ※**2026-08-05 に `ship.md` を配置**（正本 ~/dev/cc-pipeline/commands/ship.md から展開）。/run・/review・/ship を運用。
 
 ### /run harness の前提（移植メモ）
 - `.env` に `NOTION_TOKEN`（共有バックログ統合・sido と同一）, `BACKLOG_PROJECT_ID`(=osarAI), `BACKLOG_DS_ID`/`BACKLOG_DATA_SOURCE_ID`, `AUTO_MERGE_TARGET=dev`, `AUTO_TIER=低`, `MAX_WALL=180`, `GEMINI_REVIEW_API_KEY`/`GEMINI_REVIEW_MODEL` を設定済。

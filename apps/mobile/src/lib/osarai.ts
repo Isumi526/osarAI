@@ -19,6 +19,8 @@ export async function osaraiTurn(
     sessionId?: string;
     customerId?: string | null;
     forceEnd?: boolean;
+    /** タイマー残り秒数。時間がある間はAI側から対話を終了させない（早期終了防止） */
+    remainingSec?: number | null;
   },
   signal?: AbortSignal,
 ): Promise<OsaraiTurnResponse> {

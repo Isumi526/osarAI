@@ -34,6 +34,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      agency_products: {
+        Row: {
+          appeal: string | null
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          org_id: string
+          price: string | null
+          target: string | null
+          updated_at: string
+        }
+        Insert: {
+          appeal?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          org_id: string
+          price?: string | null
+          target?: string | null
+          updated_at?: string
+        }
+        Update: {
+          appeal?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          org_id?: string
+          price?: string | null
+          target?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agency_products_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agency_products_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_chat_messages: {
         Row: {
           chat_id: string
@@ -283,6 +334,7 @@ export type Database = {
       }
       osarai_sessions: {
         Row: {
+          accumulated_fields: Json
           created_at: string
           customer_id: string | null
           id: string
@@ -293,6 +345,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          accumulated_fields?: Json
           created_at?: string
           customer_id?: string | null
           id?: string
@@ -303,6 +356,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          accumulated_fields?: Json
           created_at?: string
           customer_id?: string | null
           id?: string
@@ -345,6 +399,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          channel_code: string | null
           created_at: string
           display_name: string | null
           id: string
@@ -355,6 +410,7 @@ export type Database = {
           user_profile: Json
         }
         Insert: {
+          channel_code?: string | null
           created_at?: string
           display_name?: string | null
           id: string
@@ -365,6 +421,7 @@ export type Database = {
           user_profile?: Json
         }
         Update: {
+          channel_code?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
@@ -419,6 +476,48 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string
+          id: string
+          label: string | null
+          org_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by: string
+          id?: string
+          label?: string | null
+          org_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          label?: string | null
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_codes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_codes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -572,6 +671,11 @@ export type Database = {
       }
       current_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
+      is_active_leader: { Args: { uid: string }; Returns: boolean }
+      merge_customer_custom_fields: {
+        Args: { new_fields: Json; target_customer_id: string }
+        Returns: undefined
+      }
       merge_user_profile_fields: {
         Args: { new_fields: Json; new_notes: string[] }
         Returns: undefined

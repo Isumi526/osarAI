@@ -1,7 +1,7 @@
 // ドメイン共通型（§6 データモデルに対応する手書きの軽量型）
 // 注意：これは UI/ロジック用の薄い型。DBの正本型は database.types.ts（自動生成）を使う。
 
-export type Role = 'member' | 'leader';
+export type Role = 'member' | 'leader' | 'agency';
 
 export type CustomerStatus = 'active' | 'archived';
 export type Temperature = 'hot' | 'warm' | 'cold';
@@ -14,7 +14,7 @@ export type OsaraiSessionStatus = 'in_progress' | 'done';
 export type ChatScope = 'all' | 'customer';
 export type ChatRole = 'user' | 'assistant';
 
-export type PlanId = 'light' | 'standard' | 'pro';
+export type PlanId = 'light' | 'standard' | 'pro' | 'leader' | 'member';
 export type SubscriptionStatus =
   | 'trialing'
   | 'active'
@@ -47,6 +47,12 @@ export interface OsaraiTurnResult {
   extracted: OsaraiExtracted;
   next_question: string | null;
   done: boolean;
+  /**
+   * done=true の理由。'user_request'=ユーザーが明示的に終了を望んだ／'time_up'=残り時間切れ／
+   * 'enough'=AIが十分と判断。残り時間があるのに end_reason!=='user_request' で done になった場合、
+   * サーバー側で done を取り消して対話を継続させる（AIによる早期終了防止）。
+   */
+  end_reason?: 'user_request' | 'time_up' | 'enough' | null;
 }
 
 // interactions.ai_summary の形（§6）

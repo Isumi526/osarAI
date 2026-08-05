@@ -115,6 +115,11 @@ export function Osarai() {
 
   // 時間指定の深掘りセッション（既定5分・延長可）。最初の発話が送られてから計測開始。
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  // ターン送信時に最新の残り秒数を読むためのref（AI側の早期終了防止: 残り時間をサーバーへ渡す）
+  const remainingSecRef = useRef<number | null>(null);
+  useEffect(() => {
+    remainingSecRef.current = remainingSec;
+  }, [remainingSec]);
   const [ending, setEnding] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
@@ -262,7 +267,11 @@ export function Osarai() {
     const controller = new AbortController();
     abortRef.current = controller;
     setSending(true);
-    osaraiTurn({ message: text, sessionId, customerId }, controller.signal)
+    osaraiTurn(
+      // 初回送信はまだタイマー未開始(null)のため、既定の5分(300秒)として送る
+      { message: text, sessionId, customerId, remainingSec: remainingSecRef.current ?? 300 },
+      controller.signal,
+    )
       .then((res) => {
         setSessionId(res.sessionId);
         setRemainingSec((s) => (s === null ? 300 : s)); // 最初の送信でタイマー開始（既定5分）

@@ -10,10 +10,20 @@ import {
   findFreeSlots,
   formatScheduleProposalText,
   listLocationHistory,
+  proposalSettingsFromUserProfile,
+  saveProposalDefaults,
   SCHEDULE_CATEGORIES,
   SCHEDULE_MODES,
+  WEEKDAY_LABELS,
+  toTimeInputValue,
+  parseTimeInputValue,
+  relativeDayLabel,
+  DEFAULT_PROPOSAL_INTRO,
+  offsetToDateInputValue,
+  dateInputValueToOffset,
   type Schedule,
   type ScheduleInput,
+  type ScheduleProposalSettings,
 } from '../lib/schedules.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useEscapeKey } from '../components/useEscapeKey.js';
@@ -145,12 +155,21 @@ export function SchedulePage() {
   const navigate = useNavigate();
   const [proposal, setProposal] = useState<{ text: string; copyMsg: string | null } | null>(null);
   const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposalSettings, setProposalSettings] = useState<ScheduleProposalSettings>(() =>
+    proposalSettingsFromUserProfile(null),
+  );
+  const [proposalSettingsSaved, setProposalSettingsSaved] = useState(false);
   useEscapeKey(() => setProposeCustomer(null), !!proposeCustomer);
   useEscapeKey(() => setProposal(null), !!proposal);
   // 月表示の無限スクロール(回答A): 縦に連続表示する月のリスト。上下端で前後の月を継ぎ足す。
   const [monthList, setMonthList] = useState<Date[]>([]);
   const monthScrollRef = useRef<HTMLDivElement>(null);
   const prependAdjustRef = useRef<number | null>(null);
+  // 月表示に入った直後、prevMonth(前月)ブロックがscrollTop:0で一瞬見えてから現在月へ
+  // 補正される不具合の修正: 現在月ブロックへの参照とrefを持ち、monthList初期化直後に
+  // 初期スクロール位置を合わせる(既存のprepend時スクロール補正とは別のuseLayoutEffect)。
+  const currentMonthBlockRef = useRef<HTMLDivElement>(null);
+  const initialMonthScrollPendingRef = useRef(false);
   // 前後移動(</>)のたびに一覧を丸ごとブランクにすると体感の遅延・ちらつきが大きいため、
   // 初回読み込みの時だけ「読み込み中…」を出し、以降の再取得は前の表示を残したまま裏で
   // 差し替える(議事録要望: 前後移動時のもたつき軽減)。
@@ -162,6 +181,7 @@ export function SchedulePage() {
     if (view !== 'month') return;
     const base = startOfMonth(anchor);
     setMonthList([addMonths(base, -1), base, addMonths(base, 1)]);
+    initialMonthScrollPendingRef.current = true;
   }, [view, anchor]);
 
   // prepend(上方向の月追加)後にスクロール位置を補正し、表示のジャンプを防ぐ。
@@ -170,6 +190,18 @@ export function SchedulePage() {
     const el = monthScrollRef.current;
     el.scrollTop += el.scrollHeight - prependAdjustRef.current;
     prependAdjustRef.current = null;
+  }, [monthList]);
+
+  // 月表示に入った直後の初期表示位置を現在月ブロックへ合わせる(前月が一瞬見える不具合の修正)。
+  // ペイント前に実行するuseLayoutEffectのため、ユーザーには前月は見えない。
+  useLayoutEffect(() => {
+    if (!initialMonthScrollPendingRef.current) return;
+    const container = monthScrollRef.current;
+    const target = currentMonthBlockRef.current;
+    if (!container || !target) return;
+    const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    container.scrollTop = offset;
+    initialMonthScrollPendingRef.current = false;
   }, [monthList]);
 
   function onMonthScroll(e: React.UIEvent<HTMLDivElement>) {
@@ -183,26 +215,41 @@ export function SchedulePage() {
   }
 
   useEffect(() => {
-    getMyProfile().then(setProfile);
+    getMyProfile().then((p) => {
+      setProfile(p);
+      setProposalSettings(proposalSettingsFromUserProfile(p?.user_profile));
+    });
     listCustomers({ status: 'active' }).then(setCustomers).catch(() => undefined);
     listLocationHistory().then(setLocationHistory).catch(() => undefined);
   }, []);
 
-  // 日程調整の文章生成(議事録『review』人力回答A寄り): 表示中のビューに関わらず、
-  // 「今」から直近7日間の予定を取得して空き時間を探す(AIは使わず既存データからの計算)。
+  // 日程調整の文章生成(議事録『review』人力回答A寄り・再作成): 表示中のビューに関わらず、
+  // 「今」から対象の日付範囲/時間範囲(既定 or 保存済みデフォルト)の予定を取得して空き時間を探す
+  // (AIは使わず既存データからの計算)。
   async function openProposal() {
     setProposalLoading(true);
     setError(null);
+    setProposalSettingsSaved(false);
     try {
       const now = new Date();
-      const to = addDays(now, 7);
+      const from = addDays(now, proposalSettings.startOffsetDays);
+      const to = addDays(from, proposalSettings.days);
       const upcoming = await listSchedules({ from: now.toISOString(), to: to.toISOString() });
-      const slots = findFreeSlots(upcoming, now);
-      setProposal({ text: formatScheduleProposalText(slots), copyMsg: null });
+      const slots = findFreeSlots(upcoming, now, proposalSettings);
+      setProposal({ text: formatScheduleProposalText(slots, proposalSettings.introText), copyMsg: null });
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {
       setProposalLoading(false);
+    }
+  }
+
+  async function onSaveProposalDefaults() {
+    try {
+      await saveProposalDefaults(proposalSettings);
+      setProposalSettingsSaved(true);
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
     }
   }
 
@@ -323,7 +370,7 @@ export function SchedulePage() {
           style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: 16 }}
         >
           {monthList.map((m) => (
-            <div key={monthKey(m)}>
+            <div key={monthKey(m)} ref={monthKey(m) === monthKey(startOfMonth(anchor)) ? currentMonthBlockRef : undefined}>
               {/* 上部の今日/前後移動バーの年月表示と紛らわしく見える(実機レビュー指摘)ため、
                   背景色/枠で区別できるチップ状にして「今表示中の月」ラベルだと分かるようにする。 */}
               <div
@@ -479,11 +526,148 @@ export function SchedulePage() {
           >
             <strong>日程調整の文章</strong>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
-              直近7日間の空き時間から候補を作成しました。コピーしてLINE等で送れます。
+              指定した日付範囲・時間範囲の空き時間から候補を作成しました。その場で編集してコピーし、LINE等で送れます。
             </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {/* 開始日・終了日はカレンダーで選ぶが、保存するのは今日からの相対日数。
+                  後日開き直した時に過去日で固定されず、同じ長さの期間が自動でセットされる。 */}
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                開始日（{relativeDayLabel(proposalSettings.startOffsetDays)}）
+                <input
+                  type="date"
+                  value={offsetToDateInputValue(proposalSettings.startOffsetDays)}
+                  onChange={(e) => {
+                    const offset = dateInputValueToOffset(e.target.value, proposalSettings.startOffsetDays);
+                    setProposalSettings((s) => {
+                      // 終了日より後ろに動かした場合は、期間の長さを保ったまま終了日も一緒にずらす
+                      const endOffset = s.startOffsetDays + s.days - 1;
+                      const days = offset > endOffset ? s.days : endOffset - offset + 1;
+                      return { ...s, startOffsetDays: offset, days: Math.max(1, days) };
+                    });
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                終了日（{proposalSettings.days}日間）
+                <input
+                  type="date"
+                  min={offsetToDateInputValue(proposalSettings.startOffsetDays)}
+                  value={offsetToDateInputValue(proposalSettings.startOffsetDays + proposalSettings.days - 1)}
+                  onChange={(e) => {
+                    const endOffset = dateInputValueToOffset(
+                      e.target.value,
+                      proposalSettings.startOffsetDays + proposalSettings.days - 1,
+                    );
+                    setProposalSettings((s) => ({ ...s, days: Math.max(1, endOffset - s.startOffsetDays + 1) }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                開始時刻
+                <input
+                  type="time"
+                  step={900}
+                  value={toTimeInputValue(proposalSettings.startHour, proposalSettings.startMinute)}
+                  onChange={(e) => {
+                    const { hour, minute } = parseTimeInputValue(
+                      e.target.value,
+                      proposalSettings.startHour,
+                      proposalSettings.startMinute,
+                    );
+                    setProposalSettings((s) => ({ ...s, startHour: hour, startMinute: minute }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                終了時刻
+                <input
+                  type="time"
+                  step={900}
+                  value={toTimeInputValue(proposalSettings.endHour, proposalSettings.endMinute)}
+                  onChange={(e) => {
+                    const { hour, minute } = parseTimeInputValue(
+                      e.target.value,
+                      proposalSettings.endHour,
+                      proposalSettings.endMinute,
+                    );
+                    setProposalSettings((s) => ({ ...s, endHour: hour, endMinute: minute }));
+                    setProposalSettingsSaved(false);
+                  }}
+                  style={{ padding: 8, fontSize: 14 }}
+                />
+              </label>
+            </div>
+            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              最初のあいさつ文（候補一覧の前に入ります・空にすると候補だけになります）
+              <input
+                type="text"
+                value={proposalSettings.introText}
+                placeholder={DEFAULT_PROPOSAL_INTRO}
+                onChange={(e) => {
+                  setProposalSettings((s) => ({ ...s, introText: e.target.value }));
+                  setProposalSettingsSaved(false);
+                }}
+                style={{ padding: 8, fontSize: 14 }}
+              />
+            </label>
+            <div style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              候補に入れる曜日
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {WEEKDAY_LABELS.map((label, dow) => {
+                  const on = proposalSettings.weekdays.includes(dow);
+                  return (
+                    <button
+                      key={dow}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        setProposalSettings((s) => ({
+                          ...s,
+                          weekdays: on ? s.weekdays.filter((d) => d !== dow) : [...s.weekdays, dow].sort(),
+                        }));
+                        setProposalSettingsSaved(false);
+                      }}
+                      style={{
+                        minWidth: 40,
+                        padding: '6px 0',
+                        fontSize: 13,
+                        background: on ? 'var(--color-primary)' : '#fff',
+                        color: on ? '#fff' : 'var(--color-text)',
+                        border: `1px solid ${on ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={openProposal}
+                disabled={proposalLoading || proposalSettings.weekdays.length === 0}
+                style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }}
+              >
+                {proposalLoading ? '作成中…' : 'この条件で作り直す'}
+              </button>
+              <button
+                type="button"
+                onClick={onSaveProposalDefaults}
+                style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid var(--color-primary-border)', color: 'var(--color-primary)', fontSize: 13 }}
+              >
+                {proposalSettingsSaved ? '✓ デフォルトに保存済み' : 'デフォルトとして保存'}
+              </button>
+            </div>
             <textarea
-              readOnly
               value={proposal.text}
+              onChange={(e) => setProposal({ ...proposal, text: e.target.value })}
               rows={8}
               style={{ width: '100%', padding: 10, fontSize: 14, lineHeight: 1.6, resize: 'none' }}
             />
@@ -680,6 +864,12 @@ function TimeGrid({
       style={{
         marginTop: 12,
         display: 'flex',
+        // 既定の align-items:stretch だと、各列(時刻ラベル列・日列)の高さがコンテナの
+        // 表示高さ(=画面高)に固定され、24時間ぶんの中身(HOUR_HEIGHT*24)がその箱から
+        // はみ出す。結果、日列のborderRight(縦罫線)が画面高の分しか描かれず、
+        // 日付ヘッダー(position:sticky)も箱の下端で止まって途中から消えていた。
+        // flex-startにして各列を中身の高さに合わせる（2026-08-05 人力レビューで再発を確認）。
+        alignItems: 'flex-start',
         width: '100%',
         // 親(Schedule.tsx側のflex:1ラッパー)の高さいっぱいに伸ばす(画面高さの余白を埋める・議事録要望)。
         // 親はdisplay:flexではない通常のoverflowY:autoコンテナのため、flex:1ではなくheight:100%で伸ばす。

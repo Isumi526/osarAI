@@ -39,6 +39,29 @@ export const PLANS: Record<PlanId, PlanDef> = {
     recordingImport: true,
     leaderDashboard: true,
   },
+  // 【要設計判断】代理店(LL)とリーダー課金プランの再設計（回答A）で新設。
+  // 招待元(リーダー)の自己申込チェックアウト導線は本チケットのスコープ外
+  // (価格未確定・運営者の業務判断が必要)。listPrice=0はプレースホルダーであり、
+  // 実際の価格が決まりStripe Priceを作成するまで自己申込フローには使わない
+  // (当面はprofiles.role='leader'同様、運営者がDBを手動更新して付与する運用)。
+  leader: {
+    id: 'leader',
+    name: 'Leader（価格未確定・要業務判断）',
+    listPrice: 0,
+    aiAdviceLimit: null,
+    recordingImport: true,
+    leaderDashboard: false,
+  },
+  // リーダーに招待された相手が使う無料プラン。招待元リーダーの商品リストのみ
+  // インポート可能(org全体スコープではない・agency_products_selectのRLS参照)。
+  member: {
+    id: 'member',
+    name: 'Member（招待制・無料）',
+    listPrice: 0,
+    aiAdviceLimit: 10,
+    recordingImport: false,
+    leaderDashboard: false,
+  },
 };
 
 /** 14日カード先取りトライアル（§11） */

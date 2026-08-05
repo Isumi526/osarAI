@@ -19,6 +19,8 @@ export async function selfOsaraiTurn(
     message: string;
     history: ChatMessage[];
     forceEnd?: boolean;
+    /** タイマー残り秒数。時間がある間はAI側から対話を終了させない（早期終了防止） */
+    remainingSec?: number | null;
   },
   signal?: AbortSignal,
 ): Promise<SelfOsaraiTurnResponse> {

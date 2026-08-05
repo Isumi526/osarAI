@@ -35,9 +35,15 @@ const TURN_SCHEMA: GeminiSchema = {
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },
+    end_reason: { type: 'string', enum: ['user_request', 'time_up', 'enough'], nullable: true },
   },
   required: ['extracted', 'next_question', 'done'],
 };
+
+// 残り時間があるのにAIが早期終了(done=true)した場合の代替質問（osarai/turnと同じ早期終了防止ガード）
+const CONTINUE_FALLBACK_QUESTION =
+  '他にも話しておきたいことや、最近気になっていることはありますか？😊';
+const EARLY_END_GUARD_MIN_SEC = 30;
 
 export function OPTIONS() {
   return corsPreflight();
@@ -52,8 +58,11 @@ export async function POST(req: Request) {
     message?: string;
     history?: ChatMessage[];
     forceEnd?: boolean;
+    /** クライアントのタイマー残り秒数。時間がある間はAI側から終了させない（早期終了防止） */
+    remainingSec?: number | null;
   };
   const forceEnd = body.forceEnd === true;
+  const remainingSec = typeof body.remainingSec === 'number' ? body.remainingSec : null;
   const message = (body.message ?? '').trim();
   if (!message && !forceEnd) return json({ error: 'message required' }, 400);
 
@@ -97,7 +106,11 @@ export async function POST(req: Request) {
       : '\n仕事・扱っている商品は登録済み。自由な深掘りでよい。';
 
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
-  const prompt = `${SELF_OSARAI_SYSTEM_PROMPT}${notesBlock}${nameBlock}${missingFieldsBlock}\n\n対話履歴:\n${history}`;
+  const timeBlock =
+    remainingSec !== null && remainingSec > 0
+      ? `\n\n残り時間: 約${Math.floor(remainingSec / 60)}分${remainingSec % 60}秒（この時間いっぱいまで対話を続ける）`
+      : '';
+  const prompt = `${SELF_OSARAI_SYSTEM_PROMPT}${notesBlock}${nameBlock}${missingFieldsBlock}${timeBlock}\n\n対話履歴:\n${history}`;
 
   let result: SelfOsaraiTurnResult;
   try {
@@ -109,6 +122,21 @@ export async function POST(req: Request) {
   }
   if (forceEnd) {
     result = { ...result, done: true, next_question: null };
+  }
+  // 早期終了防止ガード（osarai/turnと同じ・AC1をサーバー側で決定的に担保）
+  if (
+    !forceEnd &&
+    result.done &&
+    remainingSec !== null &&
+    remainingSec > EARLY_END_GUARD_MIN_SEC &&
+    result.end_reason !== 'user_request'
+  ) {
+    result = {
+      ...result,
+      done: false,
+      end_reason: null,
+      next_question: result.next_question ?? CONTINUE_FALLBACK_QUESTION,
+    };
   }
   if (result.next_question) {
     messages.push({ role: 'assistant', content: result.next_question });
