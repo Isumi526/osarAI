@@ -348,36 +348,83 @@ function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted {
   }
   // タスクはタイトルだけをキーにする（同じ用件が期限ありなしで二重に出るのを防ぐ）。
   // 後から期限が判明した場合は、期限ありの方を採用する。
-  const tasks = new Map<string, ExtractedTask>();
+  // タスクも言い換えの重複を潰す（「資料を送る」「保険の提案資料を送る」＝同じ用件）。
+  // 一方が他方を含むなら同一とみなし、より具体的な（長い）タイトルを残す。
+  const tasks: ExtractedTask[] = [];
   for (const t of [...(base.tasks ?? []), ...(incoming.tasks ?? [])]) {
     if (!t?.title?.trim()) continue;
-    const key = normalizeName(t.title);
-    const prev = tasks.get(key);
-    tasks.set(key, {
-      title: t.title,
-      due_date: t.due_date ?? prev?.due_date ?? null,
-      person_name: t.person_name ?? prev?.person_name ?? null,
+    const key = compactKey(t.title);
+    const i = tasks.findIndex((x) => {
+      const k = compactKey(x.title);
+      return k === key || k.includes(key) || key.includes(k);
     });
+    if (i === -1) {
+      tasks.push({ title: t.title, due_date: t.due_date ?? null, person_name: t.person_name ?? null });
+    } else {
+      const prev = tasks[i]!;
+      tasks[i] = {
+        title: t.title.length > prev.title.length ? t.title : prev.title,
+        due_date: t.due_date ?? prev.due_date ?? null,
+        person_name: t.person_name ?? prev.person_name ?? null,
+      };
+    }
   }
   return {
     people: [...people.values()],
     schedules: [...schedules.values()],
-    tasks: [...tasks.values()],
+    tasks,
     self_notes: mergeList(base.self_notes, incoming.self_notes),
     self_fields: { ...(base.self_fields ?? {}), ...(nonEmpty(incoming.self_fields) as Record<string, string>) },
   };
 }
 
+/**
+ * 要点・ニーズ・次アクションのターン間マージ。
+ * Geminiは同じ内容をターンごとに言い換えて返すため（「交流会で話をした」「交流会で話した」）、
+ * 完全一致だけの除去では確認カードが重複だらけになる。正規化した上で、片方がもう片方を
+ * 含む場合は同一とみなし、情報量の多い（長い）方を残す。
+ */
 function mergeList(a?: string[], b?: string[]): string[] {
-  const seen = new Set<string>();
   const out: string[] = [];
   for (const v of [...(a ?? []), ...(b ?? [])]) {
     const t = typeof v === 'string' ? v.trim() : '';
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
+    if (!t) continue;
+    const key = compactKey(t);
+    if (!key) continue;
+    const dupIndex = out.findIndex((x) => {
+      const k = compactKey(x);
+      return k === key || k.includes(key) || key.includes(k);
+    });
+    if (dupIndex === -1) out.push(t);
+    else if (t.length > out[dupIndex]!.length) out[dupIndex] = t; // 詳しい方を残す
   }
   return out;
+}
+
+/** 人名を落とした後のタイトルで、もう一度重複を統合する（より具体的な方を残す）。 */
+function dedupeTitles<T extends { title: string; due_at?: string | null; person_index: number | null }>(items: T[]): T[] {
+  const out: T[] = [];
+  for (const item of items) {
+    const key = compactKey(item.title);
+    const i = out.findIndex((x) => {
+      const k = compactKey(x.title);
+      return k === key || k.includes(key) || key.includes(k);
+    });
+    if (i === -1) out.push(item);
+    else if (item.title.length > out[i]!.title.length) {
+      out[i] = { ...item, due_at: item.due_at ?? out[i]!.due_at, person_index: item.person_index ?? out[i]!.person_index };
+    }
+  }
+  return out;
+}
+
+/** 言い回しの揺れを吸収する比較キー（助詞・記号・空白を落とす）。 */
+function compactKey(s: string): string {
+  return s
+    .normalize('NFKC')
+    .replace(/[\s、。，．・「」（）()]/g, '')
+    .replace(/(をした|をする|した|する|です|ます|になった|になる)$/u, '')
+    .toLowerCase();
 }
 
 function nonEmpty<T extends Record<string, unknown>>(o?: T): Record<string, unknown> {
@@ -394,7 +441,9 @@ function nonEmpty<T extends Record<string, unknown>>(o?: T): Record<string, unkn
 
 /** 累積した抽出を、確認カード（クライアント）が扱う形に変換する。日時はJSTとして解決する。 */
 function toProposals(acc: Extracted, customers: { id: string; name: string }[], now: Date) {
-  const people = (acc.people ?? []).map((p) => {
+  const people = (acc.people ?? []).map((p0) => {
+    // 抽出名に「さん」等が付くと一覧表示で「山本さんさん」になるため落とす
+    const p = { ...p0, name: stripHonorific(p0.name) };
     // AIが既存idを返していればそれを、無ければ正規化名の一致で既存に寄せる（重複登録の防止）
     const matched =
       (p.matched_customer_id && customers.find((c) => c.id === p.matched_customer_id)?.id) ??
@@ -416,11 +465,12 @@ function toProposals(acc: Extracted, customers: { id: string; name: string }[], 
     const i = people.findIndex((p) => normalizeName(p.name) === normalizeName(name));
     return i >= 0 ? i : people.length === 1 ? 0 : null;
   };
+  const personNames = people.map((p) => p.name);
   const schedules = (acc.schedules ?? []).map((s) => {
     const start = jstToIso(s.date, s.start_time ?? '10:00', now);
     const end = s.end_time ? jstToIso(s.date, s.end_time, now) : new Date(Date.parse(start) + 3600_000).toISOString();
     return {
-      title: s.title,
+      title: stripPersonFromTitle(s.title, personNames),
       start_at: start,
       end_at: end,
       person_index: indexOfPerson(s.person_name),
@@ -429,12 +479,41 @@ function toProposals(acc: Extracted, customers: { id: string; name: string }[], 
       category: null as string | null,
     };
   });
-  const tasks = (acc.tasks ?? []).map((t) => ({
-    title: t.title,
+  const tasks = dedupeTitles(
+    (acc.tasks ?? []).map((t) => ({
+    title: stripPersonFromTitle(t.title, personNames),
     due_at: t.due_date ? jstToIso(t.due_date, '23:59', now) : null,
     person_index: indexOfPerson(t.person_name),
-  }));
+  })),
+  );
   return { people, schedules, tasks, self_notes: acc.self_notes ?? [], self_fields: acc.self_fields ?? {} };
+}
+
+/**
+ * 予定/タスクのタイトルに紛れ込んだ人物名を落とす（相手はリレーションで持つため）。
+ * 「山本さんとカフェで会う」→「カフェで会う」 / 「山本さんに資料を送る」→「資料を送る」。
+ * プロンプトでも指示しているが、揺れるのでサーバー側でも正規化する。
+ */
+function stripPersonFromTitle(title: string, names: string[]): string {
+  let out = title.trim();
+  for (const n of names) {
+    const base = stripHonorific(n);
+    if (!base) continue;
+    const honorific = '(?:さん|様|さま|氏|くん|ちゃん)?';
+    out = out
+      .replace(new RegExp(`^${escapeRegExp(base)}${honorific}(?:と|に|への|へ|の|と の)\\s*`, 'u'), '')
+      .replace(new RegExp(`${escapeRegExp(base)}${honorific}(?:と|に|への|へ)`, 'gu'), '');
+  }
+  return out.trim() || title.trim();
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** 表示側が「〇〇さん」と付けるため、保存する名前からは敬称を落とす。 */
+function stripHonorific(name: string): string {
+  return name.trim().replace(/(さん|様|さま|氏|くん|ちゃん)$/u, '').trim() || name.trim();
 }
 
 /** 'YYYY-MM-DD' + 'HH:mm'（JST）を UTC の ISO 文字列にする。不正値は現在時刻にフォールバック。 */

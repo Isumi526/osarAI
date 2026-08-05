@@ -239,18 +239,7 @@ export function AssistantChat() {
           ← ホーム
         </button>
         <strong>AIと話す</strong>
-        {phase === 'chatting' && sessionId ? (
-          <button
-            type="button"
-            onClick={endAndReview}
-            disabled={ending || sending || queue.length > 0}
-            style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: 'var(--color-primary)' }}
-          >
-            {ending ? '整理中…' : '整理する'}
-          </button>
-        ) : (
-          <span style={{ width: 48 }} />
-        )}
+        <span style={{ width: 48 }} />
       </ScreenHeader>
 
       <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
@@ -395,12 +384,32 @@ export function AssistantChat() {
             background: 'var(--color-bg)',
             borderTop: '1px solid var(--color-border)',
             padding: '10px 16px',
-            display: 'flex',
+            display: 'grid',
             gap: 8,
-            alignItems: 'flex-end',
             zIndex: 80,
           }}
         >
+          {/* 「話し終わったら整理する」導線。ヘッダーの小さなリンクだと気づかず押しにくい
+              という指摘を受け、入力欄のすぐ上の全幅ボタンにした（2026-08-06）。 */}
+          {sessionId && (
+            <button
+              type="button"
+              onClick={endAndReview}
+              disabled={ending || sending || queue.length > 0}
+              style={{
+                padding: 12,
+                fontSize: 15,
+                fontWeight: 700,
+                background: 'var(--color-primary-light)',
+                border: '1px solid var(--color-primary-border)',
+                color: 'var(--color-primary-dark)',
+                borderRadius: 10,
+              }}
+            >
+              {ending ? '整理しています…' : '話し終わった・内容を整理する'}
+            </button>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <AutoResizeTextarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -461,6 +470,7 @@ export function AssistantChat() {
           >
             送信
           </button>
+          </div>
         </div>
       )}
       {confirmDialog}
@@ -586,6 +596,16 @@ function ReviewCard({
             placeholder="予定のタイトル"
             style={{ padding: 10, fontSize: 15 }}
           />
+          <PersonSelect
+            people={proposals.people}
+            value={s.person_index}
+            onChange={(v) =>
+              setProposals({
+                ...proposals,
+                schedules: proposals.schedules.map((x, j) => (j === i ? { ...x, person_index: v } : x)),
+              })
+            }
+          />
           <input
             type="datetime-local"
             value={toLocalInput(s.start_at, true)}
@@ -628,6 +648,16 @@ function ReviewCard({
             placeholder="やること"
             style={{ padding: 10, fontSize: 15 }}
           />
+          <PersonSelect
+            people={proposals.people}
+            value={t.person_index}
+            onChange={(v) =>
+              setProposals({
+                ...proposals,
+                tasks: proposals.tasks.map((x, j) => (j === i ? { ...x, person_index: v } : x)),
+              })
+            }
+          />
           <input
             type="date"
             value={t.due_at ? toLocalInput(t.due_at, false) : ''}
@@ -667,6 +697,36 @@ function ReviewCard({
         </button>
       </div>
     </section>
+  );
+}
+
+// 予定・タスクの「相手」。人物名はタイトルに埋めずリレーションで持つ（2026-08-06 指摘）。
+function PersonSelect({
+  people,
+  value,
+  onChange,
+}: {
+  people: { name: string }[];
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  if (people.length === 0) return null;
+  return (
+    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+      相手
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+        style={{ padding: 10, fontSize: 14 }}
+      >
+        <option value="">なし</option>
+        {people.map((p, i) => (
+          <option key={i} value={i}>
+            {p.name}さん
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
