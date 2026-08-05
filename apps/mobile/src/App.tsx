@@ -6,6 +6,7 @@ import { Login } from './screens/Login.js';
 import { Home } from './screens/Home.js';
 import { Osarai } from './screens/Osarai.js';
 import { AssistantChat } from './screens/AssistantChat.js';
+import { Tutorial } from './screens/Tutorial.js';
 import { Tasks } from './screens/Tasks.js';
 import { CustomerList } from './screens/CustomerList.js';
 import { CustomerDetail } from './screens/CustomerDetail.js';
@@ -34,6 +35,7 @@ function AppRoutes() {
           <Route path="/chat/legacy" element={<AiChat />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/tutorial" element={<Tutorial />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/self-osarai" element={<SelfOsarai />} />
           <Route path="/welcome" element={<Welcome />} />

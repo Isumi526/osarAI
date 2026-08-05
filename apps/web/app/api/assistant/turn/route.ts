@@ -329,6 +329,11 @@ function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted {
       custom_fields: { ...(prev?.custom_fields ?? {}), ...nonEmpty(p.custom_fields) },
     });
   }
+  // 予定・タスクのタイトルは、統合前に人名を落としておく（「山本さんに資料を送る」と
+  // 「山本さんに保険の提案資料を送る」が別物として残るのを防ぐ。相手はperson_nameで持つ）。
+  const mergedNames = [...people.values()].map((p) => p.name);
+  const cleanTitle = (t: string) => stripPersonFromTitle(t, mergedNames);
+
   // 予定は「日付＋開始時刻」をキーにする。ターンごとに言い回しが変わっても
   // （「カフェで会う」→「カフェで面談」）同じ枠の予定が二重に登録されないようにする。
   const schedules = new Map<string, ExtractedSchedule>();
@@ -338,6 +343,7 @@ function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted {
     const prev = schedules.get(key);
     schedules.set(key, {
       ...s,
+      title: cleanTitle(s.title),
       // 後のターンで場所や相手が判明した場合は補完する（判明済みの情報を消さない）
       start_time: s.start_time ?? prev?.start_time ?? null,
       end_time: s.end_time ?? prev?.end_time ?? null,
@@ -351,8 +357,9 @@ function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted {
   // タスクも言い換えの重複を潰す（「資料を送る」「保険の提案資料を送る」＝同じ用件）。
   // 一方が他方を含むなら同一とみなし、より具体的な（長い）タイトルを残す。
   const tasks: ExtractedTask[] = [];
-  for (const t of [...(base.tasks ?? []), ...(incoming.tasks ?? [])]) {
-    if (!t?.title?.trim()) continue;
+  for (const t0 of [...(base.tasks ?? []), ...(incoming.tasks ?? [])]) {
+    if (!t0?.title?.trim()) continue;
+    const t = { ...t0, title: cleanTitle(t0.title) };
     const key = compactKey(t.title);
     const i = tasks.findIndex((x) => {
       const k = compactKey(x.title);
@@ -418,12 +425,18 @@ function dedupeTitles<T extends { title: string; due_at?: string | null; person_
   return out;
 }
 
-/** 言い回しの揺れを吸収する比較キー（助詞・記号・空白を落とす）。 */
+/**
+ * 言い回しの揺れを吸収する比較キー。
+ * 「不動産も扱っている」と「不動産を扱っている」、「カフェで会う」と「カフェで会う（保険の提案）」
+ * のような差は同一とみなしたいので、括弧内の補足・助詞・記号・語尾を落として比べる。
+ */
 function compactKey(s: string): string {
   return s
     .normalize('NFKC')
-    .replace(/[\s、。，．・「」（）()]/g, '')
-    .replace(/(をした|をする|した|する|です|ます|になった|になる)$/u, '')
+    .replace(/[（(][^）)]*[）)]/g, '') // 括弧の補足は無視する
+    .replace(/[\s、。，．・「」『』〜~!！?？]/g, '')
+    .replace(/(をした|をする|した|する|です|ます|になった|になる|予定|することになった)$/u, '')
+    .replace(/[をもがはにへとでやのか]/g, '') // 助詞違いだけの重複を潰す
     .toLowerCase();
 }
 

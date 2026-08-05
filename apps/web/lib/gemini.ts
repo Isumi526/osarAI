@@ -191,12 +191,20 @@ export async function geminiJsonFromImage<T>(
 export async function geminiTranscribe(
   audioBase64: string,
   mimeType: string,
-  opts: { model?: string; language?: string } = {},
+  opts: { model?: string; language?: string; cleanFillers?: boolean } = {},
 ): Promise<string> {
   const primaryModel = opts.model ?? GEMINI_MODEL_LITE;
+  // フィラー除去は文字起こしと同じ1回の呼び出しで行う（別途LLMで後処理すると
+  // 待ち時間が二重にかかるため。2026-08-06 UI/UX刷新の音声補正）。
+  const cleanup =
+    opts.cleanFillers === false
+      ? ''
+      : `「えーと」「あー」「その」「なんか」のようなフィラーや、言い直しで生じた不要な断片は取り除いてください。` +
+        `ただし話し言葉の自然さは保ち、内容の要約・言い換え・補完はしないでください（言っていないことを足さない）。`;
   const instruction =
     `次の音声を${opts.language ?? '日本語'}で文字起こししてください。` +
-    `話し言葉のまま、要約や解説は一切付けず、発話内容のテキストだけを返してください。`;
+    cleanup +
+    `要約や解説は一切付けず、発話内容のテキストだけを返してください。`;
 
   const runOnce = async (model: string): Promise<string> => {
     const t0 = Date.now();

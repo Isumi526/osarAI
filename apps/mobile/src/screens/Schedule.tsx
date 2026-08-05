@@ -648,6 +648,18 @@ export function SchedulePage() {
                 })}
               </div>
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-muted)' }}>
+              <input
+                type="checkbox"
+                checked={proposalSettings.includeHolidays}
+                onChange={(e) => {
+                  setProposalSettings((s) => ({ ...s, includeHolidays: e.target.checked }));
+                  setProposalSettingsSaved(false);
+                }}
+                style={{ width: 18, height: 18 }}
+              />
+              祝日も候補に入れる
+            </label>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
