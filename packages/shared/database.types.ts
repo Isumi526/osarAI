@@ -334,6 +334,7 @@ export type Database = {
       }
       osarai_sessions: {
         Row: {
+          accumulated_fields: Json
           created_at: string
           customer_id: string | null
           id: string
@@ -344,6 +345,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          accumulated_fields?: Json
           created_at?: string
           customer_id?: string | null
           id?: string
@@ -354,6 +356,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          accumulated_fields?: Json
           created_at?: string
           customer_id?: string | null
           id?: string
@@ -668,6 +671,7 @@ export type Database = {
       }
       current_org_id: { Args: never; Returns: string }
       current_user_role: { Args: never; Returns: string }
+      is_active_leader: { Args: { uid: string }; Returns: boolean }
       merge_customer_custom_fields: {
         Args: { new_fields: Json; target_customer_id: string }
         Returns: undefined

@@ -54,6 +54,9 @@ const TURN_SCHEMA: GeminiSchema = {
         next_actions: { type: 'array', items: { type: 'string' } },
         // Geminiのresponse Schemaは宣言されていないプロパティを出力できないため、
         // custom_fieldsに含めたいキーは明示的に列挙する必要がある(properties:{}のままだと常に空になる)。
+        // custom_fieldsは毎ターン必ず出力させる（requiredで強制）。Geminiはターンによって
+        // このキーごと省略することがあり、新規顧客の作成時は最終ターンの抽出結果をそのまま
+        // insertするため、省略されると対話中に判明した商品/年齢/性別が丸ごと失われていた。
         custom_fields: {
           type: 'object',
           properties: {
@@ -75,6 +78,7 @@ const TURN_SCHEMA: GeminiSchema = {
           },
         },
       },
+      required: ['points', 'needs', 'next_actions', 'custom_fields'],
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },
@@ -130,11 +134,15 @@ export async function POST(req: Request) {
   let sessionId = body.sessionId;
   let messages: ChatMessage[] = [];
   let customerId: string | null = body.customerId ?? null;
+  // 対話中に判明した構造化情報のセッション累積（0025）。Geminiは毎ターン履歴全体から
+  // 再抽出するが、ターンによって一部の項目を落として返すため、最終ターンの結果だけを
+  // 保存すると先に判明していた商品/年齢/性別が失われる。ここへ都度マージして保持する。
+  let accumulatedFields: Record<string, unknown> = {};
 
   if (sessionId) {
     const { data: sess, error } = await supabase
       .from('osarai_sessions')
-      .select('id, messages, customer_id, status')
+      .select('id, messages, customer_id, status, accumulated_fields')
       .eq('id', sessionId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -142,6 +150,7 @@ export async function POST(req: Request) {
     if (sess.status === 'done') return json({ error: 'session already done' }, 409);
     messages = (sess.messages as ChatMessage[]) ?? [];
     customerId = sess.customer_id ?? customerId;
+    accumulatedFields = (sess.accumulated_fields as Record<string, unknown> | null) ?? {};
   } else if (forceEnd) {
     return json({ error: 'no session to end' }, 400);
   } else {
@@ -188,6 +197,11 @@ export async function POST(req: Request) {
   } catch (e) {
     return json({ error: 'ai failed', detail: String(e) }, 502);
   }
+  // このターンの抽出を累積へマージし、以降は累積値を「対話で判明した情報」として扱う
+  // （値が空/未判明のキーは既存の累積を消さない）。
+  accumulatedFields = mergeFields(accumulatedFields, result.extracted?.custom_fields);
+  result = { ...result, extracted: { ...result.extracted, custom_fields: accumulatedFields } };
+
   // 明示的な終了操作は、Geminiの done 判定にかかわらずここまでの抽出内容で必ず完了させる
   if (forceEnd) {
     result = { ...result, done: true, next_question: null };
@@ -243,6 +257,7 @@ export async function POST(req: Request) {
       customer_id: customerId,
       status: result.done ? 'done' : 'in_progress',
       resulting_interaction_id: resultingInteractionId,
+      accumulated_fields: accumulatedFields as unknown as never,
     })
     .eq('id', sessionId)
     .eq('user_id', user.id);
@@ -359,6 +374,24 @@ async function persistOnDone(
 function joinList(v?: string[]): string | null {
   if (!v || v.length === 0) return null;
   return v.join(' / ');
+}
+
+// 対話で判明した構造化情報のターン間マージ（0025 accumulated_fields 用）。
+// 新しい抽出のうち「実際に値があるキー」だけを上書きし、null/空文字/空配列は無視する
+// （Geminiがそのターンで拾えなかった項目で、既に判明している値を消さないため）。
+function mergeFields(
+  base: Record<string, unknown>,
+  incoming?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!incoming) return base;
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'string' && value.trim() === '') continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    merged[key] = value;
+  }
+  return merged;
 }
 
 // 会話中にユーザー自身について言及があった場合の構造化情報(self_fields)から、
