@@ -687,6 +687,24 @@ export function Osarai() {
               zIndex: 50,
             }}
           >
+          <AutoResizeTextarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…'}
+            rows={1}
+            disabled={recorder.recording}
+            style={{
+              flex: 1,
+              padding: 12,
+              borderRadius: 10,
+              border: '1px solid var(--color-border)',
+              resize: 'none',
+              fontFamily: 'inherit',
+              fontSize: 15,
+            }}
+          />
+          {/* マイクは片手でも押しやすいよう、入力欄と送信ボタンの間に置く(2026-08-06 刷新) */}
           {recorder.supported && (
             <button
               onClick={toggleMic}
@@ -710,23 +728,6 @@ export function Osarai() {
               )}
             </button>
           )}
-          <AutoResizeTextarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={recorder.recording ? '録音中…話し終えたら停止' : '話したことを入力…'}
-            rows={1}
-            disabled={recorder.recording}
-            style={{
-              flex: 1,
-              padding: 12,
-              borderRadius: 10,
-              border: '1px solid var(--color-border)',
-              resize: 'none',
-              fontFamily: 'inherit',
-              fontSize: 15,
-            }}
-          />
           {/* 生成中でも送信ボタンは有効(キューに積める)。生成中は停止ボタンも並べる。 */}
           {sending && (
             <button
