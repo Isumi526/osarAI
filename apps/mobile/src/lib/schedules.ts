@@ -1,5 +1,6 @@
 // スケジュール（アポ・予定）のデータアクセス（RLSがowner_idスコープを担保）。
 import { supabase } from './supabase.js';
+import { isJapaneseHoliday } from './holidays.js';
 import type { Database } from '@osarai/shared/database.types';
 import type { Profile } from './db.js';
 import { recomputeCustomerTemperature } from './db.js';
@@ -146,6 +147,8 @@ export interface FindFreeSlotsOptions {
   endMinute?: number;
   /** 候補に入れる曜日(0=日〜6=土)。未指定なら平日(月〜金) */
   weekdays?: number[];
+  /** 祝日も候補に入れるか（既定は入れない） */
+  includeHolidays?: boolean;
 }
 
 /** 曜日の既定値: 平日(月〜金)。土日を含めたい場合は設定で選ぶ */
@@ -165,6 +168,7 @@ export function findFreeSlots(existing: Schedule[], now: Date = new Date(), opts
   const startMinute = opts.startMinute ?? 0;
   const endMinute = opts.endMinute ?? 0;
   const weekdays = opts.weekdays && opts.weekdays.length > 0 ? opts.weekdays : DEFAULT_WEEKDAYS;
+  const includeHolidays = opts.includeHolidays === true;
   if (endHour * 60 + endMinute <= startHour * 60 + startMinute) return [];
 
   const busy = existing
@@ -176,6 +180,7 @@ export function findFreeSlots(existing: Schedule[], now: Date = new Date(), opts
     const day = new Date(now);
     day.setDate(day.getDate() + dayOffset);
     if (!weekdays.includes(day.getDay())) continue; // 選択された曜日のみ
+    if (!includeHolidays && isJapaneseHoliday(day)) continue; // 祝日は既定で候補にしない
 
     const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), startHour, startMinute, 0, 0);
     const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), endHour, endMinute, 0, 0);
@@ -213,6 +218,8 @@ export interface ScheduleProposalSettings {
   endMinute: number;
   /** 候補に入れる曜日(0=日〜6=土) */
   weekdays: number[];
+  /** 祝日も候補に入れるか */
+  includeHolidays: boolean;
   /** 候補一覧の前に置く導入文（空にすると導入文なしで候補から始まる） */
   introText: string;
 }
@@ -229,6 +236,7 @@ export const DEFAULT_PROPOSAL_SETTINGS: ScheduleProposalSettings = {
   startMinute: 0,
   endMinute: 0,
   weekdays: DEFAULT_WEEKDAYS,
+  includeHolidays: false,
   introText: DEFAULT_PROPOSAL_INTRO,
 };
 
@@ -297,6 +305,7 @@ export function proposalSettingsFromUserProfile(userProfile: unknown): ScheduleP
     // 分は後から追加した項目のため、分を持たない保存済みデフォルトは0分として扱う
     startMinute: typeof raw?.startMinute === 'number' ? raw.startMinute : DEFAULT_PROPOSAL_SETTINGS.startMinute,
     endMinute: typeof raw?.endMinute === 'number' ? raw.endMinute : DEFAULT_PROPOSAL_SETTINGS.endMinute,
+    includeHolidays: typeof raw?.includeHolidays === 'boolean' ? raw.includeHolidays : DEFAULT_PROPOSAL_SETTINGS.includeHolidays,
     // 導入文も後から追加。未保存なら既定文。意図的に空にした場合は空のまま尊重する
     introText: typeof raw?.introText === 'string' ? raw.introText : DEFAULT_PROPOSAL_SETTINGS.introText,
     // 保存済みデフォルトが無い/壊れている場合は平日既定に戻す（全曜日オフでの空振りも防ぐ）
