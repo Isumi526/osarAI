@@ -41,6 +41,26 @@ export function ChatIcon({ active }: IconProps) {
   );
 }
 
+export function TaskIcon({ active }: IconProps) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor(active)} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m4 7 2 2 3.5-3.5" />
+      <path d="m4 16 2 2 3.5-3.5" />
+      <path d="M13 8h7M13 17h7" />
+    </svg>
+  );
+}
+
+// ホームのメイン導線ボタン用。ナビ用と違い色/サイズを呼び出し側で指定する
+// （ボタン内で白抜き表示するため active による色分けをしない）。
+export function ChatBubbleIcon({ size = 22, color = 'currentColor' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5h16v11H9l-4 3.5V16H4z" />
+    </svg>
+  );
+}
+
 export function SettingsIcon({ active }: IconProps) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor(active)} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

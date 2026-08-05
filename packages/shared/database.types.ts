@@ -169,6 +169,64 @@ export type Database = {
           },
         ]
       }
+      assistant_sessions: {
+        Row: {
+          accumulated: Json
+          ai_chat_id: string | null
+          created_at: string
+          id: string
+          messages: Json
+          org_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accumulated?: Json
+          ai_chat_id?: string | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          org_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accumulated?: Json
+          ai_chat_id?: string | null
+          created_at?: string
+          id?: string
+          messages?: Json
+          org_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_sessions_ai_chat_id_fkey"
+            columns: ["ai_chat_id"]
+            isOneToOne: false
+            referencedRelation: "ai_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_sessions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cron_runs: {
         Row: {
           created_at: string
@@ -655,6 +713,73 @@ export type Database = {
             foreignKeyName: "subscriptions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          customer_id: string | null
+          due_at: string | null
+          id: string
+          notes: string | null
+          org_id: string
+          owner_id: string
+          source: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          due_at?: string | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          owner_id: string
+          source?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          due_at?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          owner_id?: string
+          source?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },

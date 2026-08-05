@@ -5,6 +5,9 @@ import { registerPushIfGranted } from './lib/push.js';
 import { Login } from './screens/Login.js';
 import { Home } from './screens/Home.js';
 import { Osarai } from './screens/Osarai.js';
+import { AssistantChat } from './screens/AssistantChat.js';
+import { Tasks } from './screens/Tasks.js';
+import { CustomerList } from './screens/CustomerList.js';
 import { CustomerDetail } from './screens/CustomerDetail.js';
 import { CustomerForm } from './screens/CustomerForm.js';
 import { AiChat } from './screens/AiChat.js';
@@ -23,11 +26,14 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/osarai" element={<Osarai />} />
+          <Route path="/customers" element={<CustomerList />} />
           <Route path="/customers/new" element={<CustomerForm />} />
           <Route path="/customers/:id/edit" element={<CustomerForm />} />
           <Route path="/customers/:id" element={<CustomerDetail />} />
-          <Route path="/chat" element={<AiChat />} />
+          <Route path="/chat" element={<AssistantChat />} />
+          <Route path="/chat/legacy" element={<AiChat />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/self-osarai" element={<SelfOsarai />} />
           <Route path="/welcome" element={<Welcome />} />

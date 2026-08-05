@@ -41,15 +41,28 @@ if (!TOKEN) { console.error('✗ NOTION_TOKEN が .env にありません'); pro
 // 【安全装置】案件page_id 未設定なら即停止。フィルタなしで全プロジェクトのタスクを拾う事故を防ぐ。
 if (!PROJECT_ID) { console.error('✗ BACKLOG_PROJECT_ID が .env にありません（自分の案件page_idを設定してください）'); process.exit(1) }
 
-// 既知の案件page_id → 表示名（共用バックログDBの各プロジェクト）
-const PROJECT_NAMES = {
-  '3540ff81-c56b-802e-871d-ca995e01718f': 'SIDO',
-  '37a0ff81-c56b-81d9-a527-eebd543686c3': 'osarAI',
-  '3690ff81-c56b-8099-94dc-d196307d2b79': 'Garage Connect',
-}
+// 案件の表示名は**Notion 案件管理マスタのページタイトル**から引く（第19条: 真実は Notion にある）。
+//   ★2026-08-05 変更: 以前はここに page_id → 表示名 のハードコード表を持っていたが、
+//     同じ page_id を project-resolve.mjs が GENLINKS、ここが SIDO と別名で呼んでいた
+//     （SIDO は案件名ではなくリポ名の大文字化で、案件管理マスタに存在しない名前）。
+//     .env に表示名を持たせる案も検討したが、それは同じ文字列を3展開先に複製することになり
+//     突き合わせ不能な写像が増えるので採らなかった（plans/20260805-project-registry.md）。
+//   取得に失敗しても /run は止めない（表示は本質ではない）。従来と同じ形にフォールバックする。
 const norm = (id) => (id || '').replace(/-/g, '')
-const PROJECT_NAME = Object.entries(PROJECT_NAMES).find(([id]) => norm(id) === norm(PROJECT_ID))?.[1]
-  || `(page_id …${norm(PROJECT_ID).slice(-6)})`
+const FALLBACK_NAME = `(page_id …${norm(PROJECT_ID).slice(-6)})`
+async function fetchProjectName() {
+  try {
+    const r = await fetch(`https://api.notion.com/v1/pages/${PROJECT_ID}`, {
+      headers: { Authorization: `Bearer ${TOKEN}`, 'Notion-Version': '2022-06-28' },
+    })
+    if (!r.ok) return FALLBACK_NAME
+    const j = await r.json()
+    const titleProp = Object.values(j.properties || {}).find((p) => p?.type === 'title')
+    const name = (titleProp?.title || []).map((t) => t.plain_text).join('').trim()
+    return name || FALLBACK_NAME
+  } catch { return FALLBACK_NAME }
+}
+const PROJECT_NAME = await fetchProjectName()
 
 const STATUS_PROP   = 'ステータス'
 const PRIORITY_PROP = '優先順位'
