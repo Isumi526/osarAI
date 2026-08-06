@@ -36,7 +36,17 @@ model: sonnet
 2. **ローカル環境を起動**（dev コードをローカルで触るため・具体値は CLAUDE.md「Pipeline設定」LOCAL_STACK / APP_LAYOUT_NOTES）:
    - Supabase ローカル: 落ちていれば `supabase start`（ポートは LOCAL_STACK の設定に従う）。
    - **web（主）**: {{DEV_URL}}（未起動なら `pnpm dev` 等＝APP_LAYOUT の起動コマンド）。管理画面・顧客導線とも**原則ここ＝ブラウザで確認**する。
-   - **local接続assert**（本番を誤って触らない）: 配信される Supabase URL が **local（LOCAL_STACK のポート）**を指し、**本番 ref（CLAUDE.md「Pipeline設定」記載の本番Supabase ref）ではない**ことを確認（`curl -s {{DEV_URL}}/ | grep -oE '<localポート>|<本番ref>'`）。本番 ref を検出したら停止し `.env.local` で local 起動し直す。
+   - **local接続assert**（本番を誤って触らない）: 配信される Supabase URL が **local（LOCAL_STACK のポート）**を指し、**本番 ref（CLAUDE.md「Pipeline設定」記載の本番Supabase ref）ではない**ことを確認する。本番 ref を検出したら停止し `.env.local` で local 起動し直す。
+     - **🔒 `curl -s {{DEV_URL}}/ | grep` は使わない**（2026-08-06 是正）。Vite/Nuxt の dev は
+       `/` にシェルHTMLしか返さず、env はモジュール変換時に入るため、**本番を向いていても
+       grep は何も返さない**。「何も出ない＝安全」と読めてしまう空振りの安全装置だった。
+     - **エントリモジュールを叩く**: `grep -rl VITE_SUPABASE_URL <app>/src | head -1` で
+       env を参照するファイルを見つけ、そのパスを dev サーバから取得して grep する
+       （例: `curl -s {{DEV_URL}}/src/main.ts | grep -oE '<localポート>|<本番ref>'`）。
+     - **🔒 fail-closed**: grep が **localポートも本番refも返さなかったら「安全」と判断しない**。
+       「接続先を確認できなかった」として**停止する**（第22条: 0件と測れないを混同しない）。
+       実例: sido の `apps/admin/.env` は本番 ref を持ち、`.env.local` が local で上書きしている。
+       `.env.local` が消えれば本番を向くが、旧 assert はどちらの場合も無出力だった。
    - **ブランチ確認**: レビュー対象のコードが今のローカルに居るか。基本 `dev` を見る（`git branch --show-current` が dev か、無ければ `git checkout dev`）。作業中の差分があれば退避を促す。
      - **🔒 緊急（`優先順位=緊急`）は dev ではなく hotfix を見る**: 📋レビューダイジェストの
        「緊急hotfix・ブランチ=`hotfix/<slug>`」を読み、`git checkout hotfix/<slug>` してからレビューする。
