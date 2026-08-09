@@ -26,7 +26,7 @@ model: sonnet
 - `{{PROD_BRANCH}}` = 本番、`dev` = 統合用。本番 Supabase ref・本番URL `{{PROD_URL}}` は CLAUDE.md「Pipeline設定」記載。
 - 本番反映は dev → PR → `{{PROD_BRANCH}}`。**CCは `{{PROD_BRANCH}}` へ直接 push しない**。Merge は人がタイミングを明示承認した時だけ CCが `gh pr merge`（ブランチ保護＝gh認証経由・人承認前提）。
 - **デプロイは `{{DEPLOY_TRIGGER}}` に従う**（上記）。`manual-cli` は Merge と本番デプロイが別ステップ（手順6・手順7）。`auto-on-merge` は Merge＝デプロイ（手順7はスキップ）。dev は preview/自動反映なし → 品質担保は **ローカルE2E全green＋独立AIレビュー＋RLS監査＋本番スモーク**。
-- **緊急hotfix（`{{PROD_BRANCH}}`派生）の独立ship**：/run の緊急レーンが作った本番待ちのうち、📋に「**緊急hotfix・ブランチ=`hotfix/<slug>`（main派生・未push）**」と記され、ローカルに `hotfix/*` ブランチがあるものは、**dev を経由せず独立してshipする**（§緊急hotfix独立ship）。通常の本番待ち（dev上）は従来どおり dev→PR→`{{PROD_BRANCH}}`。
+- **緊急も dev から ship する**（2026-08-09・T26 で独立ship を廃止）。本番待ちは全部 dev 上にあるので、経路は1本＝ dev→PR→`{{PROD_BRANCH}}`。
 - supabase db push は絶対禁止。DB変更は正式なmigration（追加のみ・後方互換）でのみ。
 - **本番migration適用は、人の明示承認＋追加のみDDLに限りCCが psql で実行可**（`.env` の `SUPABASE_PROD_DB_URL`。値はログ/チャットに残さない）。破壊的を1つでも含むなら人手のSQLエディタ実行＋事前バックアップ（CCは実行しない）。適用は **本番反映（Merge or デプロイ）より前** に行う。
 - **リスク別の ship 手数（スモークの深さをリスクで変える）**：差分に含まれる最大リスクで判断。
@@ -40,7 +40,7 @@ model: sonnet
 1. プリフライト（読み取りのみ・自動／git状態・dev最新化）:
    - `git log --oneline origin/{{PROD_BRANCH}}..origin/dev` で「本番に乗る差分」を一覧化。
    - 差分に DB migration / webhook・cron・edge functions 変更 / 破壊的変更 が含まれるか分類して提示。
-   - 本番待ちのNotionタスクを一覧化（`node --env-file=.env scripts/next-target.mjs --board` の「本番待ち」グループ）し、今回どれが反映されるか対応づけ。**緊急hotfix（hotfix/* ・main派生・未push）が本番待ちにあれば §緊急hotfix独立ship へ**。
+   - 本番待ちのNotionタスクを一覧化（`node --env-file=.env scripts/next-target.mjs --board` の「本番待ち」グループ）し、今回どれが反映されるか対応づけ。（緊急も dev 上にあるので特別扱いは不要・T26）。
    - 後方互換か・ロールバック可能かのリスク要約を出す。
    - dev を最新化： `git switch dev && git push origin dev`。
 
@@ -107,36 +107,11 @@ model: sonnet
    - 続けて /run のループに入り、次のdev作業を自走再開する。
    - 異常・人ボール待ちが残る場合はここで停止して報告（/run には入らない）。
 
-# §緊急hotfix独立ship（`hotfix/*`・`{{PROD_BRANCH}}`派生・dev堆積と無関係に出す）
+# §緊急hotfix独立ship — **廃止（2026-08-09・T26）**
+`優先順位=緊急` も dev から ship する。main派生 `hotfix/*` を dev 経由せず出す経路は無くなった。
+理由は `DECISIONS.md` T26（分離の前提がフラグ方式で解け、逆に統合して初めて出る不具合が
+ship 直前まで隠れる／機能単位で通しテストできない／緊急ほど古い道具でレビューすることになる、
+というコストが実測された）。
 
-/run 緊急レーンが作った本番待ち（📋に「緊急hotfix・ブランチ=`hotfix/<slug>`」と記載・ローカルに `hotfix/*` あり）を、**dev を経由せず独立してshipする**：
-1. プリフライト（手順1）＋ migrationチェック（手順2）＋ RLS監査（手順2.5）＋ 独立AIレビュー（手順4.5。緊急でも🔴は `--runs 3`）。block/🔴LEAK は HALT。
-2. **push**：`git push origin hotfix/<slug>`。
-3. **PR作成**：`gh pr create --base {{PROD_BRANCH}} --head hotfix/<slug> --title "hotfix: <要約>" --body "<緊急理由／migration有無／RLS・独立レビュー結果／スモーク観点>"`。
-4. **★migration適用**（追加のみ・手順5・本番反映前）。
-5. **★Merge承認**（手順6・人の「今Mergeして」で `gh pr merge`）。
-6. **★本番デプロイ**（`manual-cli` のみ手順7・人の「deployして」で `{{DEPLOY_CMD}}`。`auto-on-merge` は手順5の Merge で反映済み）。
-7. **スモーク**（手順8・緊急は🔴相当で実機能まで・自分宛隔離）。
+**廃止前に作られた `hotfix/*` が残っていたら**、dev にマージしてから通常の dev→PR→main で出す。
 
-厳守:
-
-- **`{{PROD_BRANCH}}` へ直接 push しない**。Merge は **人がタイミングを明示承認した時のみ** CCが `gh pr merge`（未指定なら待機）。
-- **`manual-cli` の本番デプロイ（`{{DEPLOY_CMD}}`）は人の明示承認後にのみ** CC が実行。`auto-on-merge` は Merge承認＝デプロイ。migration（追加のみ）適用は本番反映より前。
-- migration適用 / Merge / 本番デプロイ は必ず人の承認を取る。承認なしに実行しない。
-- **migration適用は「追加のみDDL」に限る。破壊的を1つでも含むならCCは適用せず、人手＋事前バックアップを促して停止**。
-- **RLS監査(2.5)で🔴LEAK・独立AIレビュー(4.5)で verdict=block の間は本番反映に進まない**（HALT・`ship-blocked`）。pass でも本番反映は人間の confirm 後（`ship-ready`）。kind を `ship承認` と混線させない。
-- preview は使わない。品質担保はローカルE2E全green＋独立AIレビュー＋RLS監査＋本番スモーク（**ハードリロード必須**）。
-- supabase db push は絶対にしない。`SUPABASE_PROD_DB_URL` の値はログ/チャットに残さない。
-- **本番スモークの外部送信は🔴時のみ・自テナント自分宛・隔離**。通常は認可ガード疎通（401/400）で実送信ゼロ。他テナント・実顧客への配信は絶対にしない。
-- **停止＝LINE通知（例外なし）**：人の承認待ちで止まる時は直前に必ず notify-humanball.mjs（best-effort）。提示・`--detail` は CLAUDE.md「人ボール報告フォーマット（必須）」（結論先頭・A/B・推奨1行、LINE は1〜2行）に従う。
-- スモークで異常があれば即停止して報告。
-- .env はコミットしない。
-
----
-
-## Phase 5 改修（2026-07-24）— ロールバック先確保・時間帯プロンプト・osarAI再検討
-- **起動後は本番反映まで一括（T14）**: /ship 起動＝人がタイミングを承認した文脈。T14#1 の範囲（追加のみmigration・CI経由deploy・可逆Merge・verdict=pass）は再承認を求めず自動で進む。T14#2（破壊的/不可逆/secret値）は停止＋通知。
-- **ロールバック手順を先に確保**: 本番反映の**前に**切り戻し手順（前タグ/前デプロイへの復帰・migration の逆手順の有無）を明示し、確保できなければ進めない。
-- **確認できない時間帯はプロンプト**: 本人が即応できない時間帯（深夜等）の本番反映は、実行前に「今進めてよいか」をプロンプトで確認する。
-- **osarAI 非配置理由の解消を再検討（メモ）**: osarAI に ship.md を置かない理由は「本番リリース基盤未確立」。基盤が整い次第、配置を再検討する（現状は非配置維持）。
-- 摩擦は `log-friction.mjs`（型・発生元=/ship）。
