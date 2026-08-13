@@ -35,6 +35,13 @@ coverage/
 # /run dispatcher local dedup state (machine-local, not shared across envs)
 scripts/.dispatcher-state.json
 
+# terraform (state / tfvars は秘密情報を含むためコミットしない。
+# .terraform.lock.hcl は意図的に追跡対象＝プロバイダ版を固定する)
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+
 # playwright
 test-results/
 playwright-report/
