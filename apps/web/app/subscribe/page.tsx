@@ -7,13 +7,13 @@ import { getStripe } from '@/lib/stripe';
 import { PlanPicker } from './PlanPicker';
 
 // checkout route(A4対策)と同じ検証: コードは特定プラン向け(Coupon.metadata.plan)。
-// ここではphase1のStandard固定表示のためstandard向けクーポンのみ解決する。
+// ここではphase1のLight固定表示のためlight向けクーポンのみ解決する。
 async function resolveAmountOff(code: string): Promise<number | null> {
   try {
     const stripe = getStripe();
     const found = await stripe.promotionCodes.list({ code, active: true, limit: 1 });
     const pc = found.data[0];
-    if (!pc || pc.coupon.metadata?.plan !== 'standard') return null;
+    if (!pc || pc.coupon.metadata?.plan !== 'light') return null;
     return pc.coupon.amount_off ?? null;
   } catch {
     return null;

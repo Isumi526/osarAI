@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { PLANS, type PlanId } from '@osarai/shared';
 import { Spinner } from '@/components/Spinner';
 
-// phase1はStandard単一プランのみ表示(Light/Proはphase2以降)。
+// phase1はLight単一プランのみ表示(Standard/Proはphase2以降)。
 // PLANS定義・Stripe Price・checkout APIは変更せず、UIの選択肢のみ絞る。
-const ORDER: PlanId[] = ['standard'];
+const ORDER: PlanId[] = ['light'];
 
 export function PlanPicker({ code, amountOff }: { code: string | null; amountOff: number | null }) {
   const [loading, setLoading] = useState<PlanId | null>(null);
