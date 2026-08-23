@@ -26,7 +26,7 @@ function isIOS(): boolean {
   return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 }
 
-export function AddToHomeScreenBanner() {
+export function AddToHomeScreenBanner({ style }: { style?: React.CSSProperties }) {
   const [visible, setVisible] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null);
@@ -86,6 +86,7 @@ export function AddToHomeScreenBanner() {
         gap: 12,
         alignItems: 'flex-start',
         textAlign: 'left',
+        ...style,
       }}
     >
       {/* スマホ＋プラスの簡易アイコン（自作SVG・ライセンス懸念なし） */}

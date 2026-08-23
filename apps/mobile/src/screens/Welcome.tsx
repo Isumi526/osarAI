@@ -123,11 +123,7 @@ export function Welcome() {
 
         {/* 最終ページでは「ホーム画面に追加」を案内する（ブラウザ利用者向け・
             ネイティブ/追加済み/非表示済みでは自動的に出ない） */}
-        {isLast && (
-          <div style={{ width: '100%', marginTop: 24 }}>
-            <AddToHomeScreenBanner />
-          </div>
-        )}
+        {isLast && <AddToHomeScreenBanner style={{ width: '100%', marginTop: 24 }} />}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>

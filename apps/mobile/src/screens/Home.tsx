@@ -6,6 +6,7 @@ import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { ChatBubbleIcon } from '../components/NavIcons.js';
+import { AddToHomeScreenBanner } from '../components/AddToHomeScreenBanner.js';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
 
@@ -74,6 +75,10 @@ export function Home() {
           ご利用にはお申し込みが必要です。登録・プラン変更はWebから行えます（14日無料トライアル）。
         </div>
       )}
+
+      {/* ホーム画面への追加(PWA)案内。ブラウザ利用者向け。ネイティブ/追加済み/
+          「今後表示しない」を押した場合は何も描画しない(空の余白も出ない)。 */}
+      <AddToHomeScreenBanner style={{ margin: '12px 0' }} />
 
       {/* 集計ブロックは読み込み前から表示しておき、読み込み中は数値を「-」にする
           (議事録要望: 非表示→いきなり表示だと鬱陶しいため)。 */}
