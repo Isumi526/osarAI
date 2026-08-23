@@ -1,0 +1,18 @@
+# Vercelデプロイ時にアップロードしないもの（.gitignoreの .next-*/ をVercelのignore
+# パーサが取りこぼし、e2e/review用の巨大ビルド残骸をアップロードして詰まる問題の対策）。
+# web/mobile とも リポジトリルートから deploy し rootDirectory で各app配下をビルドするため、
+# ビルドに必要な packages/ apps/web apps/mobile のソースは除外しない。
+node_modules
+.git
+**/.next
+.next-*
+**/.next-*
+apps/web/.next-e2e
+apps/web/.next-review
+apps/web/test-results
+apps/web/playwright-report
+apps/mobile/dist
+apps/mobile/ios
+apps/mobile/android
+**/*.log
+**/tsconfig.tsbuildinfo
