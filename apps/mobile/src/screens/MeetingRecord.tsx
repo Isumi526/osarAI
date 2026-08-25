@@ -1,13 +1,14 @@
-// 会議録音（T1・PC透明ローカル録音）。Zoom/Meet を開いたまま、相手にボットを見せず、
-// タブ/画面のシステム音声（相手）＋マイク（自分）を録音 → 文字起こし → 3データ抽出 →
-// 既存 ReviewCard で承認 → 登録。デスクトップ Chrome/Edge 向け（スマホ経路は T2）。
+// 会議録音。相手にボットを見せず端末側で録音 → 文字起こし → 3データ抽出 → ReviewCard承認 → 登録。
+// - PC(T1): getDisplayMedia でタブ/画面のシステム音声(相手)＋マイク(自分)を分離録音（透明）。
+// - スマホ(T2): getDisplayMedia 非対応のためスピーカー再生＋マイクで室内録音（イヤホンは外す）。
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
 import { ReviewCard } from '../components/ReviewCard.js';
 import { useMeetingRecorder } from '../hooks/useMeetingRecorder.js';
-import { uploadMeetingAudio, ingestMeeting, commitMeeting } from '../lib/meeting.js';
+import { useRecorder } from '../hooks/useRecorder.js';
+import { uploadMeetingAudio, ingestMeeting, commitMeeting, type MeetingCapture } from '../lib/meeting.js';
 import type { Proposals } from '../lib/assistant.js';
 
 type Phase = 'idle' | 'recording' | 'processing' | 'reviewing' | 'committed';
@@ -16,7 +17,10 @@ const EMPTY: Proposals = { people: [], schedules: [], tasks: [], self_notes: [],
 
 export function MeetingRecord() {
   const navigate = useNavigate();
-  const recorder = useMeetingRecorder();
+  const pcRec = useMeetingRecorder();
+  const micRec = useRecorder();
+  // PCでシステム音声を録れるなら透明モード。無理ならスマホのスピーカー録音にフォールバック。
+  const mode: 'pc' | 'mobile' | 'none' = pcRec.supported ? 'pc' : micRec.supported ? 'mobile' : 'none';
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -41,16 +45,33 @@ export function MeetingRecord() {
 
   async function onStart() {
     setError(null);
-    const ok = await recorder.start();
-    if (!ok) {
-      setError(recorder.error);
+    if (mode === 'pc') {
+      const ok = await pcRec.start();
+      if (!ok) {
+        setError(pcRec.error);
+        return;
+      }
+    } else if (mode === 'mobile') {
+      await micRec.start();
+      if (micRec.error) {
+        setError(micRec.error);
+        return;
+      }
+    } else {
       return;
     }
     setPhase('recording');
   }
 
   async function onStop() {
-    const rec = await recorder.stop();
+    // モードごとに録音を止めて、共通の {blob, mimeType, durationSec} に正規化する。
+    let rec: { blob: Blob; mimeType: string; durationSec: number } | null = null;
+    if (mode === 'pc') {
+      rec = await pcRec.stop();
+    } else {
+      const blob = await micRec.stop();
+      if (blob) rec = { blob, mimeType: blob.type || 'audio/webm', durationSec: elapsed };
+    }
     if (!rec) {
       setError('録音を取得できませんでした。もう一度お試しください。');
       setPhase('idle');
@@ -59,11 +80,12 @@ export function MeetingRecord() {
     setPhase('processing');
     setError(null);
     try {
+      const capture: MeetingCapture = mode === 'pc' ? 'pc_local' : 'mobile_speaker';
       const path = await uploadMeetingAudio(rec.blob, rec.mimeType);
       const res = await ingestMeeting({
         recordingPath: path,
         mimeType: rec.mimeType,
-        capture: 'pc_local',
+        capture,
         durationSec: rec.durationSec,
       });
       setMeetingId(res.meetingId);
@@ -109,32 +131,48 @@ export function MeetingRecord() {
           <p style={{ color: 'var(--color-danger, #c0392b)', fontSize: 14, margin: 0 }}>{error}</p>
         )}
 
-        {phase === 'idle' && (
+        {phase === 'idle' && mode === 'none' && (
+          <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+            <strong>この端末では会議録音を使えません</strong>
+            <p style={{ fontSize: 14, color: 'var(--color-text-muted)', marginTop: 8 }}>
+              マイクの使えるブラウザ（パソコンの Chrome / Edge、またはスマホ）でお試しください。
+            </p>
+          </section>
+        )}
+
+        {phase === 'idle' && mode === 'pc' && (
           <>
-            {!recorder.supported ? (
-              <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
-                <strong>この端末では会議録音を使えません</strong>
-                <p style={{ fontSize: 14, color: 'var(--color-text-muted)', marginTop: 8 }}>
-                  会議の音声録音は、パソコンの <b>Chrome / Edge</b> でご利用ください。
-                  Safari やスマホ・iPad のブラウザは、相手の音声の取り込みに対応していません
-                  （スマホでの録音は別途対応予定です）。
-                </p>
-              </section>
-            ) : (
-              <>
-                <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
-                  <strong>使い方</strong>
-                  <ol style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: '8px 0 0', paddingLeft: 18, display: 'grid', gap: 4 }}>
-                    <li>Zoom / Meet を開いたまま「録音を開始」を押す</li>
-                    <li>共有ダイアログで会議のタブ（または画面）を選び、<b>「タブの音声も共有」にチェック</b></li>
-                    <li>会議が終わったら「停止して解析」。相手にはボットも通知も一切表示されません</li>
-                  </ol>
-                </section>
-                <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
-                  録音を開始
-                </button>
-              </>
-            )}
+            <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+              <strong>使い方（パソコン）</strong>
+              <ol style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: '8px 0 0', paddingLeft: 18, display: 'grid', gap: 4 }}>
+                <li>Zoom / Meet を開いたまま「録音を開始」を押す</li>
+                <li>共有ダイアログで会議のタブ（または画面）を選び、<b>「タブの音声も共有」にチェック</b></li>
+                <li>会議が終わったら「停止して解析」。相手にはボットも通知も一切表示されません</li>
+              </ol>
+            </section>
+            <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
+              録音を開始
+            </button>
+          </>
+        )}
+
+        {phase === 'idle' && mode === 'mobile' && (
+          <>
+            <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+              <strong>使い方（スマホ・タブレット）</strong>
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
+                スマホでは相手の声を直接取り込めないため、<b>イヤホンを外して端末のスピーカーで会議を再生</b>し、
+                室内の音をマイクで録音します。
+              </p>
+              <ol style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: '8px 0 0', paddingLeft: 18, display: 'grid', gap: 4 }}>
+                <li>イヤホンを外し、Zoom / Meet を<b>スピーカー</b>にする</li>
+                <li>「録音を開始」を押す（マイクの許可を求められたら許可）</li>
+                <li>会議が終わったら「停止して解析」</li>
+              </ol>
+            </section>
+            <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
+              録音を開始
+            </button>
           </>
         )}
 
