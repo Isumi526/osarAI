@@ -16,6 +16,7 @@ import { Settings } from './screens/Settings.js';
 import { SchedulePage } from './screens/Schedule.js';
 import { SelfOsarai } from './screens/SelfOsarai.js';
 import { Welcome } from './screens/Welcome.js';
+import { MeetingRecord } from './screens/MeetingRecord.js';
 import { BottomNav, BOTTOM_NAV_HEIGHT, useBottomNavVisible } from './components/BottomNav.js';
 import { NavGuardProvider } from './components/NavGuard.js';
 
@@ -32,6 +33,7 @@ function AppRoutes() {
           <Route path="/customers/:id/edit" element={<CustomerForm />} />
           <Route path="/customers/:id" element={<CustomerDetail />} />
           <Route path="/chat" element={<AssistantChat />} />
+          <Route path="/meeting" element={<MeetingRecord />} />
           <Route path="/chat/legacy" element={<AiChat />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/tasks" element={<Tasks />} />
