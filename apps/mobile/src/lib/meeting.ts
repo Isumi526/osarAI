@@ -12,6 +12,7 @@ export type MeetingCapture = 'pc_local' | 'mobile_speaker' | 'bot';
 export interface IngestResponse {
   meetingId: string;
   transcript: string;
+  minutes: string | null;
   proposals: Proposals | null;
   reused?: boolean;
 }
@@ -46,7 +47,11 @@ export async function ingestMeeting(input: {
   return apiPost<IngestResponse>('/api/meeting/ingest', input);
 }
 
-/** 確認カードで編集した最終版を確定登録する。 */
-export async function commitMeeting(input: { meetingId: string; proposals: Proposals }): Promise<MeetingCommitResponse> {
+/** 確認カードで編集した最終版を確定登録する（議事録も顧客の履歴に残す）。 */
+export async function commitMeeting(input: {
+  meetingId: string;
+  proposals: Proposals;
+  minutes?: string | null;
+}): Promise<MeetingCommitResponse> {
   return apiPost<MeetingCommitResponse>('/api/meeting/commit', input);
 }

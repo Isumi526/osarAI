@@ -64,9 +64,12 @@ export async function commitProposals(args: {
   userId: string;
   proposals: Proposals;
   transcript: string;
+  /** 会議の議事録（T3）。あれば主たる相手の履歴(interaction)に残してタイムラインで読めるようにする。 */
+  minutes?: string | null;
 }): Promise<CommitResult> {
-  const { supabase, orgId, userId, proposals, transcript } = args;
+  const { supabase, orgId, userId, proposals, transcript, minutes } = args;
   const now = new Date().toISOString();
+  let minutesAttached = false;
 
   // 既存つながりを一度だけ引き、新規作成時の重複（表記揺れ）を防ぐ照合に使う。
   const { data: existing } = await supabase
@@ -128,6 +131,9 @@ export async function commitProposals(args: {
       needs: person.needs ?? [],
       next_actions: person.next_actions ?? [],
     };
+    // 議事録は主たる相手（最初の1人）の履歴にだけ残す（全員に重複させない）。
+    const summaryWithMinutes = !minutesAttached && minutes ? { ...aiSummary, minutes } : aiSummary;
+    if (!minutesAttached && minutes) minutesAttached = true;
     const [, interaction] = await Promise.all([
       recomputeTemperature(supabase, customerId, now),
       supabase
@@ -139,7 +145,7 @@ export async function commitProposals(args: {
           source: 'ai_dialogue',
           type: 'text',
           raw_text: transcript,
-          ai_summary: aiSummary as never,
+          ai_summary: summaryWithMinutes as never,
           met_at: now,
         })
         .select('id')

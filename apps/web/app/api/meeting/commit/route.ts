@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (!ctx) return json({ error: 'unauthenticated' }, 401);
   const { supabase, user } = ctx;
 
-  const body = (await req.json().catch(() => ({}))) as { meetingId?: string; proposals?: Proposals };
+  const body = (await req.json().catch(() => ({}))) as { meetingId?: string; proposals?: Proposals; minutes?: string | null };
   const meetingId = (body.meetingId ?? '').trim();
   const proposals = body.proposals;
   if (!meetingId) return json({ error: 'meetingId required' }, 400);
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
       userId: user.id,
       proposals,
       transcript: rec.transcript ?? '',
+      minutes: body.minutes ?? null,
     });
   } catch (e) {
     return json({ error: 'commit_failed', detail: String(e) }, 500);
