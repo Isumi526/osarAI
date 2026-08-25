@@ -328,7 +328,7 @@ async function deleteGeminiFile(name: string): Promise<void> {
 export async function geminiTranscribeLong(
   bytes: Uint8Array,
   mimeType: string,
-  opts: { model?: string; language?: string; cleanFillers?: boolean } = {},
+  opts: { model?: string; language?: string; cleanFillers?: boolean; channelSelfLeft?: boolean } = {},
 ): Promise<string> {
   const model = opts.model ?? GEMINI_MODEL_LITE;
   const cleanup =
@@ -336,9 +336,15 @@ export async function geminiTranscribeLong(
       ? ''
       : `「えーと」「あー」「その」「なんか」のようなフィラーや、言い直しで生じた不要な断片は取り除いてください。` +
         `ただし話し言葉の自然さは保ち、内容の要約・言い換え・補完はしないでください（言っていないことを足さない）。`;
+  // 話者ラベル付け（T4）。PC録音は2chステレオ（左=自分/右=相手）なので、その前提で
+  // 「自分」と「相手1/相手2…」を割り当てさせる。それ以外は話者A/B/Cで分離のみ。
+  const diarization = opts.channelSelfLeft
+    ? `この音声は2chステレオで、左チャンネルが録音者本人（あなたの利用者=「自分」）、右チャンネルが相手です。` +
+      `話者が替わったら改行し、行頭に「自分:」または相手が複数なら「相手1:」「相手2:」のようにラベルを付けてください。`
+    : `複数人が話している場合は、話者が替わったら改行し、可能なら行頭に「話者A:」「話者B:」のように話者ラベルを付けてください（誰かは特定しなくてよい）。`;
   const instruction =
-    `次の会議音声を${opts.language ?? '日本語'}で文字起こししてください。複数人が話している場合は、` +
-    `話者が替わったら改行し、可能なら行頭に「話者A:」「話者B:」のように話者ラベルを付けてください（誰かは特定しなくてよい）。` +
+    `次の会議音声を${opts.language ?? '日本語'}で文字起こししてください。` +
+    diarization +
     cleanup +
     `要約や解説は一切付けず、発話内容のテキストだけを返してください。`;
 

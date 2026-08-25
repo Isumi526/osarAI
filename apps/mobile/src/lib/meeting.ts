@@ -9,11 +9,17 @@ const BUCKET = 'recordings';
 
 export type MeetingCapture = 'pc_local' | 'mobile_speaker' | 'bot';
 
+export interface Speaker {
+  label: string;
+  isSelf: boolean;
+}
+
 export interface IngestResponse {
   meetingId: string;
   transcript: string;
   minutes: string | null;
   proposals: Proposals | null;
+  speakers: Speaker[];
   reused?: boolean;
 }
 
@@ -52,6 +58,8 @@ export async function commitMeeting(input: {
   meetingId: string;
   proposals: Proposals;
   minutes?: string | null;
+  /** 話者ラベル → 実名の割当（T4）。transcript/議事録のラベルを実名に置き換えて保存する。 */
+  speakerNames?: Record<string, string>;
 }): Promise<MeetingCommitResponse> {
   return apiPost<MeetingCommitResponse>('/api/meeting/commit', input);
 }

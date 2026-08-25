@@ -8,7 +8,7 @@ import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
 import { ReviewCard } from '../components/ReviewCard.js';
 import { useMeetingRecorder } from '../hooks/useMeetingRecorder.js';
 import { useRecorder } from '../hooks/useRecorder.js';
-import { uploadMeetingAudio, ingestMeeting, commitMeeting, type MeetingCapture } from '../lib/meeting.js';
+import { uploadMeetingAudio, ingestMeeting, commitMeeting, type MeetingCapture, type Speaker } from '../lib/meeting.js';
 import type { Proposals } from '../lib/assistant.js';
 
 type Phase = 'idle' | 'recording' | 'processing' | 'reviewing' | 'committed';
@@ -27,6 +27,8 @@ export function MeetingRecord() {
   const [proposals, setProposals] = useState<Proposals>(EMPTY);
   const [minutes, setMinutes] = useState<string | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
   const [committing, setCommitting] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -91,6 +93,10 @@ export function MeetingRecord() {
       setMeetingId(res.meetingId);
       setProposals(res.proposals ?? EMPTY);
       setMinutes(res.minutes);
+      setSpeakers(res.speakers ?? []);
+      const initNames: Record<string, string> = {};
+      for (const s of res.speakers ?? []) initNames[s.label] = s.isSelf ? '自分' : '';
+      setSpeakerNames(initNames);
       setPhase('reviewing');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -108,7 +114,7 @@ export function MeetingRecord() {
     setCommitting(true);
     setError(null);
     try {
-      await commitMeeting({ meetingId, proposals, minutes });
+      await commitMeeting({ meetingId, proposals, minutes, speakerNames });
       setPhase('committed');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -199,20 +205,55 @@ export function MeetingRecord() {
         )}
 
         {phase === 'reviewing' && (
-          <ReviewCard
-            proposals={proposals}
-            setProposals={setProposals}
-            committing={committing}
-            onCommit={onCommit}
-            onBackToChat={() => {
-              setPhase('idle');
-              setProposals(EMPTY);
-              setMinutes(null);
-              setMeetingId(null);
-            }}
-            backLabel="録り直す"
-            minutes={minutes}
-          />
+          <>
+            {speakers.length > 0 && (
+              <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, display: 'grid', gap: 8 }}>
+                <div>
+                  <strong>話者</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                    誰の発言かを割り当てると、議事録や履歴が実名で残ります。
+                  </p>
+                </div>
+                {speakers.map((s) => (
+                  <label key={s.label} style={{ display: 'grid', gridTemplateColumns: '72px 1fr', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{s.label}</span>
+                    {s.isSelf ? (
+                      <span style={{ fontSize: 14, padding: '8px 0' }}>自分</span>
+                    ) : (
+                      <input
+                        list="meeting-people"
+                        value={speakerNames[s.label] ?? ''}
+                        onChange={(e) => setSpeakerNames((m) => ({ ...m, [s.label]: e.target.value }))}
+                        placeholder="お名前（相手）"
+                        style={{ padding: 8, fontSize: 14 }}
+                      />
+                    )}
+                  </label>
+                ))}
+                <datalist id="meeting-people">
+                  {proposals.people.map((p, i) => (
+                    <option key={i} value={p.name} />
+                  ))}
+                </datalist>
+              </section>
+            )}
+            <ReviewCard
+              proposals={proposals}
+              setProposals={setProposals}
+              committing={committing}
+              onCommit={onCommit}
+              onBackToChat={() => {
+                setPhase('idle');
+                setProposals(EMPTY);
+                setMinutes(null);
+                setMeetingId(null);
+                setSpeakers([]);
+                setSpeakerNames({});
+              }}
+              backLabel="録り直す"
+              minutes={minutes}
+            />
+          </>
         )}
 
         {phase === 'committed' && (

@@ -74,6 +74,7 @@ export async function POST(req: Request) {
         transcript: existingRec.transcript ?? '',
         minutes: existingRec.minutes ?? null,
         proposals: existingRec.proposals ?? null,
+        speakers: parseSpeakers(existingRec.transcript ?? ''),
         reused: true,
       },
       200,
@@ -109,14 +110,16 @@ export async function POST(req: Request) {
   if (dlErr || !blob) return fail(`音声の取得に失敗しました: ${dlErr?.message ?? 'not found'}`, 404);
   const bytes = new Uint8Array(await blob.arrayBuffer());
 
-  // --- 長尺文字起こし（Files API） ---
+  // --- 長尺文字起こし（Files API・話者ラベル付き） ---
   let transcript: string;
   try {
-    transcript = await geminiTranscribeLong(bytes, mimeType);
+    // PC録音は2chステレオ（左=自分/右=相手）なので self/other を割り当てさせる（T4）。
+    transcript = await geminiTranscribeLong(bytes, mimeType, { channelSelfLeft: capture === 'pc_local' });
   } catch (e) {
     return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
   }
   if (!transcript) return fail('文字起こし結果が空でした', 502);
+  const speakers = parseSpeakers(transcript);
 
   // --- 議事録（ペラ一）を生成（T3・失敗しても致命ではない） ---
   let minutes: string | null = null;
@@ -191,7 +194,19 @@ export async function POST(req: Request) {
     })
     .eq('id', meetingId);
 
-  return json({ meetingId, transcript, minutes, proposals }, 200);
+  return json({ meetingId, transcript, minutes, proposals, speakers }, 200);
+}
+
+/** 文字起こしの行頭ラベルから話者ロスターを作る（T4）。「自分」は isSelf=true。 */
+function parseSpeakers(transcript: string): { label: string; isSelf: boolean }[] {
+  const seen = new Map<string, boolean>();
+  for (const line of transcript.split('\n')) {
+    const m = /^\s*(自分|相手\s*\d*|話者\s*[A-Za-z0-9]+)\s*[:：]/.exec(line);
+    if (!m) continue;
+    const label = m[1]!.replace(/\s+/g, '');
+    seen.set(label, label === '自分');
+  }
+  return [...seen.entries()].map(([label, isSelf]) => ({ label, isSelf }));
 }
 
 function json(payload: unknown, status: number) {
