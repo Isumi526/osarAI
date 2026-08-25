@@ -372,6 +372,88 @@ export type Database = {
           },
         ]
       }
+      meeting_recordings: {
+        Row: {
+          audio_url: string | null
+          capture: string
+          committed_interaction_ids: Json
+          consent_ack: boolean
+          created_at: string
+          customer_id: string | null
+          duration_sec: number | null
+          error: string | null
+          id: string
+          mime_type: string | null
+          minutes: string | null
+          org_id: string
+          proposals: Json | null
+          status: string
+          transcript: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audio_url?: string | null
+          capture?: string
+          committed_interaction_ids?: Json
+          consent_ack?: boolean
+          created_at?: string
+          customer_id?: string | null
+          duration_sec?: number | null
+          error?: string | null
+          id?: string
+          mime_type?: string | null
+          minutes?: string | null
+          org_id: string
+          proposals?: Json | null
+          status?: string
+          transcript?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audio_url?: string | null
+          capture?: string
+          committed_interaction_ids?: Json
+          consent_ack?: boolean
+          created_at?: string
+          customer_id?: string | null
+          duration_sec?: number | null
+          error?: string | null
+          id?: string
+          mime_type?: string | null
+          minutes?: string | null
+          org_id?: string
+          proposals?: Json | null
+          status?: string
+          transcript?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_recordings_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_recordings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_recordings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
