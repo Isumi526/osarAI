@@ -120,6 +120,7 @@ export async function POST(req: Request) {
 
   // --- 議事録（ペラ一）を生成（T3・失敗しても致命ではない） ---
   let minutes: string | null = null;
+  let minutesError: string | null = null;
   try {
     minutes = await geminiText(
       `次の会議の全文文字起こしから、後で見返せる「ペラ一の議事録」を作成してください。` +
@@ -128,6 +129,8 @@ export async function POST(req: Request) {
       { model: GEMINI_MODEL_LITE, temperature: 0.2 },
     );
   } catch (e) {
+    // 致命ではない（議事録なしでも登録は進む）が、失敗は error 列に記録して追跡可能にする。
+    minutesError = `議事録生成に失敗しました: ${String(e)}`;
     console.error('[meeting/ingest] minutes failed', e);
   }
 
@@ -183,7 +186,7 @@ export async function POST(req: Request) {
       minutes,
       proposals: proposals as unknown as never,
       status: 'reviewing',
-      error: extractError,
+      error: [extractError, minutesError].filter(Boolean).join(' / ') || null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', meetingId);
