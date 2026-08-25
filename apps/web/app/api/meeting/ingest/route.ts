@@ -11,7 +11,7 @@ import { getEntitlement } from '@/lib/entitlement';
 import { formatUserProfile } from '@/lib/customer-context';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
-import { geminiTranscribeLong, geminiJson, GEMINI_MODEL_DIALOGUE } from '@/lib/gemini';
+import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
 import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
 
 export const runtime = 'nodejs';
@@ -62,14 +62,20 @@ export async function POST(req: Request) {
   // 通常のクライアント再送はこのクエリで吸収する。
   const { data: existingRec } = await supabase
     .from('meeting_recordings')
-    .select('id, transcript, proposals, status')
+    .select('id, transcript, minutes, proposals, status')
     .eq('user_id', user.id)
     .eq('audio_url', recordingPath)
     .neq('status', 'failed')
     .maybeSingle();
   if (existingRec) {
     return json(
-      { meetingId: existingRec.id, transcript: existingRec.transcript ?? '', proposals: existingRec.proposals ?? null, reused: true },
+      {
+        meetingId: existingRec.id,
+        transcript: existingRec.transcript ?? '',
+        minutes: existingRec.minutes ?? null,
+        proposals: existingRec.proposals ?? null,
+        reused: true,
+      },
       200,
     );
   }
@@ -111,6 +117,19 @@ export async function POST(req: Request) {
     return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
   }
   if (!transcript) return fail('文字起こし結果が空でした', 502);
+
+  // --- 議事録（ペラ一）を生成（T3・失敗しても致命ではない） ---
+  let minutes: string | null = null;
+  try {
+    minutes = await geminiText(
+      `次の会議の全文文字起こしから、後で見返せる「ペラ一の議事録」を作成してください。` +
+        `「要点」「決定事項」「次アクション」を見出し付きで簡潔にまとめ、前置きや解説は付けないでください。` +
+        `話者ラベルがあれば誰の発言かも踏まえてください。\n---\n${transcript}\n---`,
+      { model: GEMINI_MODEL_LITE, temperature: 0.2 },
+    );
+  } catch (e) {
+    console.error('[meeting/ingest] minutes failed', e);
+  }
 
   // --- 全文から people/schedules/tasks を1ショット抽出 ---
   const [customersRes, agencyRes] = await Promise.all([
@@ -161,6 +180,7 @@ export async function POST(req: Request) {
     .from('meeting_recordings')
     .update({
       transcript,
+      minutes,
       proposals: proposals as unknown as never,
       status: 'reviewing',
       error: extractError,
@@ -168,7 +188,7 @@ export async function POST(req: Request) {
     })
     .eq('id', meetingId);
 
-  return json({ meetingId, transcript, proposals }, 200);
+  return json({ meetingId, transcript, minutes, proposals }, 200);
 }
 
 function json(payload: unknown, status: number) {

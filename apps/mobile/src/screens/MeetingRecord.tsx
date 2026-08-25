@@ -68,7 +68,7 @@ export function MeetingRecord() {
       });
       setMeetingId(res.meetingId);
       setProposals(res.proposals ?? EMPTY);
-      setMinutes((res as { minutes?: string | null }).minutes ?? null);
+      setMinutes(res.minutes);
       setPhase('reviewing');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -86,7 +86,7 @@ export function MeetingRecord() {
     setCommitting(true);
     setError(null);
     try {
-      await commitMeeting({ meetingId, proposals });
+      await commitMeeting({ meetingId, proposals, minutes });
       setPhase('committed');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
