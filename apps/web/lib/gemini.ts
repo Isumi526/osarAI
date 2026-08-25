@@ -242,6 +242,135 @@ export async function geminiTranscribe(
   return withRetryAndFallback(runOnce, primaryModel, primaryModel);
 }
 
+const UPLOAD_URL = 'https://generativelanguage.googleapis.com/upload/v1beta/files';
+
+/** Files API へ音声をレジューム可能アップロードし、参照用の uri / name を返す。 */
+async function uploadFileToGemini(bytes: Uint8Array, mimeType: string): Promise<{ uri: string; name: string }> {
+  const key = apiKey();
+  const numBytes = String(bytes.byteLength);
+  // 1) レジューマブルセッション開始（メタデータのみ・アップロードURLを受け取る）
+  const start = await fetchWithTimeout(
+    UPLOAD_URL,
+    {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': key,
+        'X-Goog-Upload-Protocol': 'resumable',
+        'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': numBytes,
+        'X-Goog-Upload-Header-Content-Type': mimeType,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ file: { display_name: 'meeting-audio' } }),
+    },
+    30_000,
+  );
+  if (!start.ok) {
+    throw new GeminiApiError(start.status, `Files start ${start.status}: ${(await start.text()).slice(0, 200)}`);
+  }
+  const uploadUrl = start.headers.get('x-goog-upload-url');
+  if (!uploadUrl) throw new Error('Files API: アップロードURLが返りませんでした');
+  // 2) 本体アップロード＋finalize
+  const up = await fetchWithTimeout(
+    uploadUrl,
+    {
+      method: 'POST',
+      headers: {
+        'content-length': numBytes,
+        'X-Goog-Upload-Offset': '0',
+        'X-Goog-Upload-Command': 'upload, finalize',
+      },
+      // undici/lib.dom の BodyInit 型は Uint8Array<ArrayBufferLike> を厳密拒否する（TS5.7系の
+      // SharedArrayBuffer 区別）。実行時は undici が Uint8Array を受けるためキャストで通す。
+      body: bytes as unknown as BodyInit,
+    },
+    180_000,
+  );
+  if (!up.ok) {
+    throw new GeminiApiError(up.status, `Files upload ${up.status}: ${(await up.text()).slice(0, 200)}`);
+  }
+  const data = (await up.json()) as { file?: { uri?: string; name?: string } };
+  const uri = data.file?.uri;
+  const name = data.file?.name;
+  if (!uri || !name) throw new Error('Files API: uri/name が返りませんでした');
+  return { uri, name };
+}
+
+/** 音声ファイルは非同期に処理される。ACTIVE になるまで待つ（FAILED は即エラー）。 */
+async function waitForFileActive(name: string, timeoutMs = 90_000): Promise<void> {
+  const key = apiKey();
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await fetchWithTimeout(`${API_BASE}/${name}`, { headers: { 'x-goog-api-key': key } }, 15_000);
+    if (res.ok) {
+      const j = (await res.json()) as { state?: string };
+      if (j.state === 'ACTIVE') return;
+      if (j.state === 'FAILED') throw new Error('Files API: 音声処理に失敗しました(FAILED)');
+    }
+    await sleep(2_000);
+  }
+  throw new GeminiApiError(TIMEOUT_STATUS, 'Files API: 音声がACTIVEになりませんでした（タイムアウト）');
+}
+
+/** best-effort でアップロード済みファイルを削除（Files は48hで自動失効するが明示削除する）。 */
+async function deleteGeminiFile(name: string): Promise<void> {
+  try {
+    await fetchWithTimeout(`${API_BASE}/${name}`, { method: 'DELETE', headers: { 'x-goog-api-key': apiKey() } }, 15_000);
+  } catch {
+    /* 失効任せで問題ない */
+  }
+}
+
+/**
+ * 長尺音声の文字起こし（会議録音・T0）。inline(~20MB)上限を避けるため Files API 経由で渡す。
+ * 1時間級の会議でも 25MB 制限で落ちない。processing 完了待ち＋長めのタイムアウトを取る。
+ */
+export async function geminiTranscribeLong(
+  bytes: Uint8Array,
+  mimeType: string,
+  opts: { model?: string; language?: string; cleanFillers?: boolean } = {},
+): Promise<string> {
+  const model = opts.model ?? GEMINI_MODEL_LITE;
+  const cleanup =
+    opts.cleanFillers === false
+      ? ''
+      : `「えーと」「あー」「その」「なんか」のようなフィラーや、言い直しで生じた不要な断片は取り除いてください。` +
+        `ただし話し言葉の自然さは保ち、内容の要約・言い換え・補完はしないでください（言っていないことを足さない）。`;
+  const instruction =
+    `次の会議音声を${opts.language ?? '日本語'}で文字起こししてください。複数人が話している場合は、` +
+    `話者が替わったら改行し、可能なら行頭に「話者A:」「話者B:」のように話者ラベルを付けてください（誰かは特定しなくてよい）。` +
+    cleanup +
+    `要約や解説は一切付けず、発話内容のテキストだけを返してください。`;
+
+  const { uri, name } = await uploadFileToGemini(bytes, mimeType);
+  try {
+    await waitForFileActive(name);
+    const runOnce = async (m: string): Promise<string> => {
+      const res = await fetchWithTimeout(
+        `${API_BASE}/models/${m}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey() },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ fileData: { mimeType, fileUri: uri } }, { text: instruction }] }],
+            generationConfig: { temperature: 0 },
+          }),
+        },
+        // 長尺は生成にも時間がかかる。ルート側 maxDuration と整合させる。
+        240_000,
+      );
+      if (!res.ok) {
+        throw new GeminiApiError(res.status, `Gemini STT(long) ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      }
+      const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+      return (data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '').trim();
+    };
+    return await withRetryAndFallback(runOnce, model, model);
+  } finally {
+    void deleteGeminiFile(name);
+  }
+}
+
 async function callGenerate(prompt: string, opts: GenerateOpts): Promise<string> {
   const primaryModel = opts.model ?? GEMINI_MODEL_DIALOGUE;
   const body: Record<string, unknown> = {
