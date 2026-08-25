@@ -57,6 +57,23 @@ export async function POST(req: Request) {
   if (!profile) return json({ error: 'profile not found' }, 400);
   const orgId = profile.org_id;
 
+  // べき等ガード：同じ録音パスの再送で二重に文字起こし/抽出しない（コスト暴走・重複防止）。
+  // 完全な排他には (user_id,audio_url) のユニーク制約が要る（同時実行の競合は残る・📋参照）が、
+  // 通常のクライアント再送はこのクエリで吸収する。
+  const { data: existingRec } = await supabase
+    .from('meeting_recordings')
+    .select('id, transcript, proposals, status')
+    .eq('user_id', user.id)
+    .eq('audio_url', recordingPath)
+    .neq('status', 'failed')
+    .maybeSingle();
+  if (existingRec) {
+    return json(
+      { meetingId: existingRec.id, transcript: existingRec.transcript ?? '', proposals: existingRec.proposals ?? null, reused: true },
+      200,
+    );
+  }
+
   // --- 録音レコードを作成（処理中） ---
   const { data: rec, error: recErr } = await supabase
     .from('meeting_recordings')
@@ -127,13 +144,15 @@ export async function POST(req: Request) {
   const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history });
 
   let extracted: Extracted;
+  let extractError: string | null = null;
   try {
     const result = await geminiJson<TurnResult>(prompt, TURN_SCHEMA, { model: GEMINI_MODEL_DIALOGUE, system: ASSISTANT_SYSTEM_PROMPT });
     extracted = result.extracted ?? {};
   } catch (e) {
-    // 文字起こしは残す（抽出だけ失敗）。空proposalsでレビューへ回す。
+    // 文字起こし自体は有用（議事録/レビューに使える）ため残す。ただし抽出失敗を無音で
+    // reviewing にせず error 列に記録して観測可能にする（候補は空でレビューに回す）。
     extracted = {};
-    await supabase.from('meeting_recordings').update({ transcript, updated_at: new Date().toISOString() }).eq('id', meetingId);
+    extractError = `抽出に失敗しました: ${String(e)}`;
     console.error('[meeting/ingest] extract failed', e);
   }
   const proposals = toProposals(extracted, customers, now);
@@ -144,6 +163,7 @@ export async function POST(req: Request) {
       transcript,
       proposals: proposals as unknown as never,
       status: 'reviewing',
+      error: extractError,
       updated_at: new Date().toISOString(),
     })
     .eq('id', meetingId);

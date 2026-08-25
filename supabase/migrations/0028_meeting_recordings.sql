@@ -33,6 +33,9 @@ create index on meeting_recordings(status);
 
 alter table meeting_recordings enable row level security;
 
--- 本人のみ（leaderも他人の録音生ログは見ない・§7 osarai_own と同方針）
+-- 本人のみ（leaderも他人の録音生ログは見ない・§7 osarai_own と同方針）。
+-- テナント分離は最優先(CLAUDE.md)のため、本人限定に加え org_id も明示的に照合する
+-- （user_id=auth.uid() で実質担保されるが、防御的に二重化する）。
 create policy meeting_recordings_own on meeting_recordings for all
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (user_id = auth.uid() and org_id = current_org_id())
+  with check (user_id = auth.uid() and org_id = current_org_id());

@@ -155,8 +155,8 @@ export function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted
       custom_fields: { ...(prev?.custom_fields ?? {}), ...nonEmpty(p.custom_fields) },
     });
   }
-  // 予定・タスクのタイトルは、統合前に人名を落としておく（「山本さんに資料を送る」と
-  // 「山本さんに保険の提案資料を送る」が別物として残るのを防ぐ。相手はperson_nameで持つ）。
+  // 予定・タスクのタイトルは、統合前に人名を落としておく（「サンプル太郎さんに資料を送る」と
+  // 「サンプル太郎さんに保険の提案資料を送る」が別物として残るのを防ぐ。相手はperson_nameで持つ）。
   const mergedNames = [...people.values()].map((p) => p.name);
   const cleanTitle = (t: string) => stripPersonFromTitle(t, mergedNames);
 
@@ -281,7 +281,7 @@ function nonEmpty<T extends Record<string, unknown>>(o?: T): Record<string, unkn
 /** 累積した抽出を、確認カード（クライアント）が扱う形に変換する。日時はJSTとして解決する。 */
 export function toProposals(acc: Extracted, customers: { id: string; name: string }[], now: Date): Proposals {
   const people = (acc.people ?? []).map((p0) => {
-    // 抽出名に「さん」等が付くと一覧表示で「山本さんさん」になるため落とす
+    // 抽出名に「さん」等が付くと一覧表示で「サンプル太郎さんさん」になるため落とす
     const p = { ...p0, name: stripHonorific(p0.name) };
     // AIが既存idを返していればそれを、無ければ正規化名の一致で既存に寄せる（重複登録の防止）
     const matched =
@@ -330,7 +330,7 @@ export function toProposals(acc: Extracted, customers: { id: string; name: strin
 
 /**
  * 予定/タスクのタイトルに紛れ込んだ人物名を落とす（相手はリレーションで持つため）。
- * 「山本さんとカフェで会う」→「カフェで会う」 / 「山本さんに資料を送る」→「資料を送る」。
+ * 「サンプル太郎さんとカフェで会う」→「カフェで会う」 / 「サンプル太郎さんに資料を送る」→「資料を送る」。
  * プロンプトでも指示しているが、揺れるのでサーバー側でも正規化する。
  */
 function stripPersonFromTitle(title: string, names: string[]): string {
