@@ -88,7 +88,8 @@ function relabelSpeakers(text: string, map: Record<string, string>): string {
     const nm = (name ?? '').trim();
     if (!nm || !label.trim()) continue;
     const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(`(^|\\n)\\s*${esc}\\s*[:：]`, 'g'), `$1${nm}: `);
+    // コロン直後の空白も一緒に飲み込み、置換後に二重スペースが残らないようにする。
+    out = out.replace(new RegExp(`(^|\\n)\\s*${esc}\\s*[:：][ 　]*`, 'g'), `$1${nm}: `);
   }
   return out;
 }
