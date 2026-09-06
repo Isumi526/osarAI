@@ -51,7 +51,7 @@ export function Home() {
   }, []);
 
   return (
-    <main className="screen">
+    <main className="screen" style={{ paddingBottom: 'calc(56px + env(safe-area-inset-bottom) + 96px)' }}>
       <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
         {/* 使い方はいつでも見返せるよう右上に常設する（ITに不慣れなユーザー向け） */}
@@ -115,34 +115,31 @@ export function Home() {
         ))}
       </div>
 
-      {/* 入口はAIチャット1つに統一する（2026-08-06 UI/UX刷新）。
-          旧: おさらいする/AIに相談の2ボタン・つながりAI登録ボタン・予定登録バナー・
-          右下の＋FAB・つながり一覧 をホームから撤去し、情報過多を解消した。
-          つながり一覧はマイページ配下(/customers)へ、おさらい/相談はこのAIボタンへ集約。 */}
-      {/* 会議録音（PC透明ローカル録音）への入口。AIと話すFABの上に控えめに重ねる。 */}
+      {/* 会議録音（PC透明ローカル録音）への入口。固定FABにすると統計カードに重なるため
+          コンテンツ内のインラインボタンにする（AIと話すFABと別導線）。 */}
       <button
         onClick={() => navigate('/meeting')}
         disabled={!subActive}
         aria-label="会議を録音する"
         style={{
-          position: 'fixed',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          bottom: 'calc(56px + env(safe-area-inset-bottom) + 20px + 64px)',
-          width: 'min(320px, calc(100% - 32px))',
-          padding: '12px 20px',
-          fontSize: 14,
+          width: '100%',
+          margin: '4px 0 8px',
+          padding: '14px 20px',
+          fontSize: 15,
           fontWeight: 700,
-          borderRadius: 999,
+          borderRadius: 12,
           background: '#fff',
           color: 'var(--color-primary)',
           border: '1px solid var(--color-primary)',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          zIndex: 90,
         }}
       >
         会議を録音する
       </button>
+
+      {/* 入口はAIチャット1つに統一する（2026-08-06 UI/UX刷新）。
+          旧: おさらいする/AIに相談の2ボタン・つながりAI登録ボタン・予定登録バナー・
+          右下の＋FAB・つながり一覧 をホームから撤去し、情報過多を解消した。
+          つながり一覧はマイページ配下(/customers)へ、おさらい/相談はこのAIボタンへ集約。 */}
       <button
         onClick={() => navigate('/chat')}
         disabled={!subActive}

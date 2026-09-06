@@ -124,7 +124,7 @@ export function MeetingRecord() {
   }
 
   return (
-    <main style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
+    <main className="screen" style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
       <ScreenHeader>
         <button type="button" onClick={() => navigate('/')} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
           ← ホーム
@@ -132,7 +132,7 @@ export function MeetingRecord() {
         <strong>会議を録音する</strong>
         <span style={{ width: 48 }} />
       </ScreenHeader>
-      <div style={{ padding: 16, display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gap: 16 }}>
         {error && (
           <p style={{ color: 'var(--color-danger, #c0392b)', fontSize: 14, margin: 0 }}>{error}</p>
         )}
