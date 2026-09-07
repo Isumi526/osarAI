@@ -1,0 +1,34 @@
+# 本番スモーク（読み取り専用）を1日1回まわし、壊れていたらLINEへ通知する。
+# 契機: モデル更新でおさらいのAIが本番で止まり、気づくのが遅れたこと。
+#
+# ★書き込みは一切しない（GETのみ）。本番にテストデータを作らない。
+# 必要な GitHub Secrets（未設定でも落ちないが、通知とAI疎通はskipされる）:
+#   HUMANBALL_WEBHOOK_URL / HUMANBALL_WEBHOOK_SECRET … 失敗通知の宛先
+#   SMOKE_TOKEN … /api/health/ai を叩くトークン（Vercel側の環境変数と同じ値）
+name: prod-smoke
+
+on:
+  schedule:
+    # JST 3:00（UTC 18:00）＝深夜帯。利用者の少ない時間に回す。
+    - cron: '0 18 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # 依存インストール不要（prod-smoke.mjs は Node 標準の fetch だけで動く）
+      - name: run production smoke
+        env:
+          PROD_WEB_URL: https://osarai.app
+          PROD_MOBILE_URL: https://app.osarai.app
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
+          HUMANBALL_WEBHOOK_URL: ${{ secrets.HUMANBALL_WEBHOOK_URL }}
+          HUMANBALL_WEBHOOK_SECRET: ${{ secrets.HUMANBALL_WEBHOOK_SECRET }}
+          NOTIFY_PREFIX: '[osarAI]'
+        run: node scripts/prod-smoke.mjs

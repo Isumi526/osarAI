@@ -422,3 +422,40 @@ async function callGenerate(prompt: string, opts: GenerateOpts): Promise<string>
 
   return withRetryAndFallback(runOnce, primaryModel, GEMINI_MODEL_LITE);
 }
+
+/**
+ * Gemini の疎通確認（本番スモーク用）。最小のプロンプトで応答可否だけを見る。
+ * 目的は「モデル側の変更やキー失効でAI機能が黙って壊れる」のを早く知ること
+ * （実際にモデル更新でおさらいのAIが本番で止まった経験がある）。
+ * コストを増やさないよう出力は1語に制限し、呼び出し元はトークンで保護すること。
+ */
+export async function geminiPing(): Promise<{ ok: boolean; model: string; elapsedMs: number; detail?: string }> {
+  const model = GEMINI_MODEL_LITE;
+  const t0 = Date.now();
+  try {
+    const res = await fetchWithTimeout(
+      `${API_BASE}/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey() },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'ok とだけ返してください。' }] }],
+          // 5トークンだと thinking 系モデルで本文が空になり「AIが落ちた」と誤判定しうるので少し余裕を持たせる
+          generationConfig: { maxOutputTokens: 16, temperature: 0 },
+        }),
+      },
+      15_000,
+    );
+    const elapsedMs = Date.now() - t0;
+    if (!res.ok) {
+      return { ok: false, model, elapsedMs, detail: `HTTP ${res.status}` };
+    }
+    const body = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    const text = body.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return text.trim().length > 0
+      ? { ok: true, model, elapsedMs }
+      : { ok: false, model, elapsedMs, detail: 'empty response' };
+  } catch (e) {
+    return { ok: false, model, elapsedMs: Date.now() - t0, detail: String(e instanceof Error ? e.message : e) };
+  }
+}
