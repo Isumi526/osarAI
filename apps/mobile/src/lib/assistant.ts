@@ -1,6 +1,11 @@
 // 統合AIチャットのクライアント（2026-08-06 UI/UX刷新）。lib/osarai.ts と同型。
 import { apiPost } from './api.js';
 
+export interface SimilarNameCandidate {
+  id: string;
+  name: string;
+  score: number;
+}
 export interface PersonProposal {
   customer_id: string | null;
   name: string;
@@ -8,6 +13,8 @@ export interface PersonProposal {
   needs: string[];
   next_actions: string[];
   custom_fields?: Record<string, unknown>;
+  /** 同一人物かもしれない既存つながり（新規登録になる時だけサーバーが付ける）。 */
+  similar?: SimilarNameCandidate[];
 }
 export interface ScheduleProposal {
   title: string;

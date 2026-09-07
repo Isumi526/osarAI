@@ -9,3 +9,4 @@ export * from './prompts/self-osarai';
 export * from './prompts/assistant';
 export * from './jst';
 export * from './temperature';
+export * from './name-match';

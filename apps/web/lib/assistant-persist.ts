@@ -5,7 +5,7 @@
 // interactions(source='ai_dialogue')作成）を踏襲し、Homeの個人集計との互換を保つ。
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@osarai/shared/database.types';
-import { computeAutoTemperature, type AiSummary } from '@osarai/shared';
+import { computeAutoTemperature, normalizeName, type AiSummary, type SimilarNameCandidate } from '@osarai/shared';
 
 type DB = SupabaseClient<Database>;
 
@@ -16,6 +16,11 @@ export interface PersonProposal {
   needs?: string[];
   next_actions?: string[];
   custom_fields?: Record<string, unknown>;
+  /**
+   * 同一人物かもしれない既存つながりの候補（新規登録になる場合だけ付く・確認カードで確認を出す）。
+   * サーバーは断定せず候補を出すだけで、寄せるかどうかはユーザーが決める。
+   */
+  similar?: SimilarNameCandidate[];
 }
 
 export interface ScheduleProposal {
@@ -50,13 +55,9 @@ export interface CommitResult {
 }
 
 /** 表記揺れの検知用。全角半角・敬称・空白を落とした比較キーにする。 */
-export function normalizeName(name: string): string {
-  return name
-    .normalize('NFKC')
-    .replace(/\s+/g, '')
-    .replace(/(さん|様|さま|氏|くん|ちゃん)$/u, '')
-    .toLowerCase();
-}
+// 名前の正規化規則は @osarai/shared に集約した（表記揺れ検知と同じ規則を使うため）。
+// 既存の import 元（proposal-extraction 等）を壊さないよう、ここから再exportする。
+export { normalizeName };
 
 export async function commitProposals(args: {
   supabase: DB;

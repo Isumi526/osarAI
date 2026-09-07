@@ -4,6 +4,7 @@
 // これを import して使う。振る舞いは従来と同一（関数はそのまま移設）。
 import type { GeminiSchema } from '@/lib/gemini';
 import { normalizeName, type Proposals } from '@/lib/assistant-persist';
+import { findSimilarNames } from '@osarai/shared';
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -295,6 +296,9 @@ export function toProposals(acc: Extracted, customers: { id: string; name: strin
       needs: p.needs ?? [],
       next_actions: p.next_actions ?? [],
       custom_fields: p.custom_fields ?? {},
+      // 新規登録になる場合だけ、表記揺れで同一人物の可能性がある既存つながりを添える。
+      // 音声入力は「渡辺/渡邊」「タナカ/田中」のような揺れが出るため、勝手に寄せず確認カードで聞く。
+      similar: matched ? undefined : findSimilarNames(p.name, customers),
     };
   });
   const indexOfPerson = (name?: string | null) => {

@@ -87,12 +87,80 @@ export function ReviewCard({
             onChange={(e) =>
               setProposals({
                 ...proposals,
-                people: proposals.people.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
+                people: proposals.people.map((x, j) =>
+                  // 名前を手で直したら、サーバーが古い名前で出した類似候補は当てにならないので消す
+                  j === i ? { ...x, name: e.target.value, similar: undefined } : x,
+                ),
               })
             }
             placeholder="お名前"
             style={{ padding: 10, fontSize: 15 }}
           />
+          {/* 表記揺れ（音声入力の「渡辺/渡邊」「タナカ/田中」等）で同じ人を二重登録しないための確認。
+              勝手に寄せず、ユーザーに選ばせる。 */}
+          {!p.customer_id && (p.similar?.length ?? 0) > 0 && (
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                background: 'var(--color-surface-subtle, #fff7f0)',
+                border: '1px solid var(--color-primary)',
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 13 }}>
+                似たお名前の方が登録済みです。同じ方なら選んでください（新しく作らずに追記します）。
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {p.similar!.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() =>
+                      setProposals({
+                        ...proposals,
+                        people: proposals.people.map((x, j) =>
+                          // 既存に寄せる時は表記も既存側に合わせる（同じ人が2つの表記で残らないように）
+                          j === i ? { ...x, customer_id: c.id, name: c.name, similar: undefined } : x,
+                        ),
+                      })
+                    }
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      background: '#fff',
+                      color: 'var(--color-primary)',
+                      border: '1px solid var(--color-primary)',
+                    }}
+                  >
+                    {c.name}さんと同じ
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setProposals({
+                      ...proposals,
+                      people: proposals.people.map((x, j) => (j === i ? { ...x, similar: undefined } : x)),
+                    })
+                  }
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    borderRadius: 999,
+                    background: 'none',
+                    color: 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                >
+                  別の人として登録
+                </button>
+              </div>
+            </div>
+          )}
           <LinesField
             label="要点"
             value={p.points}
