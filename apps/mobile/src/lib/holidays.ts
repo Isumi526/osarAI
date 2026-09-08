@@ -1,6 +1,28 @@
 // 日本の祝日判定（2026-08-06 追加・日程調整の候補から祝日を除くために使う）。
 // 外部APIに依存すると通信失敗時に候補が出せなくなるため、内閣府の規則をそのまま計算する。
 // 対応: 固定日の祝日 / ハッピーマンデー / 春分・秋分（近似式） / 振替休日 / 国民の休日。
+//
+// 出典: 内閣府「国民の祝日について」https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html
+//       （祝日法の規定そのもの。同ページの祝日CSVで突き合わせできる）
+// 検証: apps/web/e2e/japanese-holidays.spec.ts で 2026年(18日)・2027年(17日) を実際の暦と照合。
+//
+// ★対応年は 1980〜2099（春分・秋分の近似式が有効な範囲）。この範囲の外では
+//   計算結果が実際の暦とずれるため、黙って「祝日なし」として動かないよう
+//   HOLIDAY_CALC_YEAR_RANGE を公開し、範囲外では警告を出す（第22条）。
+//   ※祝日法が改正された場合（新しい祝日の追加・天皇誕生日の変更など）は
+//     このファイルの holidaysOfYear() を直し、上記specの期待値も更新する。
+
+/** この実装が正しく計算できる年の範囲。範囲外は結果を信用してはいけない。 */
+export const HOLIDAY_CALC_YEAR_RANGE = {
+  from: 1980,
+  to: 2099,
+  supports(year: number): boolean {
+    return year >= this.from && year <= this.to;
+  },
+} as const;
+
+// 範囲外の警告は年ごとに1回だけ出す（毎日分ループするので黙らせないと大量に出る）
+const warnedYears = new Set<number>();
 
 /** 春分日（1980-2099の近似式。日本の官報決定と一致する範囲で使う） */
 function vernalEquinoxDay(year: number): number {
@@ -74,6 +96,14 @@ const cache = new Map<number, Set<string>>();
 /** 日本の祝日（振替休日・国民の休日を含む）かどうか */
 export function isJapaneseHoliday(date: Date): boolean {
   const year = date.getFullYear();
+  if (!HOLIDAY_CALC_YEAR_RANGE.supports(year) && !warnedYears.has(year)) {
+    warnedYears.add(year);
+    // 「祝日が無い年」と区別がつかないまま候補に混ざるのを避けるため、必ず表に出す
+    console.warn(
+      `[holidays] ${year}年は対応範囲(${HOLIDAY_CALC_YEAR_RANGE.from}〜${HOLIDAY_CALC_YEAR_RANGE.to})外です。` +
+        `祝日判定が実際の暦とずれる可能性があります（apps/mobile/src/lib/holidays.ts の更新が必要）。`,
+    );
+  }
   if (!cache.has(year)) cache.set(year, holidaysOfYear(year));
   return cache.get(year)!.has(toIso(date));
 }
