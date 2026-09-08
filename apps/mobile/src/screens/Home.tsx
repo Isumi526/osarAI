@@ -6,6 +6,8 @@ import { getEntitlement } from '../lib/subscription.js';
 import { getPersonalStats, type PersonalStats } from '../lib/stats.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { ChatBubbleIcon } from '../components/NavIcons.js';
+import { BellIcon } from '../components/BellIcon.js';
+import { countUnread } from '../lib/notifications.js';
 import { AddToHomeScreenBanner } from '../components/AddToHomeScreenBanner.js';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
@@ -14,6 +16,14 @@ export function Home() {
   const navigate = useNavigate();
   const [subActive, setSubActive] = useState(true); // 判定前は制限を出さない
   const [stats, setStats] = useState<PersonalStats | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    // 未読が取れなくてもホームは出す（バッジが出ないだけ）
+    countUnread()
+      .then(setUnreadCount)
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     getPersonalStats()
@@ -54,10 +64,20 @@ export function Home() {
     <main className="screen" style={{ paddingBottom: 'calc(56px + env(safe-area-inset-bottom) + 96px)' }}>
       <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
-        {/* 使い方はいつでも見返せるよう右上に常設する（ITに不慣れなユーザー向け） */}
-        <Link to="/tutorial" style={{ fontSize: 13, color: 'var(--color-primary)', textDecoration: 'none' }}>
-          使い方
-        </Link>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* 使い方はいつでも見返せるよう右上に常設する（ITに不慣れなユーザー向け） */}
+          <Link to="/tutorial" style={{ fontSize: 13, color: 'var(--color-primary)', textDecoration: 'none' }}>
+            使い方
+          </Link>
+          {/* 通知ベル。未読があれば赤いバッジで気づけるようにする */}
+          <Link
+            to="/notifications"
+            aria-label="通知"
+            style={{ color: 'var(--color-text)', display: 'inline-flex' }}
+          >
+            <BellIcon unread={unreadCount} />
+          </Link>
+        </span>
       </ScreenHeader>
 
       {!subActive && (
