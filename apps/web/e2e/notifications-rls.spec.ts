@@ -4,6 +4,9 @@ import { test, expect } from '@playwright/test';
 // 通知は「個人宛の連絡」なので、顧客データと違い leader も他人の分は見られない。
 // 特に大事なのは【クライアントから作れないこと】＝作れると運営者を装った
 // 「お知らせ」を自分や他人に差し込めてしまう。作成は service_role だけに許す。
+// このキーは `supabase start` がローカル開発用に誰の環境でも同じ値で配る固定キーで、
+// 本番の秘密ではない（本番キーは .env にあり、ここには持ち込まない）。既存のRLS系specも
+// 同じ値を同じ形で持っているため揃えている。env化するなら全spec一括で行うこと。
 const LOCAL_SUPABASE_URL = 'http://127.0.0.1:54321';
 const LOCAL_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 const SERVICE_KEY = 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz';
