@@ -1,7 +1,7 @@
 // プラン選択 → Stripe Checkout（§11）。サインアップ後にここへ来る。
 // チャネル割引は ?code=<チャネルコード> のように埋め込まれたコードを引き継ぐ。
 import { redirect } from 'next/navigation';
-import { isSubscriptionActive } from '@osarai/shared';
+import { isSubscriptionActive, channelDef } from '@osarai/shared';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
 import { PlanPicker } from './PlanPicker';
@@ -43,19 +43,25 @@ export default async function SubscribePage({
   if (isSubscriptionActive(sub?.status ?? null)) redirect('/billing');
 
   const amountOff = code ? await resolveAmountOff(code) : null;
+  // 割引なしの「流入元の記録だけ」のチャネルコード（例: ?code=LL）。
+  // profiles.channel_code には signup 時点で保存済み。Stripe には渡さない（割引コードではない）。
+  const channel = !amountOff ? channelDef(code) : null;
 
   return (
     <main style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
       <h1>プランを選ぶ</h1>
       <p style={{ color: '#6b6358' }}>14日間無料。トライアル終了後に自動課金されます。</p>
-      {code && (
+      {code && channel && (
+        <p style={{ color: '#6b6358' }}>{channel.label}からのご登録として記録しました（割引の適用はありません）。</p>
+      )}
+      {code && !channel && (
         <p style={{ color: amountOff ? 'var(--color-success)' : '#c0392b' }}>
           {amountOff
             ? `割引コード「${code}」適用中（¥${amountOff.toLocaleString()}引き）`
             : `割引コード「${code}」は無効です`}
         </p>
       )}
-      <PlanPicker code={code ?? null} amountOff={amountOff} />
+      <PlanPicker code={channel ? null : (code ?? null)} amountOff={amountOff} />
     </main>
   );
 }
