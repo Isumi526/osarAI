@@ -4,6 +4,8 @@
 import { NextResponse } from 'next/server';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { commitProposals, type Proposals } from '@/lib/assistant-persist';
+import { getEntitlement } from '@/lib/entitlement';
+import { relabelSpeakers } from '@/lib/meeting-speakers';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -28,19 +30,34 @@ export async function POST(req: Request) {
   if (!meetingId) return json({ error: 'meetingId required' }, 400);
   if (!proposals) return json({ error: 'proposals required' }, 400);
 
-  const { data: profile } = await supabase.from('profiles').select('org_id').eq('id', user.id).maybeSingle();
+  // 新規のつながりは名前が必須（/api/assistant/commit と同じサーバー側検証・T7）
+  const unnamed = proposals.people.find((p) => !p.customer_id && !p.name?.trim());
+  if (unnamed) return json({ error: 'name_required', message: 'お名前が未入力のつながりがあります。' }, 400);
+
+  const [{ data: profile }, ent] = await Promise.all([
+    supabase.from('profiles').select('org_id').eq('id', user.id).maybeSingle(),
+    getEntitlement(supabase, user.id),
+  ]);
   if (!profile) return json({ error: 'profile not found' }, 400);
+  if (!ent.active) return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
   const orgId = profile.org_id;
 
-  // 対象録音（本人のもの・RLSで保証されるが status も確認）
+  // 対象録音（本人のもの・RLSで保証されるが status も確認）。
+  // reviewing 以外は受け付けない: processing/failed の行を空 proposals で done にすると二度と直せなくなる。
   const { data: rec, error: recErr } = await supabase
     .from('meeting_recordings')
-    .select('id, transcript, status')
+    .select('id, transcript, status, capture, duration_sec, created_at')
     .eq('id', meetingId)
     .eq('user_id', user.id)
     .maybeSingle();
   if (recErr || !rec) return json({ error: 'meeting not found' }, 404);
-  if (rec.status === 'done') return json({ error: 'already_committed' }, 409);
+  if (rec.status === 'done') return json({ error: 'already_committed', message: 'この録音はすでに登録済みです。' }, 409);
+  if (rec.status !== 'reviewing') {
+    return json({ error: 'not_reviewable', message: 'この録音はまだ解析が終わっていません（再解析してください）。' }, 409);
+  }
+  // 会議の実施日時 ＝ 録音行の作成時刻 − 録音時間（承認が翌日にずれても会議日を保つ）
+  const metAt = new Date(Date.parse(rec.created_at) - (rec.duration_sec ?? 0) * 1000).toISOString();
+  const source = rec.capture === 'mobile_speaker' ? 'in_person_rec' : 'zoom_rec';
 
   // 話者ラベル（自分/相手1…）を、ユーザーが割り当てた実名に置き換える（T4）。
   // transcript も議事録も同じ置換を通し、履歴で「誰が話したか」が実名で読めるようにする。
@@ -57,6 +74,8 @@ export async function POST(req: Request) {
       proposals,
       transcript,
       minutes,
+      source,
+      metAt,
     });
   } catch (e) {
     return json({ error: 'commit_failed', detail: String(e) }, 500);
@@ -79,19 +98,6 @@ export async function POST(req: Request) {
     .eq('user_id', user.id);
 
   return json({ meetingId, ...result }, 200);
-}
-
-/** 行頭の話者ラベル「自分:」「相手1:」等を割当実名に置換する（T4）。空名はスキップ。 */
-function relabelSpeakers(text: string, map: Record<string, string>): string {
-  let out = text;
-  for (const [label, name] of Object.entries(map)) {
-    const nm = (name ?? '').trim();
-    if (!nm || !label.trim()) continue;
-    const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // コロン直後の空白も一緒に飲み込み、置換後に二重スペースが残らないようにする。
-    out = out.replace(new RegExp(`(^|\\n)\\s*${esc}\\s*[:：][ 　]*`, 'g'), `$1${nm}: `);
-  }
-  return out;
 }
 
 function json(payload: unknown, status: number) {

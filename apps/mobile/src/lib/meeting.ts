@@ -20,6 +20,8 @@ export interface IngestResponse {
   minutes: string | null;
   proposals: Proposals | null;
   speakers: Speaker[];
+  /** 議事録生成・候補抽出の部分失敗（文字起こしは成功）。UIで知らせて再解析を促す。 */
+  warnings?: string[];
   reused?: boolean;
 }
 

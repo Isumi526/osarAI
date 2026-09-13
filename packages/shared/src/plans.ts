@@ -20,7 +20,9 @@ export const PLANS: Record<PlanId, PlanDef> = {
     name: 'Light',
     listPrice: 1980,
     aiAdviceLimit: 10,
-    recordingImport: false,
+    // 会議録音(メイン機能)は有料プラン全部で開放する（D1・2026-09-13 人確認）。
+    // 上位プランとの差は将来「月N本」の回数fenceで切る。member(招待制・無料)は据え置き。
+    recordingImport: true,
     leaderDashboard: false,
   },
   standard: {

@@ -20,8 +20,9 @@ export async function POST(req: Request) {
 
   const ent = await getEntitlement(supabase, user.id);
   if (!ent.active) return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
-  if (ent.def && !ent.def.recordingImport) {
-    return json({ error: 'plan_upgrade_required', message: '会議録音は Standard 以上でご利用いただけます。' }, 403);
+  // plan が未知（PLANS に無い文字列）ならフェイルクローズ（許可側に倒さない・T7）
+  if (!ent.def || !ent.def.recordingImport) {
+    return json({ error: 'plan_upgrade_required', message: 'このプランでは会議録音をご利用いただけません。' }, 403);
   }
 
   const body = (await req.json().catch(() => ({}))) as { mimeType?: string };

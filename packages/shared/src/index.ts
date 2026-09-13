@@ -7,6 +7,7 @@ export * from './prompts/osarai';
 export * from './prompts/advice';
 export * from './prompts/self-osarai';
 export * from './prompts/assistant';
+export * from './prompts/meeting';
 export * from './jst';
 export * from './temperature';
 export * from './name-match';
