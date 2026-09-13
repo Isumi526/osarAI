@@ -50,6 +50,16 @@ export function ReviewCard({
     proposals.self_notes.length === 0 &&
     !minutes;
 
+  // 人物を外したら、予定/タスクの相手インデックスもずらす（外した人を指していたものは「なし」に戻す）。
+  const removePerson = (i: number) => {
+    const remap = (idx: number | null) => (idx === null ? null : idx === i ? null : idx > i ? idx - 1 : idx);
+    setProposals({
+      ...proposals,
+      people: proposals.people.filter((_, j) => j !== i),
+      schedules: proposals.schedules.map((s) => ({ ...s, person_index: remap(s.person_index) })),
+      tasks: proposals.tasks.map((t) => ({ ...t, person_index: remap(t.person_index) })),
+    });
+  };
   const addPerson = () =>
     setProposals({
       ...proposals,
@@ -116,7 +126,7 @@ export function ReviewCard({
             </span>
             <button
               type="button"
-              onClick={() => setProposals({ ...proposals, people: proposals.people.filter((_, j) => j !== i) })}
+              onClick={() => removePerson(i)}
               style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', padding: 4 }}
               aria-label="このつながりを登録しない"
             >
