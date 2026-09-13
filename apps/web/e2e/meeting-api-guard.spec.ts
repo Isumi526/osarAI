@@ -51,10 +51,9 @@ test('meeting/upload-url・ingest: 未認証401 / 未契約402 / Light は録音
   const { path } = (await light.json()) as { path: string };
   expect(path.startsWith(`${me.userId}/`)).toBe(true);
 
-  // 招待制の無料 member は不可（フェイルクローズ・未知の plan も同様）
+  // 招待制の無料 member は不可（未知の plan は subscriptions.plan の CHECK 制約で DB に入らないため、
+  // フェイルクローズ側の分岐はここでは member で代表させる）
   await activate(request, me.userId, 'member');
-  expect((await request.post('/api/meeting/upload-url', { headers: auth, data: { mimeType: 'audio/webm' } })).status()).toBe(403);
-  await activate(request, me.userId, 'unknown_plan');
   expect((await request.post('/api/meeting/upload-url', { headers: auth, data: { mimeType: 'audio/webm' } })).status()).toBe(403);
 
   // 他人のパスを ingest に渡しても 403（所有者チェック・Gemini には到達しない）
