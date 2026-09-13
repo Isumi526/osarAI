@@ -14,7 +14,8 @@ function pickMimeType(): string | undefined {
 export interface Recorder {
   recording: boolean;
   error: string | null;
-  start: () => Promise<void>;
+  /** 失敗時は ok=false と理由を返す（呼び出し側が古い error state を読む stale closure を避ける・T7）。 */
+  start: (opts?: { audioBitsPerSecond?: number }) => Promise<{ ok: boolean; error: string | null }>;
   stop: () => Promise<Blob | null>;
   supported: boolean;
 }
@@ -31,22 +32,36 @@ export function useRecorder(): Recorder {
     !!navigator.mediaDevices?.getUserMedia &&
     typeof MediaRecorder !== 'undefined';
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (opts?: { audioBitsPerSecond?: number }) => {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const mimeType = pickMimeType();
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const mr = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        ...(opts?.audioBitsPerSecond ? { audioBitsPerSecond: opts.audioBitsPerSecond } : {}),
+      });
       chunksRef.current = [];
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-      mr.start();
+      // 1秒ごとにチャンク化（会議の長時間録音で1つの巨大Blobにしない）
+      mr.start(1000);
       mediaRef.current = mr;
       setRecording(true);
+      return { ok: true, error: null };
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const name = e instanceof DOMException ? e.name : '';
+      const raw = e instanceof Error ? e.message : String(e);
+      const msg =
+        name === 'NotAllowedError'
+          ? 'マイクの使用が許可されていません。ブラウザの設定でマイクを許可してください。'
+          : name === 'NotFoundError'
+            ? 'マイクが見つかりませんでした。'
+            : raw;
+      setError(msg);
+      return { ok: false, error: msg };
     }
   }, []);
 

@@ -19,10 +19,13 @@ const SHOW_RECORDING_IMPORT = false;
 
 const SOURCE_LABEL: Record<string, string> = {
   ai_dialogue: 'AIおさらい',
-  in_person_rec: '対面録音',
-  zoom_rec: 'Zoom録画',
+  in_person_rec: '会議録音（スマホ）',
+  zoom_rec: '会議録音',
   manual: '手入力',
 };
+
+// タイムラインで全文（文字起こし）を折りたたむ長さ。1時間の会議の全文をカードに展開しない。
+const RAW_PREVIEW_CHARS = 160;
 
 export function CustomerDetail() {
   const { id } = useParams();
@@ -122,13 +125,22 @@ export function CustomerDetail() {
             : typeof cf.products === 'string' && cf.products.trim()
               ? [cf.products]
               : [];
-          if (!age && !gender && products.length === 0) return null;
+          const wantsToMeet = Array.isArray(cf.wants_to_meet)
+            ? cf.wants_to_meet.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+            : [];
+          if (!age && !gender && products.length === 0 && wantsToMeet.length === 0) return null;
           return (
-            <p style={{ margin: '4px 0' }}>
-              {age && <>年齢: {age}　</>}
-              {gender && <>性別: {gender}　</>}
-              {products.length > 0 && <>扱っている商品: {products.join('、')}</>}
-            </p>
+            <>
+              {(age || gender || products.length > 0) && (
+                <p style={{ margin: '4px 0' }}>
+                  {age && <>年齢: {age}　</>}
+                  {gender && <>性別: {gender}　</>}
+                  {products.length > 0 && <>扱っている商品: {products.join('、')}</>}
+                </p>
+              )}
+              {/* 相手が「どんな人とつながりたいか」（会議録音の抽出・T7）。紹介の起点になる */}
+              {wantsToMeet.length > 0 && <p style={{ margin: '4px 0' }}>つながりたい人: {wantsToMeet.join('、')}</p>}
+            </>
           );
         })()}
         {customer.last_met_at && (
@@ -229,13 +241,26 @@ export function CustomerDetail() {
                       <li key={i}>{p}</li>
                     ))}
                   </ul>
-                ) : (
-                  <p style={{ margin: '6px 0 0' }}>{ix.transcript ?? ix.raw_text ?? '（内容なし）'}</p>
-                )}
+                ) : !summary?.minutes ? (
+                  <RawText text={ix.transcript ?? ix.raw_text ?? '（内容なし）'} />
+                ) : null}
                 {summary?.next_actions?.length ? (
                   <p style={{ margin: '6px 0 0', color: 'var(--color-primary)', fontSize: 13 }}>
                     次アクション: {summary.next_actions.join(' / ')}
                   </p>
+                ) : null}
+                {/* 会議録音の議事録（T3/T7）。次回会う直前に読み返す用途なので、既定で開いた状態で出す */}
+                {summary?.minutes ? (
+                  <details open style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>議事録</summary>
+                    <p style={{ margin: '6px 0 0', fontSize: 14, whiteSpace: 'pre-wrap' }}>{summary.minutes}</p>
+                  </details>
+                ) : null}
+                {summary?.minutes && (ix.transcript ?? ix.raw_text) ? (
+                  <details style={{ marginTop: 6 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, color: '#9a9183' }}>全文（文字起こし）</summary>
+                    <p style={{ margin: '6px 0 0', fontSize: 13, whiteSpace: 'pre-wrap' }}>{ix.transcript ?? ix.raw_text}</p>
+                  </details>
                 ) : null}
               </li>
             );
@@ -244,5 +269,16 @@ export function CustomerDetail() {
       )}
       {confirmDialog}
     </main>
+  );
+}
+
+/** 長文（文字起こし等）は先頭だけ見せ、必要なら開く。 */
+function RawText({ text }: { text: string }) {
+  if (text.length <= RAW_PREVIEW_CHARS) return <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{text}</p>;
+  return (
+    <details style={{ marginTop: 6 }}>
+      <summary style={{ cursor: 'pointer' }}>{text.slice(0, RAW_PREVIEW_CHARS)}…</summary>
+      <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{text}</p>
+    </details>
   );
 }

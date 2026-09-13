@@ -5,6 +5,7 @@
 import type { GeminiSchema } from '@/lib/gemini';
 import { normalizeName, type Proposals } from '@/lib/assistant-persist';
 import { findSimilarNames } from '@osarai/shared';
+import { isSpeakerLabel } from '@/lib/meeting-speakers';
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -83,6 +84,8 @@ export const TURN_SCHEMA: GeminiSchema = {
                   products: { type: 'array', items: { type: 'string' } },
                   age: { type: 'string', nullable: true },
                   gender: { type: 'string', nullable: true },
+                  // 相手が「どんな人とつながりたいか」（紹介希望・T7）。紹介TODOの元データ。
+                  wants_to_meet: { type: 'array', items: { type: 'string' } },
                 },
               },
             },
@@ -282,8 +285,11 @@ function nonEmpty<T extends Record<string, unknown>>(o?: T): Record<string, unkn
 /** 累積した抽出を、確認カード（クライアント）が扱う形に変換する。日時はJSTとして解決する。 */
 export function toProposals(acc: Extracted, customers: { id: string; name: string }[], now: Date): Proposals {
   const people = (acc.people ?? []).map((p0) => {
-    // 抽出名に「さん」等が付くと一覧表示で「サンプル太郎さんさん」になるため落とす
-    const p = { ...p0, name: stripHonorific(p0.name) };
+    // 抽出名に「さん」等が付くと一覧表示で「サンプル太郎さんさん」になるため落とす。
+    // 会議録音で相手が名乗らず「相手1」「話者B」のままなら、名前を空にして確認カードで入力させる
+    // （ラベルがそのまま customers に作られるのを防ぐ・T7）。
+    const rawName = stripHonorific(p0.name);
+    const p = { ...p0, name: isSpeakerLabel(rawName) ? '' : rawName };
     // AIが既存idを返していればそれを、無ければ正規化名の一致で既存に寄せる（重複登録の防止）
     const matched =
       (p.matched_customer_id && customers.find((c) => c.id === p.matched_customer_id)?.id) ??
@@ -298,7 +304,7 @@ export function toProposals(acc: Extracted, customers: { id: string; name: strin
       custom_fields: p.custom_fields ?? {},
       // 新規登録になる場合だけ、表記揺れで同一人物の可能性がある既存つながりを添える。
       // 音声入力は「渡辺/渡邊」「タナカ/田中」のような揺れが出るため、勝手に寄せず確認カードで聞く。
-      similar: matched ? undefined : findSimilarNames(p.name, customers),
+      similar: matched || !p.name ? undefined : findSimilarNames(p.name, customers),
     };
   });
   const indexOfPerson = (name?: string | null) => {

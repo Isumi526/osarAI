@@ -107,6 +107,11 @@ interface GenerateOpts {
   /** JSON 強制したい時に渡す。渡すと文字列ではなくパース済みオブジェクトを返す。 */
   jsonSchema?: GeminiSchema;
   temperature?: number;
+  /**
+   * 1試行の fetch タイムアウト(ms)。既定 15s は対話1ターン向けの値で、会議録音(T7)のように
+   * 1時間分の文字起こしを入力に議事録/抽出させる時は 90〜120s を渡す。
+   */
+  timeoutMs?: number;
 }
 
 /** プレーンテキスト生成。 */
@@ -407,7 +412,7 @@ async function callGenerate(prompt: string, opts: GenerateOpts): Promise<string>
         headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey() },
         body: JSON.stringify(body),
       },
-      15_000,
+      opts.timeoutMs ?? 15_000,
     );
     if (!res.ok) {
       const detail = await res.text();

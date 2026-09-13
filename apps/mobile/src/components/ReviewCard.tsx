@@ -4,6 +4,10 @@ import { type Proposals } from '../lib/assistant.js';
 import { AutoResizeTextarea } from './AutoResizeTextarea.js';
 
 const toLines = (v: string[]) => v.join('\n');
+const wantsToMeet = (cf?: Record<string, unknown>): string[] => {
+  const v = cf?.wants_to_meet;
+  return Array.isArray(v) ? v.map((x) => String(x)) : [];
+};
 const fromLines = (v: string) => v.split('\n').map((s) => s.trim()).filter(Boolean);
 // datetime-local / date 入力とISO文字列の相互変換
 const toLocalInput = (iso: string, withTime: boolean) => {
@@ -22,6 +26,8 @@ export function ReviewCard({
   onBackToChat,
   backLabel = 'まだ話す',
   minutes,
+  onMinutesChange,
+  allowAddPerson = false,
 }: {
   proposals: Proposals;
   setProposals: (p: Proposals) => void;
@@ -32,12 +38,23 @@ export function ReviewCard({
   backLabel?: string;
   /** 議事録（あれば冒頭に表示・T3）。 */
   minutes?: string | null;
+  /** 議事録を編集可能にする（会議録音・T7）。渡さなければ読み取り専用。 */
+  onMinutesChange?: (v: string) => void;
+  /** 「つながりを追加」ボタンを出す（AIが相手を取りこぼした時に手で足せる・T7）。 */
+  allowAddPerson?: boolean;
 }) {
   const empty =
     proposals.people.length === 0 &&
     proposals.schedules.length === 0 &&
     proposals.tasks.length === 0 &&
-    proposals.self_notes.length === 0;
+    proposals.self_notes.length === 0 &&
+    !minutes;
+
+  const addPerson = () =>
+    setProposals({
+      ...proposals,
+      people: [...proposals.people, { customer_id: null, name: '', points: [], needs: [], next_actions: [], custom_fields: {} }],
+    });
 
   return (
     <section
@@ -51,10 +68,29 @@ export function ReviewCard({
         gap: 16,
       }}
     >
-      {minutes && (
+      {minutes != null && (minutes || onMinutesChange) && (
         <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--color-border)' }}>
           <strong style={{ fontSize: 13 }}>議事録</strong>
-          <p style={{ margin: '6px 0 0', fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--color-text)' }}>{minutes}</p>
+          {onMinutesChange ? (
+            <AutoResizeTextarea
+              value={minutes}
+              onChange={(e) => onMinutesChange(e.target.value)}
+              rows={4}
+              style={{
+                marginTop: 6,
+                width: '100%',
+                padding: 10,
+                fontSize: 13,
+                fontFamily: 'inherit',
+                border: '1px solid var(--color-border)',
+                borderRadius: 8,
+                resize: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          ) : (
+            <p style={{ margin: '6px 0 0', fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--color-text)' }}>{minutes}</p>
+          )}
         </div>
       )}
 
@@ -66,6 +102,11 @@ export function ReviewCard({
       </div>
 
       {empty && <p style={{ color: 'var(--color-text-muted)' }}>登録する内容は見つかりませんでした。</p>}
+      {allowAddPerson && proposals.people.length === 0 && (
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
+          話した相手が見つかりませんでした。「つながりを追加」で相手のお名前を入れてください（議事録はその方の履歴に残ります）。
+        </p>
+      )}
 
       {proposals.people.map((p, i) => (
         <div key={i} style={{ display: 'grid', gap: 6, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
@@ -185,8 +226,39 @@ export function ReviewCard({
               })
             }
           />
+          {/* 相手が「どんな人とつながりたいか」（紹介希望・T7）。紹介TODOの元になる。 */}
+          <LinesField
+            label="つながりたい人（紹介希望）"
+            value={wantsToMeet(p.custom_fields)}
+            onChange={(v) =>
+              setProposals({
+                ...proposals,
+                people: proposals.people.map((x, j) =>
+                  j === i ? { ...x, custom_fields: { ...(x.custom_fields ?? {}), wants_to_meet: v } } : x,
+                ),
+              })
+            }
+          />
         </div>
       ))}
+      {allowAddPerson && (
+        <button
+          type="button"
+          onClick={addPerson}
+          style={{
+            justifySelf: 'start',
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 700,
+            borderRadius: 999,
+            background: '#fff',
+            color: 'var(--color-primary)',
+            border: '1px solid var(--color-primary)',
+          }}
+        >
+          ＋ つながりを追加
+        </button>
+      )}
 
       {proposals.schedules.map((s, i) => (
         <div key={i} style={{ display: 'grid', gap: 6, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
