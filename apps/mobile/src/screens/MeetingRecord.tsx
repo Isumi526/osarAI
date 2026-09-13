@@ -241,7 +241,17 @@ export function MeetingRecord() {
     setCommitting(true);
     setError(null);
     try {
-      const res = await commitMeeting({ meetingId, proposals, minutes, speakerNames });
+      // 1対1の会議で相手が1人に確定しているなら、相手未指定の予定/タスクはその人に紐付ける
+      // （抽出時点では相手の名前が分からず person_index が null になりやすいため）。
+      let finalProposals = proposals;
+      if (proposals.people.length === 1) {
+        finalProposals = {
+          ...proposals,
+          schedules: proposals.schedules.map((s) => ({ ...s, person_index: s.person_index ?? 0 })),
+          tasks: proposals.tasks.map((t) => ({ ...t, person_index: t.person_index ?? 0 })),
+        };
+      }
+      const res = await commitMeeting({ meetingId, proposals: finalProposals, minutes, speakerNames });
       setPrimaryCustomerId(res.customers[0]?.id ?? null);
       setPhase('committed');
     } catch (e) {
@@ -420,6 +430,7 @@ export function MeetingRecord() {
                   <strong>話者</strong>
                   <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
                     誰の発言かを割り当てると、議事録や履歴が実名で残ります。
+                    {mode !== 'pc' && ' 自分の発言には「自分」と入力してください。'}
                   </p>
                 </div>
                 {speakers.map((s) => (
@@ -433,7 +444,7 @@ export function MeetingRecord() {
                         value={speakerNames[s.label] ?? ''}
                         onChange={(e) => setSpeakerNames((m) => ({ ...m, [s.label]: e.target.value }))}
                         onBlur={(e) => syncSpeakerToPeople(e.target.value)}
-                        placeholder="お名前（相手）"
+                        placeholder={mode === 'pc' ? 'お名前（相手）' : 'お名前（自分なら「自分」）'}
                         style={{ padding: 8, fontSize: 14 }}
                       />
                     )}
