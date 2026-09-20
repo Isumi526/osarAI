@@ -548,7 +548,7 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 
 ## Pipeline設定（/run 自走ループ harness 用・2026-06-29 移植時点の実値）
 
-`.claude/commands/run.md`（/run）の `{{...}}` プレースホルダはここと `.env` から解決する。
+`/run`・`/review`・`/ship`・`/intake` は **cc-pipeline プラグイン**（`~/.claude/skills/cc-pipeline` → `~/dev/cc-pipeline/plugin/skills/*/SKILL.md`・全プロジェクト自動ロード）の skill。このリポに `.claude/commands/` のコピーは置かない（2026-09-20・T44 S5 で撤去）。本文の `{{...}}` プレースホルダはここと `.env` から解決する。
 §0 自己点検で確認した osarAI の実構成：
 
 | キー | 実値 | 備考 |
@@ -562,6 +562,9 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 | **MIGRATIONS_DIR** | `supabase/migrations` | 0001_init / 0002_rls / 0003_auth_seed / 0004_storage_recordings / 0005_webhook_idempotency。RLSは org_id + owner_id(auth.uid()) スコープ |
 | **DEPLOY_PLATFORM** | Vercel（**稼働中**・2026-08-05 実構成を確認） | プロジェクト2つ: `web`→https://osarai.app（root=apps/web・Next.js）/ `mobile`→https://app.osarai.app（root=apps/mobile・Vite）。scope=`stism`。`apps/web/.vercel`・`apps/mobile/.vercel` に個別リンク済み。**GitHub webhook 無し＝Git連携なし → Merge では自動デプロイされない（`DEPLOY_TRIGGER=manual-cli`）**。デプロイは各ディレクトリで `npx vercel --prod --scope stism` |
 | **DEV_URL** | `http://localhost:3000` | apps/web の `next dev -p 3000`（.env にも記載） |
+| **DOC_LEVEL** | `light` | 設計書（spec-doc skill）の粒度。light=認識合わせ資料1〜4枚／standard／formal（2026-09-20・T44） |
+| **SPEC_DS_ID** | `1cf812c9-6a86-452f-bacc-8f823786feb5` | Notion「設計書」DB（3リポ共有・Stism 配下）。お客様共有版は案件ページ配下「お客様共有（osarAI）」を作って人が一度だけ「共有›公開」 |
+| **STAKEHOLDERS_DS_ID** | `f2afffbc-b6fd-400c-9625-9c6e65a38a00` | Notion「関係者」DB（案件管理配下・3リポ共有）。案件プロファイルは案件管理マスタの osarAI 行本文（`37a0ff81-c56b-81d9-a527-eebd543686c3`） |
 | **PROD_BRANCH** | `main`（確定） | 2026-06-29 phase5-customers HEAD を `main` に昇格し origin へ push。`dev` も `main` から分岐して push 済。通常feature=dev基点／緊急=main派生hotfix。`.env` PROD_BRANCH=main 同期済 |
 | **PROD_SUPABASE** | 既存プロジェクト `apiagxfbazxmdqcbynxk`（人確認・2026-07-08） | 新規本番プロジェクトは作らず、現行の開発用Supabaseプロジェクトをそのまま本番として使う方針。2026-07-08時点で`profiles`は0件と確認済み（クリーン。Stripe課金負債台帳修正時のPlaywright E2Eは全てlocal Supabase専用インスタンス(3055)に向けており、この既存プロジェクトへは一切書き込んでいない）。`SUPABASE_PROD_DB_URL` はまだ未設定（rls-audit本番監査用・設定は人が実施）。**このプロジェクトのmigration適用状況は未確認**（0001-0005が本番相当として適用済みかは次フェーズで要確認。`supabase db push`は常時禁止のためCCは適用しない） |
 | **DOMAIN** | 独自ドメイン運用中（2026-08-05 確認） | Web=`osarai.app` / モバイル=`app.osarai.app` |

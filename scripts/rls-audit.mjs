@@ -16,7 +16,7 @@
 //    --prod-readonly = .env の SUPABASE_PROD_DB_URL（read-only セッション・SELECTのみ）
 //    URL は PG* env に分解して psql に渡す（argv/ログに残さない）。
 //
-//  判定（allowlist=.kody/accepted.yml の rls-multitenant 系 target を「RLSオフ許容」）:
+//  判定その1 — anon（allowlist=.kody/accepted.yml の rls-multitenant 系 target を「RLSオフ許容」）:
 //    🔴 LEAK（--assert 失敗対象）: allowlist外で「anon/public から到達可能」かつ「RLS無効」
 //        → anon キーで PostgREST 越しに全行（＝全テナント）読める実害ライン。
 //    🟡 WARN（report のみ・assert は失敗させない）:
@@ -24,6 +24,20 @@
 //        - allowlist外で anon到達可だが RLS有効＝ポリシーで行フィルタ済（supabaseの通常形）
 //    ※ supabase は public 表へ anon に既定 grant を撒くため「anon grant有」単独は実害でない。
 //      実害は「anon到達可 × RLS無効」。よって assert はこの積で判定し、両次元は report に必ず出す。
+//
+//  判定その2 — authenticated（allowlist=rls-authenticated-crosstenant 系 target）:
+//    🟠 XTENANT（--assert 失敗対象）: allowlist外で「authenticated に INSERT/UPDATE/DELETE」かつ「RLS無効」
+//        → ★ログイン済みの利用者なら誰でも、他テナントの行を書き換え・削除できる実害ライン。
+//
+//    ★なぜこの次元を足したか（2026-08-15）:
+//     この監査は長らく anon と PUBLIC しか見ておらず、authenticated を見る行が1つも無かった。
+//     その盲点の下で「RLS無効 × authenticated に書き込み権限」が本番で32表に溜まっていた
+//     （accounts / workers / users / settings / daily_reports を含む＝実質アプリ全体）。
+//     実証: demo テナントのアカウントで overtime_requests を絞り込み無しに読むと sido の行が全部見え、
+//     別テナントのJWTでの PATCH が 204 で通り status=approved に書き換わった。
+//     anon が「インターネットの誰でも」なのに対し authenticated は「ログイン中の顧客」で、
+//     露出範囲は狭いが原因は同じ（RLSを入れずロール単位で権限を撒いている）。
+//     32表は accepted.yml にベースライン登録し、assert は**新規流入だけ**で落とす（anon と同じラチェット）。
 // ============================================================
 
 import { readFileSync } from 'node:fs'
@@ -53,7 +67,13 @@ function loadEnv() {
       const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
       if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '')
     }
-  } catch { /* .env 無しでも override/local で動く */ }
+  } catch { /* .env 無しでも override/local/CI で動く */ }
+  // ★CI には .env が無い（gitignore対象）。GitHub Actions の secrets は環境変数で来るので、
+  //  .env に無ければ process.env から拾う。これが無いと prod-health から呼んだ時に
+  //  「.env に SUPABASE_PROD_DB_URL が無い」で即死する（2026-08-15 に CI へ載せる時に判明）。
+  for (const k of ['SUPABASE_PROD_DB_URL', 'LOCAL_DB_URL']) {
+    if (!env[k] && process.env[k]) env[k] = process.env[k]
+  }
   return env
 }
 
@@ -99,11 +119,13 @@ function psqlJson(pgEnv, sql) {
 
 // ---- allowlist（既存 accepted.yml を流用＝判定源を共有）----
 function loadAllowlist() {
-  // rls-multitenant 系ルールの target を「RLSオフ許容」テーブルとして拾う。
+  // rls-multitenant 系      → anon 次元の「RLSオフ許容」テーブル
+  // rls-authenticated-crosstenant 系 → authenticated 次元の「越境書き込み許容」テーブル
   // accepted.yml の素朴パース（entries: - rule / target / reason / ticket）。
-  const set = new Map() // target -> {reason, ticket}
+  const set = new Map()     // target -> {reason, ticket}   … anon 次元
+  const authSet = new Map() // target -> {reason, ticket}   … authenticated 次元
   let text
-  try { text = readFileSync(join(ROOT, '.kody', 'accepted.yml'), 'utf8') } catch { return set }
+  try { text = readFileSync(join(ROOT, '.kody', 'accepted.yml'), 'utf8') } catch { return { set, authSet } }
   const lines = text.split('\n')
   let cur = null
   for (const raw of lines) {
@@ -114,11 +136,15 @@ function loadAllowlist() {
     const mt = line.match(/^\s*target:\s*(.+?)\s*$/); if (mt) cur.target = strip(mt[1])
     const mr = line.match(/^\s*reason:\s*(.+?)\s*$/); if (mr) cur.reason = strip(mr[1])
     const mk = line.match(/^\s*ticket:\s*(.+?)\s*$/); if (mk) cur.ticket = strip(mk[1])
-    if (cur.rule && cur.target && /rls-multitenant/.test(cur.rule)) {
-      set.set(cur.target, { reason: cur.reason || '', ticket: cur.ticket || '' })
-    }
+    if (!cur.rule || !cur.target) continue
+    const entry = { reason: cur.reason || '', ticket: cur.ticket || '' }
+    // ★先に authenticated を判定する。rls-authenticated-crosstenant は
+    //  /rls-multitenant/ に部分一致しないが、順序を明示しておかないと将来ルール名を
+    //  変えた時に静かに両方へ入る（＝越境ベースラインが anon 側も免除してしまう）。
+    if (/rls-authenticated-crosstenant/.test(cur.rule)) authSet.set(cur.target, entry)
+    else if (/rls-multitenant/.test(cur.rule)) set.set(cur.target, entry)
   }
-  return set
+  return { set, authSet }
   function strip(s) { return s.replace(/^["']|["']$/g, '').trim() }
 }
 
@@ -132,20 +158,31 @@ pol as ( select polrelid, count(*) n from pg_policy group by polrelid ),
 g as (
   select table_name, grantee, string_agg(distinct privilege_type, ',' order by privilege_type) privs
   from information_schema.role_table_grants
-  where table_schema = 'public' and grantee in ('anon','PUBLIC')
+  where table_schema = 'public' and grantee in ('anon','PUBLIC','authenticated')
   group by table_name, grantee
+),
+-- authenticated の「書き込み」権限だけを別に取る。SELECT だけなら越境で読めるにとどまり、
+-- 書き換え・削除ができるかどうかが実害の段違いなので分けて判定する。
+gw as (
+  select table_name, string_agg(distinct privilege_type, ',' order by privilege_type) privs
+  from information_schema.role_table_grants
+  where table_schema = 'public' and grantee = 'authenticated'
+    and privilege_type in ('INSERT','UPDATE','DELETE')
+  group by table_name
 )
 select coalesce(json_agg(json_build_object(
   'table', t.relname,
   'rls', t.relrowsecurity,
   'policies', coalesce(p.n, 0),
   'anon', (select privs from g where g.table_name = t.relname and g.grantee = 'anon'),
-  'pub',  (select privs from g where g.table_name = t.relname and g.grantee = 'PUBLIC')
+  'pub',  (select privs from g where g.table_name = t.relname and g.grantee = 'PUBLIC'),
+  'auth', (select privs from g where g.table_name = t.relname and g.grantee = 'authenticated'),
+  'authWrite', (select privs from gw where gw.table_name = t.relname)
 ) order by t.relname), '[]'::json)
 from tbls t left join pol p on p.polrelid = t.oid;
 `
 
-function classify(rows, allow) {
+function classify(rows, allow, authAllow) {
   const out = []
   for (const r of rows) {
     const anonReachable = !!(r.anon || r.pub)
@@ -155,7 +192,19 @@ function classify(rows, allow) {
     else if (!r.rls) { level = 'warn'; reason = 'RLS無効（anon到達不可・service_role等のみ）' }
     else if (anonReachable && r.policies === 0) { level = 'warn'; reason = 'RLS有効だがポリシー0件（実質deny-all／要確認）' }
     if (allowed && level !== 'ok') { reason = `allowlist許容: ${allow.get(r.table).reason || ''}`.trim() }
-    out.push({ ...r, anonReachable, allowed, level, reason })
+
+    // ── authenticated 次元（anon とは独立に判定する）──
+    //  RLS が無ければ account_id の絞り込みが一切かからない＝他テナントの行まで書ける。
+    const authAllowed = authAllow.has(r.table)
+    let authLevel = 'ok', authReason = ''
+    if (!r.rls && r.authWrite) {
+      authLevel = 'xtenant'
+      authReason = `authenticated:${r.authWrite} × RLS無効（ログイン中の他テナント利用者が書換・削除できる）`
+    }
+    if (authAllowed && authLevel !== 'ok') {
+      authReason = `allowlist許容: ${authAllow.get(r.table).reason || ''}`.trim()
+    }
+    out.push({ ...r, anonReachable, allowed, level, reason, authAllowed, authLevel, authReason })
   }
   return out
 }
@@ -163,54 +212,80 @@ function classify(rows, allow) {
 // ---- 実行 ----
 const env = loadEnv()
 const { pgEnv, label } = resolveConn(env)
-const allow = loadAllowlist()
+const { set: allow, authSet: authAllow } = loadAllowlist()
 const rows = psqlJson(pgEnv, AUDIT_SQL)
-const classified = classify(rows, allow)
+const classified = classify(rows, allow, authAllow)
 
 const leaks = classified.filter((r) => r.level === 'leak' && !r.allowed)
 const warns = classified.filter((r) => r.level === 'warn' && !r.allowed)
 const allowedHits = classified.filter((r) => r.allowed && r.level !== 'ok')
+const xtenants = classified.filter((r) => r.authLevel === 'xtenant' && !r.authAllowed)
+const authAllowedHits = classified.filter((r) => r.authAllowed && r.authLevel !== 'ok')
 
 const summary = {
   target: label,
   total: classified.length,
-  violations: leaks.length,
+  violations: leaks.length + xtenants.length,
+  anon_violations: leaks.length,
+  authenticated_violations: xtenants.length,
   warnings: warns.length,
-  allowlisted: allowedHits.length,
-  verdict: leaks.length === 0 ? 'pass' : 'block',
+  allowlisted: allowedHits.length + authAllowedHits.length,
+  verdict: (leaks.length + xtenants.length) === 0 ? 'pass' : 'block',
   leaks: leaks.map((r) => ({ table: r.table, rls: r.rls, anon: r.anon, pub: r.pub, reason: r.reason })),
+  xtenant: xtenants.map((r) => ({ table: r.table, rls: r.rls, authWrite: r.authWrite, reason: r.authReason })),
   warns: warns.map((r) => ({ table: r.table, rls: r.rls, anon: r.anon, reason: r.reason })),
   allowlisted_hits: allowedHits.map((r) => ({ table: r.table, reason: r.reason })),
-  tables: classified.map((r) => ({ table: r.table, rls: r.rls, policies: r.policies, anon: r.anon || null, pub: r.pub || null, level: r.allowed ? 'allow' : r.level })),
+  authenticated_allowlisted_hits: authAllowedHits.map((r) => ({ table: r.table, reason: r.authReason })),
+  tables: classified.map((r) => ({
+    table: r.table, rls: r.rls, policies: r.policies,
+    anon: r.anon || null, pub: r.pub || null, authWrite: r.authWrite || null,
+    level: r.allowed ? 'allow' : r.level,
+    authLevel: r.authAllowed ? 'allow' : r.authLevel,
+  })),
 }
 
 if (JSON_ONLY) {
   process.stdout.write(JSON.stringify(summary, null, 2) + '\n')
 } else {
   const mark = (r) => r.allowed ? '⚪allow' : r.level === 'leak' ? '🔴LEAK' : r.level === 'warn' ? '🟡warn' : '🟢ok'
-  console.log(`\n📋 RLS/anon 監査 — ${label}  (public 表 ${summary.total}件)`)
-  console.log('─'.repeat(78))
-  console.log(['  状態', 'テーブル'.padEnd(28), 'RLS', 'pol', 'anon/public grant'].join(' '))
+  const authMark = (r) => r.authAllowed ? '⚪' : r.authLevel === 'xtenant' ? '🟠' : '・'
+  console.log(`\n📋 RLS 監査（anon / authenticated） — ${label}  (public 表 ${summary.total}件)`)
+  console.log('─'.repeat(96))
+  console.log(['  状態', 'テーブル'.padEnd(28), 'RLS', 'pol', '越', 'grant'].join(' '))
   for (const r of classified) {
-    const grant = [r.anon ? `anon:${r.anon}` : null, r.pub ? `PUBLIC:${r.pub}` : null].filter(Boolean).join(' ') || '—'
-    console.log(['  ' + mark(r).padEnd(7), r.table.padEnd(28), (r.rls ? 'on ' : 'OFF'), String(r.policies).padStart(2) + ' ', grant].join(' '))
+    const grant = [
+      r.anon ? `anon:${r.anon}` : null,
+      r.pub ? `PUBLIC:${r.pub}` : null,
+      r.authWrite ? `auth-w:${r.authWrite}` : null,
+    ].filter(Boolean).join(' ') || '—'
+    console.log(['  ' + mark(r).padEnd(7), r.table.padEnd(28), (r.rls ? 'on ' : 'OFF'), String(r.policies).padStart(2) + ' ', authMark(r) + ' ', grant].join(' '))
   }
-  console.log('─'.repeat(78))
-  console.log(`🔴 LEAK(違反): ${leaks.length}　🟡 warn: ${warns.length}　⚪ allowlist許容: ${allowedHits.length}`)
+  console.log('─'.repeat(96))
+  console.log(`🔴 LEAK(anon違反): ${leaks.length}　🟠 XTENANT(authenticated越境違反): ${xtenants.length}　🟡 warn: ${warns.length}　⚪ allowlist許容: ${allowedHits.length + authAllowedHits.length}`)
   if (leaks.length) {
     console.log('\n🔴 違反（allowlist外・anon到達可×RLS無効）:')
     for (const r of leaks) console.log(`   - ${r.table} … ${r.reason}`)
+  }
+  if (xtenants.length) {
+    console.log('\n🟠 違反（allowlist外・authenticated書込可×RLS無効＝他テナントの行を書換・削除できる）:')
+    for (const r of xtenants) console.log(`   - ${r.table} … ${r.authReason}`)
   }
   if (warns.length) {
     console.log('\n🟡 warn（report のみ・assert非対象）:')
     for (const r of warns) console.log(`   - ${r.table} … ${r.reason}`)
   }
   if (allowedHits.length) {
-    console.log('\n⚪ allowlist で許容中（accepted.yml で追跡）:')
+    console.log('\n⚪ allowlist で許容中（anon次元・accepted.yml で追跡）:')
     for (const r of allowedHits) console.log(`   - ${r.table} … ${r.reason}`)
+  }
+  if (authAllowedHits.length) {
+    console.log(`\n⚪ allowlist で許容中（authenticated越境・${authAllowedHits.length}件・accepted.yml で追跡）`)
+    console.log('   ※ ベースライン。1件ずつRLS化していく対象で、ここが0になるのがゴール。')
   }
   console.log(`\nverdict: ${summary.verdict}\n`)
 }
 
-if (ASSERT && leaks.length > 0) process.exit(1)
+// ★anon と authenticated の**どちらか**に allowlist 外の違反があれば落とす。
+//  片方だけ見ていたのが 2026-08-15 に32表の越境書き込みを見逃した原因なので、両方で assert する。
+if (ASSERT && (leaks.length + xtenants.length) > 0) process.exit(1)
 process.exit(0)
