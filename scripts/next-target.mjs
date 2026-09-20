@@ -165,7 +165,30 @@ async function main() {
   // --board: 全ステータスの盤面を出して終了（/run ステートマシン用）
   if (BOARD) { printBoard(out.results); return }
 
-  const rows = out.results.sort((a, b) => {
+  // ★T44 設計OK ゲート（2026-09-20）: 設計書 relation を持つ要件定義済みは、設計書のステータスが
+  //   設計OK／チケット化済 になるまで Ready から外す（先方の回答待ちのものを /run が拾って推測実装しない）。
+  //   設計書が読めない（未共有・失敗）時は fail-closed＝外す（理由を出す）。設計書なしは従来どおり。
+  const specStatus = new Map()
+  for (const p of out.results) for (const r of (p.properties?.['設計書']?.relation || [])) if (!specStatus.has(r.id)) {
+    try {
+      const res = await fetch(`https://api.notion.com/v1/pages/${r.id}`, { headers: { Authorization: `Bearer ${TOKEN}`, 'Notion-Version': '2022-06-28' } })
+      const j = res.ok ? await res.json() : null
+      specStatus.set(r.id, j?.properties?.['ステータス']?.select?.name ?? '(読めない)')
+    } catch { specStatus.set(r.id, '(読めない)') }
+  }
+  const specGate = (p) => {
+    const rel = p.properties?.['設計書']?.relation || []
+    if (rel.length === 0) return null
+    const bad = rel.map((r) => specStatus.get(r.id)).filter((st) => !['設計OK', 'チケット化済'].includes(st))
+    return bad.length ? `設計OK待ち（設計書: ${bad.join('/')}）` : null
+  }
+  const held = out.results.filter((p) => specGate(p))
+  if (held.length) {
+    console.log(`■ 設計OK待ちで保留中（Ready から除外）: ${held.length}件`)
+    for (const p of held) console.log(`  - ${title(p)} — ${specGate(p)}`)
+  }
+
+  const rows = out.results.filter((p) => !specGate(p)).sort((a, b) => {
     const ra = rankOfPriority(priority(a))
     const rb = rankOfPriority(priority(b))
     if (ra !== rb) return ra - rb
