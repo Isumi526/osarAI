@@ -179,6 +179,9 @@ export function useMeetingRecorder(): MeetingRecorder {
         audio: true,
         ...({
           systemAudio: 'include',
+          // Chrome/Edge 152+ で「画面/ウィンドウ」ペインの音声チェックを既定ONにするヒント
+          // （それ以前のバージョンや Safari/Firefox では無視される）。
+          audioSelection: 'preferred',
           selfBrowserSurface: 'exclude',
           monitorTypeSurfaces: 'include',
           surfaceSwitching: 'exclude',
