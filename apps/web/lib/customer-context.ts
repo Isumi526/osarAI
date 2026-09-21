@@ -25,9 +25,15 @@ export async function buildContext(
       .order('met_at', { ascending: false, nullsFirst: false })
       .limit(10);
     const timeline = (ix ?? [])
-      .map((r) => {
+      .map((r, i) => {
         const s = r.ai_summary as AiSummary | null;
         const when = r.met_at ? new Date(r.met_at).toLocaleDateString('ja-JP') : '日付不明';
+        // 会議録音の議事録があればそれを優先（直近3件は全文、それ以前は冒頭のみ）。
+        // AI相談が「前回どんな話をしたか」を踏まえて答えられるようにする（T7c）。
+        if (s?.minutes) {
+          const body = i < 3 ? s.minutes : s.minutes.slice(0, 300) + (s.minutes.length > 300 ? '…' : '');
+          return `- ${when}（会議の議事録）:\n${body.replace(/^/gm, '    ')}`;
+        }
         const bodyText = s?.points?.length ? s.points.join('、') : (r.raw_text ?? '').slice(0, 120);
         const next = s?.next_actions?.length ? ` / 次: ${s.next_actions.join('、')}` : '';
         return `- ${when}: ${bodyText}${next}`;

@@ -53,7 +53,12 @@ export async function POST(req: Request) {
     transcriptText?: string;
     /** 会議の実施日時（ISO）。過去の録音/文字起こしを取り込む時に、相対日付の解決と met_at の基準にする */
     recordedAt?: string;
+    /** 録音者本人が話していた区間（秒）。PC録音のマイクゲートが記録する（T7c・話者の取り違え防止） */
+    selfSegments?: [number, number][];
   };
+  const selfSegments = Array.isArray(body.selfSegments)
+    ? body.selfSegments.filter((x): x is [number, number] => Array.isArray(x) && x.length === 2 && x.every((n) => typeof n === 'number')).slice(0, 400)
+    : undefined;
   const recordedAt = body.recordedAt && !Number.isNaN(Date.parse(body.recordedAt)) ? new Date(body.recordedAt) : null;
   const importedText = typeof body.transcriptText === 'string' ? body.transcriptText.trim() : '';
   const recordingPath = (body.recordingPath ?? '').trim();
@@ -155,6 +160,7 @@ export async function POST(req: Request) {
     return json({ error: 'ingest_failed', meetingId, detail }, status);
   };
 
+  const durationSecBody = typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null;
   let transcript: string;
   if (importedText) {
     // --- 貼り付け取り込み: 文字起こしは済んでいるので形式だけ揃える（話者: 発言） ---
@@ -172,6 +178,8 @@ export async function POST(req: Request) {
       transcript = await geminiTranscribeLong(bytes, mimeType, {
       channelSelfLeft: capture === 'pc_local',
       selfName: (profile.display_name ?? '').trim() || undefined,
+      selfSegments: capture === 'pc_local' ? selfSegments : undefined,
+      durationSec: durationSecBody ?? undefined,
     });
     } catch (e) {
       return fail(`文字起こしに失敗しました: ${String(e)}`, 502);

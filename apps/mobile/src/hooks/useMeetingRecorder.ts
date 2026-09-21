@@ -49,6 +49,12 @@ export interface RecordingResult {
   blob: Blob;
   mimeType: string;
   durationSec: number;
+  /**
+   * 録音者本人（マイク）が実際に話していた時間帯 [開始秒, 終了秒]（T7c）。
+   * スピーカー再生だと相手の声がマイクにも漏れて「自分の発言」と誤認されるため、
+   * マイク側は「相手より十分大きい時だけ通す」ゲートをかけ、通した区間を記録して文字起こしのヒントにする。
+   */
+  selfSegments?: [number, number][];
 }
 
 /** 入力レベル（0〜1）。録音中に「本当に音が入っているか」を可視化するため（T7b）。 */
@@ -72,7 +78,8 @@ export interface MeetingRecorder {
   shareEnded: boolean;
   mimeType: string;
   /** 録音を開始する。失敗時は ok=false と理由（画面側はこの戻り値を使う・stale closure 対策）。 */
-  start: () => Promise<{ ok: boolean; error: string | null }>;
+  /** 録音を開始する。onChunk は timeslice ごとの Blob（IndexedDB への逐次保存用・T7c） */
+  start: (opts?: { onChunk?: (blob: Blob, index: number) => void }) => Promise<{ ok: boolean; error: string | null }>;
   stop: () => Promise<RecordingResult | null>;
   pause: () => void;
   resume: () => void;
@@ -109,6 +116,10 @@ export function useMeetingRecorder(): MeetingRecorder {
   const mimeRef = useRef<string>('audio/webm');
   // 共有終了などで先に録音が止まった時の確定済みデータ（stop() はこれを返す）
   const pendingRef = useRef<RecordingResult | null>(null);
+  // 本人が話していた区間（ゲート通過区間・録音開始からの秒）。finalize で RecordingResult に載せる
+  const selfSegmentsRef = useRef<[number, number][]>([]);
+  const selfOpenRef = useRef<number | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const stopWaitersRef = useRef<((r: RecordingResult | null) => void)[]>([]);
 
   const supported =
@@ -123,6 +134,12 @@ export function useMeetingRecorder(): MeetingRecorder {
   const cleanup = useCallback(() => {
     if (meterRef.current) clearInterval(meterRef.current);
     meterRef.current = null;
+    try {
+      processorRef.current?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    processorRef.current = null;
     displayRef.current?.getTracks().forEach((t) => t.stop());
     micRef.current?.getTracks().forEach((t) => t.stop());
     ctxRef.current?.close().catch(() => {});
@@ -137,7 +154,11 @@ export function useMeetingRecorder(): MeetingRecorder {
     if (pendingRef.current) return pendingRef.current;
     const blob = new Blob(chunksRef.current, { type: mimeRef.current });
     const durationSec = Math.round((Date.now() - startedAtRef.current) / 1000);
-    const result = blob.size > 0 ? { blob, mimeType: mimeRef.current, durationSec } : null;
+    if (selfOpenRef.current !== null) {
+      selfSegmentsRef.current.push([selfOpenRef.current, durationSec]);
+      selfOpenRef.current = null;
+    }
+    const result = blob.size > 0 ? { blob, mimeType: mimeRef.current, durationSec, selfSegments: selfSegmentsRef.current } : null;
     pendingRef.current = result;
     cleanup();
     setRecording(false);
@@ -160,7 +181,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     };
   }, [cleanup]);
 
-  const start = useCallback(async (): Promise<{ ok: boolean; error: string | null }> => {
+  const start = useCallback(async (startOpts?: { onChunk?: (blob: Blob, index: number) => void }): Promise<{ ok: boolean; error: string | null }> => {
     setError(null);
     setShareEnded(false);
     pendingRef.current = null;
@@ -208,8 +229,47 @@ export function useMeetingRecorder(): MeetingRecorder {
       const micSource = ctx.createMediaStreamSource(mic);
       const sysSource = ctx.createMediaStreamSource(new MediaStream(sysAudio));
       const merger = ctx.createChannelMerger(2);
-      micSource.connect(merger, 0, 0); // 左 = 自分
+      // マイク側のゲート: スピーカー再生時に相手の声がマイクへ漏れる分（相手より小さい）を落とし、
+      // 本人が話している時（相手より十分大きい）だけ通す。イヤホン時は常に通る。
+      // ScriptProcessorNode は非推奨だが、外部ファイル不要で全ブラウザで動くためここでは採用。
+      const gate = ctx.createScriptProcessor(2048, 2, 1);
+      const pair = ctx.createChannelMerger(2);
+      micSource.connect(pair, 0, 0);
+      sysSource.connect(pair, 0, 1);
+      pair.connect(gate);
+      selfSegmentsRef.current = [];
+      selfOpenRef.current = null;
+      let holdBlocks = 0;
+      const gateStart = ctx.currentTime;
+      gate.onaudioprocess = (ev) => {
+        const micIn = ev.inputBuffer.getChannelData(0);
+        const sysIn = ev.inputBuffer.getChannelData(1);
+        const out = ev.outputBuffer.getChannelData(0);
+        let m = 0;
+        let sy = 0;
+        for (let i = 0; i < micIn.length; i++) {
+          m += micIn[i]! * micIn[i]!;
+          sy += sysIn[i]! * sysIn[i]!;
+        }
+        const micRms = Math.sqrt(m / micIn.length);
+        const sysRms = Math.sqrt(sy / sysIn.length);
+        // 本人が話している判定: マイクが無音でなく、かつ相手側の 1.5 倍以上（漏れなら相手側より小さい）
+        const speaking = micRms > 0.004 && micRms > sysRms * 1.5;
+        if (speaking) holdBlocks = 8; // 語尾が切れないよう約0.4秒ホールド
+        else if (holdBlocks > 0) holdBlocks--;
+        const pass = speaking || holdBlocks > 0;
+        const t = Math.max(0, Math.round(ev.playbackTime - gateStart));
+        if (pass && selfOpenRef.current === null) selfOpenRef.current = t;
+        if (!pass && selfOpenRef.current !== null) {
+          if (t - selfOpenRef.current >= 1) selfSegmentsRef.current.push([selfOpenRef.current, t]);
+          selfOpenRef.current = null;
+        }
+        if (pass) out.set(micIn);
+        else out.fill(0);
+      };
+      gate.connect(merger, 0, 0); // 左 = 自分（ゲート後）
       sysSource.connect(merger, 0, 1); // 右 = 相手
+      processorRef.current = gate;
       const dest = ctx.createMediaStreamDestination();
       merger.connect(dest);
 
@@ -218,7 +278,7 @@ export function useMeetingRecorder(): MeetingRecorder {
       const sysAn = ctx.createAnalyser();
       micAn.fftSize = 1024;
       sysAn.fftSize = 1024;
-      micSource.connect(micAn);
+      gate.connect(micAn); // ゲート後＝「自分が話している」時だけ振れる
       sysSource.connect(sysAn);
       const buf = new Float32Array(1024) as Float32Array<ArrayBuffer>;
       silentSinceRef.current = Date.now();
@@ -240,8 +300,16 @@ export function useMeetingRecorder(): MeetingRecorder {
       mimeRef.current = mimeType;
       const mr = new MediaRecorder(dest.stream, { mimeType, audioBitsPerSecond: AUDIO_BITS_PER_SECOND });
       chunksRef.current = [];
+      let chunkIndex = 0;
       mr.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          try {
+            startOpts?.onChunk?.(e.data, chunkIndex++);
+          } catch {
+            /* 保存失敗で録音は止めない */
+          }
+        }
       };
       // onstop は start 時点で設定する（共有終了で先に止まっても Blob 化されるように）。
       mr.onstop = () => {

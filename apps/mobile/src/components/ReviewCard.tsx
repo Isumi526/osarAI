@@ -214,19 +214,24 @@ export function ReviewCard({
               </div>
             </div>
           )}
-          {/* その人について知っていること・今回分かったこと・約束を1つのメモにまとめる（要点/ニーズ/次アクション
-              /つながりたい人の分割はフォーム負担が大きい＝2026-09-21 レビュー）。保存先は従来どおり points(行) */}
-          <LinesField
-            label="この人についてのメモ"
-            value={personMemoLines(p)}
-            onChange={(v) =>
-              setProposals({
-                ...proposals,
-                people: proposals.people.map((x, j) => (j === i ? applyPersonMemo(x, v) : x)),
-              })
-            }
-            placeholder="話した内容・相手の状況・約束したことなど（1行に1つ）"
-          />
+          {/* その人についてのメモ（要点/ニーズ/次アクション/つながりたい人を1本に統合）。会議録音では
+              議事録が主役なので既定は畳み、必要な時だけ開く（2026-09-21 レビュー）。保存先は従来どおり points(行) */}
+          <details open={personMemoLines(p).length > 0 && !minutes}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--color-text-muted)' }}>
+              この人についてのメモ{personMemoLines(p).length > 0 ? `（${personMemoLines(p).length}件）` : '（任意）'}
+            </summary>
+            <LinesField
+              label=""
+              value={personMemoLines(p)}
+              onChange={(v) =>
+                setProposals({
+                  ...proposals,
+                  people: proposals.people.map((x, j) => (j === i ? applyPersonMemo(x, v) : x)),
+                })
+              }
+              placeholder="話した内容・相手の状況・約束したことなど（1行に1つ）"
+            />
+          </details>
         </div>
       ))}
       {allowAddPerson && (

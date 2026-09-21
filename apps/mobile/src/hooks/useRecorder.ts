@@ -22,7 +22,7 @@ export interface Recorder {
   silentSec: number;
   error: string | null;
   /** 失敗時は ok=false と理由を返す（呼び出し側が古い error state を読む stale closure を避ける・T7）。 */
-  start: (opts?: { audioBitsPerSecond?: number; meter?: boolean }) => Promise<{ ok: boolean; error: string | null }>;
+  start: (opts?: { audioBitsPerSecond?: number; meter?: boolean; onChunk?: (blob: Blob, index: number) => void }) => Promise<{ ok: boolean; error: string | null }>;
   stop: () => Promise<Blob | null>;
   pause: () => void;
   resume: () => void;
@@ -46,7 +46,7 @@ export function useRecorder(): Recorder {
     !!navigator.mediaDevices?.getUserMedia &&
     typeof MediaRecorder !== 'undefined';
 
-  const start = useCallback(async (opts?: { audioBitsPerSecond?: number; meter?: boolean }) => {
+  const start = useCallback(async (opts?: { audioBitsPerSecond?: number; meter?: boolean; onChunk?: (blob: Blob, index: number) => void }) => {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -79,8 +79,16 @@ export function useRecorder(): Recorder {
         ...(opts?.audioBitsPerSecond ? { audioBitsPerSecond: opts.audioBitsPerSecond } : {}),
       });
       chunksRef.current = [];
+      let chunkIndex = 0;
       mr.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          try {
+            opts?.onChunk?.(e.data, chunkIndex++);
+          } catch {
+            /* 保存失敗で録音は止めない */
+          }
+        }
       };
       // 1秒ごとにチャンク化（会議の長時間録音で1つの巨大Blobにしない）
       mr.start(1000);

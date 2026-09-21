@@ -333,7 +333,16 @@ async function deleteGeminiFile(name: string): Promise<void> {
 export async function geminiTranscribeLong(
   bytes: Uint8Array,
   mimeType: string,
-  opts: { model?: string; language?: string; cleanFillers?: boolean; channelSelfLeft?: boolean; selfName?: string } = {},
+  opts: {
+    model?: string;
+    language?: string;
+    cleanFillers?: boolean;
+    channelSelfLeft?: boolean;
+    selfName?: string;
+    /** 本人（左ch）が話していた区間 [開始秒, 終了秒]。無ければ渡さない */
+    selfSegments?: [number, number][];
+    durationSec?: number;
+  } = {},
 ): Promise<string> {
   // 実会議30分の評価（2026-09-21・Notta参照）で Flash-Lite は同じ段落を数十回繰り返すループに入り
   // 173秒/10万字の出力になった（CER 75%）。Flash＋thinking最小＋出力上限なら 22秒・ループ無し（CER 25%・
@@ -346,9 +355,23 @@ export async function geminiTranscribeLong(
         `ただし話し言葉の自然さは保ち、内容の要約・言い換え・補完はしないでください（言っていないことを足さない）。`;
   // 話者ラベル付け（T4）。PC録音は2chステレオ（左=自分/右=相手）なので、その前提で
   // 「自分」と「相手1/相手2…」を割り当てさせる。それ以外は話者A/B/Cで分離のみ。
+  const fmt = (sec: number) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+  const segs = opts.selfSegments ?? [];
+  // 本人が話した区間のヒント（PC録音）。マイク側はゲート済みなので、区間外の発話はすべて相手のもの。
+  const selfHint =
+    opts.channelSelfLeft && opts.selfSegments
+      ? segs.length === 0
+        ? `録音者本人はこの会議中ほとんど発言していません。聞こえる発話は基本的にすべて相手のものとして「相手1:」「相手2:」で書き、「自分:」は使わないでください。`
+        : `録音者本人が話していた時間帯は ${segs
+            .slice(0, 60)
+            .map(([a, b]) => `${fmt(a)}〜${fmt(b)}`)
+            .join('、')}${segs.length > 60 ? ' ほか' : ''} です（録音開始からの経過時間）。` +
+          `それ以外の時間帯の発話は相手のものです。この時間帯を「自分:」の判定に使ってください。`
+      : '';
   const diarization = opts.channelSelfLeft
     ? `この音声は2chステレオで、左チャンネルが録音者本人（あなたの利用者=「自分」）、右チャンネルが相手です。` +
-      `話者が替わったら改行し、行頭に「自分:」または相手が複数なら「相手1:」「相手2:」のようにラベルを付けてください。`
+      `話者が替わったら改行し、行頭に「自分:」または相手が複数なら「相手1:」「相手2:」のようにラベルを付けてください。` +
+      selfHint
     : `複数人が話している場合は、話者が替わったら改行し、行頭に話者ラベルを付けてください。` +
       (opts.selfName
         ? `録音者本人の名前は「${opts.selfName}」です。会話中の呼びかけ（「${opts.selfName}さん」等）や文脈から本人と判断できる話者は「自分:」、それ以外は「相手1:」「相手2:」のようにラベルを付けてください。判断できない場合は「話者A:」「話者B:」で構いません。`

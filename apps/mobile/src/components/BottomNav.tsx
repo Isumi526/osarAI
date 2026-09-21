@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { HomeIcon, ScheduleIcon, TaskIcon, SettingsIcon } from './NavIcons.js';
 import { useNavGuardDirty } from './NavGuard.js';
 import { useConfirm } from './ConfirmDialog.js';
+import { useMeetingSession, fmtSec } from './MeetingSession.js';
 
 export const BOTTOM_NAV_HEIGHT = 56;
 
@@ -23,6 +24,7 @@ export function BottomNav() {
   const navigate = useNavigate();
   const isDirty = useNavGuardDirty();
   const { confirm, dialog: confirmDialog } = useConfirm();
+  const ms = useMeetingSession();
 
   // 編集中(チャット系画面の未送信入力/未保存セッション)にタブ移動しようとした場合、
   // 確認ダイアログを挟んでから遷移する(議事録要望「下部ナビタップ時なども同様」)。
@@ -38,6 +40,33 @@ export function BottomNav() {
 
   return (
     <>
+      {/* 録音中に他画面へ移動しても録音は続く。戻り口としてナビの上に帯を出す（T7c） */}
+      {ms.recording && pathname !== '/meeting' && (
+        <button
+          type="button"
+          onClick={() => navigate('/meeting')}
+          style={{
+            position: 'fixed',
+            bottom: BOTTOM_NAV_HEIGHT,
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            border: 'none',
+            borderRadius: 0,
+            background: ms.paused ? '#6b6358' : '#c0392b',
+            color: '#fff',
+            fontSize: 13,
+            padding: '8px 12px',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 8,
+            marginBottom: 'env(safe-area-inset-bottom)',
+          }}
+        >
+          <span>{ms.paused ? '❚❚ 一時停止中' : '● 録音中'} {fmtSec(ms.elapsed)}</span>
+          <span style={{ opacity: 0.85 }}>録音画面へ戻る →</span>
+        </button>
+      )}
       <nav
         style={{
           position: 'fixed',
