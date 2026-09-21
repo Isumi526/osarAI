@@ -24,6 +24,12 @@ export const maxDuration = 300;
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
 
 const CAPTURES = ['pc_local', 'mobile_speaker', 'bot', 'text_import'] as const;
+/**
+ * 自動提案する「つながり」候補の上限（MVP は1対1が主・多人数の会議は主要な相手だけ）。
+ * 役員会議級（16話者）で候補が15人出て承認画面が埋まったため（2026-09-21 実データ評価）。
+ * 超えた分は候補から外し warnings で知らせる（文字起こし・議事録は人数に関係なく生成する）。
+ */
+const MAX_PEOPLE = 3;
 /** 貼り付け取り込みの上限（1時間の会議でも 3〜5 万字程度） */
 const MAX_IMPORT_CHARS = 200_000;
 type Capture = (typeof CAPTURES)[number];
@@ -163,7 +169,10 @@ export async function POST(req: Request) {
     // --- 長尺文字起こし（Files API・話者ラベル付き） ---
     try {
       // PC録音は2chステレオ（左=自分/右=相手）なので self/other を割り当てさせる（T4）。
-      transcript = await geminiTranscribeLong(bytes, mimeType, { channelSelfLeft: capture === 'pc_local' });
+      transcript = await geminiTranscribeLong(bytes, mimeType, {
+      channelSelfLeft: capture === 'pc_local',
+      selfName: (profile.display_name ?? '').trim() || undefined,
+    });
     } catch (e) {
       return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
     }
@@ -241,6 +250,7 @@ export async function POST(req: Request) {
     `ユーザー本人${selfName ? `（名前: ${selfName}。「自分:」の発言者）` : '（「自分:」の発言者）'}を people に含めないでください。` +
     `話の中で名前だけ出た第三者（紹介したい知人など）は people に入れず、必要なら tasks の題名に含めてください。` +
     `相手の名前が分からない場合は name を空文字にしてください（「相手1」のようなラベルを名前にしない）。` +
+    `people は、ユーザーが直接やり取りした主要な相手を最大 ${MAX_PEOPLE} 人まで（発言量の多い順）にしてください。` +
     `\n---\n${transcript}\n---`;
   const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history });
 
@@ -260,6 +270,12 @@ export async function POST(req: Request) {
     extractError = `候補の抽出に失敗しました: ${String(e)}`;
     console.error('[meeting/ingest] extract failed', e);
   }
+  let peopleWarning: string | null = null;
+  if ((extracted.people?.length ?? 0) > MAX_PEOPLE) {
+    const dropped = extracted.people!.length - MAX_PEOPLE;
+    extracted = { ...extracted, people: extracted.people!.slice(0, MAX_PEOPLE) };
+    peopleWarning = `多人数の会議のため、つながり候補を主要な${MAX_PEOPLE}名に絞りました（${dropped}名は候補から外しました。必要なら「つながりを追加」で足せます）。`;
+  }
   const proposals = toProposals(extracted, customers, now);
 
   await supabase
@@ -274,7 +290,7 @@ export async function POST(req: Request) {
     })
     .eq('id', meetingId);
 
-  const warnings = [extractError, minutesError].filter((w): w is string => !!w);
+  const warnings = [extractError, minutesError, peopleWarning].filter((w): w is string => !!w);
   return json({ meetingId, transcript, minutes, proposals, speakers, warnings }, 200);
 }
 

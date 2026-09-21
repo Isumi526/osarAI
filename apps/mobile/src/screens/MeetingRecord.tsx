@@ -15,7 +15,7 @@ import { useRecorder } from '../hooks/useRecorder.js';
 import { ApiError } from '../lib/api.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { uploadMeetingAudio, ingestMeeting, ingestTranscriptText, commitMeeting, type IngestResponse, type MeetingCapture, type Speaker } from '../lib/meeting.js';
-import { listCustomers } from '../lib/db.js';
+import { listCustomers, getMyProfile } from '../lib/db.js';
 import { detectPlatform, BROWSER_LABEL, OS_LABEL } from '../lib/platform.js';
 import { SILENCE_LEVEL } from '../hooks/useMeetingRecorder.js';
 import type { Proposals } from '../lib/assistant.js';
@@ -42,6 +42,8 @@ export function MeetingRecord() {
   // 話者割当・手動追加で既存のつながりを選べるようにする（名前で一致したら customer_id を紐付け）
   const [existing, setExisting] = useState<{ id: string; name: string }[]>([]);
   const [importText, setImportText] = useState('');
+  // 表示名が未設定（メールの@前など）だと「自分/相手」の判定が弱くなるので案内する
+  const [nameHint, setNameHint] = useState(false);
   const [importDate, setImportDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +88,14 @@ export function MeetingRecord() {
     listCustomers({ status: 'active' })
       .then((rows) => {
         if (!cancelled) setExisting(rows.map((c) => ({ id: c.id, name: c.name })));
+      })
+      .catch(() => {});
+    getMyProfile()
+      .then((p) => {
+        if (cancelled) return;
+        const name = (p?.display_name ?? '').trim();
+        // 未設定・英数字のみ（メールの@前の自動値）・1文字は本名でない可能性が高い
+        setNameHint(!name || /^[\w.+-]+$/.test(name) || name.length < 2);
       })
       .catch(() => {});
     getEntitlement()
@@ -468,6 +478,12 @@ export function MeetingRecord() {
               録音を開始
             </button>
           </>
+        )}
+
+        {phase === 'idle' && gate === 'ok' && mode !== 'none' && nameHint && (
+          <p style={{ margin: 0, padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-border)', fontSize: 13 }}>
+            マイページの<b>表示名を本名（漢字）</b>にしておくと、会話の中の「自分」と「相手」の判定が安定し、議事録の精度が上がります。
+          </p>
         )}
 
         {phase === 'idle' && gate === 'ok' && mode !== 'none' && (

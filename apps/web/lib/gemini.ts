@@ -333,7 +333,7 @@ async function deleteGeminiFile(name: string): Promise<void> {
 export async function geminiTranscribeLong(
   bytes: Uint8Array,
   mimeType: string,
-  opts: { model?: string; language?: string; cleanFillers?: boolean; channelSelfLeft?: boolean } = {},
+  opts: { model?: string; language?: string; cleanFillers?: boolean; channelSelfLeft?: boolean; selfName?: string } = {},
 ): Promise<string> {
   // 実会議30分の評価（2026-09-21・Notta参照）で Flash-Lite は同じ段落を数十回繰り返すループに入り
   // 173秒/10万字の出力になった（CER 75%）。Flash＋thinking最小＋出力上限なら 22秒・ループ無し（CER 25%・
@@ -349,7 +349,10 @@ export async function geminiTranscribeLong(
   const diarization = opts.channelSelfLeft
     ? `この音声は2chステレオで、左チャンネルが録音者本人（あなたの利用者=「自分」）、右チャンネルが相手です。` +
       `話者が替わったら改行し、行頭に「自分:」または相手が複数なら「相手1:」「相手2:」のようにラベルを付けてください。`
-    : `複数人が話している場合は、話者が替わったら改行し、可能なら行頭に「話者A:」「話者B:」のように話者ラベルを付けてください（誰かは特定しなくてよい）。`;
+    : `複数人が話している場合は、話者が替わったら改行し、行頭に話者ラベルを付けてください。` +
+      (opts.selfName
+        ? `録音者本人の名前は「${opts.selfName}」です。会話中の呼びかけ（「${opts.selfName}さん」等）や文脈から本人と判断できる話者は「自分:」、それ以外は「相手1:」「相手2:」のようにラベルを付けてください。判断できない場合は「話者A:」「話者B:」で構いません。`
+        : `可能なら「話者A:」「話者B:」のように話者ラベルを付けてください（誰かは特定しなくてよい）。`);
   const instruction =
     `次の会議音声を${opts.language ?? '日本語'}で文字起こししてください。` +
     diarization +
