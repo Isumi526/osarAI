@@ -43,3 +43,29 @@ test('isSpeakerLabel: ラベルそのものは人物名として扱わない', (
   for (const s of ['相手1', '相手 2', '話者A', '話者B', '自分', '相手', '話者']) expect(isSpeakerLabel(s)).toBe(true);
   for (const s of ['山田', '相手方株式会社', '話者太郎', '']) expect(isSpeakerLabel(s)).toBe(false);
 });
+
+// --- T7b: 他ツールの文字起こし取り込み ---
+import { normalizeImportedTranscript } from '../lib/meeting-speakers';
+
+test('normalizeImportedTranscript: Notta形式（名前＋タイムスタンプ行→発言行）を「名前: 発言」に揃える', () => {
+  const src = '話者 1  00:00:03\n本日はありがとうございます。\n話者 2  00:00:10\nこちらこそ。\n話者 1  00:00:15\n時間: 14時でお願いします。\n';
+  const out = normalizeImportedTranscript(src);
+  expect(out.split('\n')).toEqual(['話者1: 本日はありがとうございます。', '話者2: こちらこそ。', '話者1: 時間: 14時でお願いします。']);
+  expect(parseSpeakers(out)).toEqual([
+    { label: '話者1', isSelf: false },
+    { label: '話者2', isSelf: false },
+  ]);
+});
+
+test('normalizeImportedTranscript: 行頭タイムスタンプを落とし「名前: 発言」はそのまま', () => {
+  expect(normalizeImportedTranscript('[00:01:02] 山田 太郎: はい\n00:02 鈴木: どうも\n\n補足の行')).toBe('山田 太郎: はい\n鈴木: どうも\n補足の行');
+});
+
+test('parseSpeakers: 任意の名前ラベルは2行以上に出た時だけ話者とみなす（本文中のコロンを誤認しない）', () => {
+  const t = '山田 太郎: はい\n鈴木: どうも\n山田 太郎: 時間: 14時です\n鈴木: 了解\n注意: これは話者ではない';
+  expect(parseSpeakers(t)).toEqual([
+    { label: '山田 太郎', isSelf: false },
+    { label: '鈴木', isSelf: false },
+  ]);
+  expect(relabelSpeakers(t, { '山田 太郎': '山田' }).split('\n')[0]).toBe('山田: はい');
+});

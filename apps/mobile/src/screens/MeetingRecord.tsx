@@ -14,7 +14,10 @@ import { useMeetingRecorder, type RecordingResult } from '../hooks/useMeetingRec
 import { useRecorder } from '../hooks/useRecorder.js';
 import { ApiError } from '../lib/api.js';
 import { getEntitlement } from '../lib/subscription.js';
-import { uploadMeetingAudio, ingestMeeting, commitMeeting, type MeetingCapture, type Speaker } from '../lib/meeting.js';
+import { uploadMeetingAudio, ingestMeeting, ingestTranscriptText, commitMeeting, type IngestResponse, type MeetingCapture, type Speaker } from '../lib/meeting.js';
+import { listCustomers } from '../lib/db.js';
+import { detectPlatform, BROWSER_LABEL, OS_LABEL } from '../lib/platform.js';
+import { SILENCE_LEVEL } from '../hooks/useMeetingRecorder.js';
 import type { Proposals } from '../lib/assistant.js';
 
 type Phase = 'idle' | 'recording' | 'processing' | 'failed' | 'reviewing' | 'committed';
@@ -31,9 +34,14 @@ export function MeetingRecord() {
   const pcRec = useMeetingRecorder();
   const micRec = useRecorder();
   const { confirm, dialog: confirmDialog } = useConfirm();
-  // PCでシステム音声を録れるなら透明モード。無理ならスマホのスピーカー録音にフォールバック。
-  const mode: 'pc' | 'mobile' | 'none' = pcRec.supported ? 'pc' : micRec.supported ? 'mobile' : 'none';
+  // PCでシステム音声を録れるなら透明モード。無理ならマイク（スピーカー再生の室内録音）にフォールバック。
+  // 'mic' はスマホだけでなく、デスクトップの Safari/Firefox（システム音声共有が非対応）も含む。
+  const mode: 'pc' | 'mic' | 'none' = pcRec.supported ? 'pc' : micRec.supported ? 'mic' : 'none';
+  const [platform] = useState(() => detectPlatform());
   const [gate, setGate] = useState<Gate>('checking');
+  // 話者割当・手動追加で既存のつながりを選べるようにする（名前で一致したら customer_id を紐付け）
+  const [existing, setExisting] = useState<{ id: string; name: string }[]>([]);
+  const [importText, setImportText] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -52,6 +60,9 @@ export function MeetingRecord() {
   const [stillProcessing, setStillProcessing] = useState(false);
   const [primaryCustomerId, setPrimaryCustomerId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const paused = mode === 'pc' ? pcRec.paused : micRec.paused;
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   const busy = phase === 'recording' || phase === 'processing' || phase === 'failed' || phase === 'reviewing';
@@ -71,6 +82,11 @@ export function MeetingRecord() {
   // 価格・課金への導線はアプリ内に置かない（CLAUDE.md §11）。
   useEffect(() => {
     let cancelled = false;
+    listCustomers({ status: 'active' })
+      .then((rows) => {
+        if (!cancelled) setExisting(rows.map((c) => ({ id: c.id, name: c.name })));
+      })
+      .catch(() => {});
     getEntitlement()
       .then((ent) => {
         if (cancelled) return;
@@ -90,7 +106,9 @@ export function MeetingRecord() {
   useEffect(() => {
     if (phase === 'recording') {
       setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      timerRef.current = setInterval(() => {
+        if (!pausedRef.current) setElapsed((s) => s + 1);
+      }, 1000);
       const originalTitle = document.title;
       const requestWakeLock = async () => {
         try {
@@ -118,8 +136,8 @@ export function MeetingRecord() {
     return undefined;
   }, [phase]);
   useEffect(() => {
-    if (phase === 'recording') document.title = `● 録音中 ${fmt(elapsed)} | osarAI`;
-  }, [phase, elapsed]);
+    if (phase === 'recording') document.title = `${paused ? '❚❚ 一時停止' : '● 録音中'} ${fmt(elapsed)} | osarAI`;
+  }, [phase, elapsed, paused]);
   useEffect(() => {
     if (phase !== 'processing') return undefined;
     setProcessingSec(0);
@@ -135,8 +153,8 @@ export function MeetingRecord() {
         setError(r.error);
         return;
       }
-    } else if (mode === 'mobile') {
-      const r = await micRec.start({ audioBitsPerSecond: MOBILE_BITRATE });
+    } else if (mode === 'mic') {
+      const r = await micRec.start({ audioBitsPerSecond: MOBILE_BITRATE, meter: true });
       if (!r.ok) {
         setError(r.error);
         return;
@@ -147,6 +165,45 @@ export function MeetingRecord() {
     setPending(null);
     setUploadedPath(null);
     setPhase('recording');
+  }
+
+  /** ingest の結果を承認画面の state に展開する（録音・テキスト取り込み共通）。 */
+  function applyIngest(res: IngestResponse) {
+    setMeetingId(res.meetingId);
+    setProposals(res.proposals ?? EMPTY);
+    setMinutes(res.minutes ?? '');
+    setWarnings(res.warnings ?? []);
+    setSpeakers(res.speakers ?? []);
+    const initNames: Record<string, string> = {};
+    for (const s of res.speakers ?? []) initNames[s.label] = s.isSelf ? '自分' : '';
+    setSpeakerNames(initNames);
+    setPhase('reviewing');
+  }
+
+  /** 他ツールの文字起こしを貼り付けて取り込む（録音なし・レビュー/検証にも使う）。 */
+  async function onImportText() {
+    const text = importText.trim();
+    if (!text) return;
+    setPhase('processing');
+    setError(null);
+    setPending(null);
+    setUploadedPath(null);
+    try {
+      applyIngest(await ingestTranscriptText(text));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setPhase('idle');
+    }
+  }
+
+  /** 相手の音声が入っていない（共有の「システム音声」OFF 等）ので録音を破棄して最初から。 */
+  async function onDiscardAndRestart() {
+    const ok = await confirm('ここまでの録音を破棄して、録音の設定からやり直しますか？');
+    if (!ok) return;
+    if (mode === 'pc') await pcRec.stop();
+    else await micRec.stop();
+    setPhase('idle');
+    setError(null);
   }
 
   /** アップロード（必要なら）→ 解析。失敗しても pending / uploadedPath は残す。 */
@@ -168,15 +225,7 @@ export function MeetingRecord() {
           capture,
           durationSec: rec.durationSec,
         });
-        setMeetingId(res.meetingId);
-        setProposals(res.proposals ?? EMPTY);
-        setMinutes(res.minutes ?? '');
-        setWarnings(res.warnings ?? []);
-        setSpeakers(res.speakers ?? []);
-        const initNames: Record<string, string> = {};
-        for (const s of res.speakers ?? []) initNames[s.label] = s.isSelf ? '自分' : '';
-        setSpeakerNames(initNames);
-        setPhase('reviewing');
+        applyIngest(res);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setStillProcessing(e instanceof ApiError && e.code === 'still_processing');
@@ -218,11 +267,24 @@ export function MeetingRecord() {
   function syncSpeakerToPeople(name: string) {
     const nm = name.trim();
     if (!nm || nm === '自分') return;
-    const exists = proposals.people.some((p) => normalize(p.name) === normalize(nm));
-    if (exists) return;
+    // 既存のつながりと名前が一致すれば、その人（customer_id 付き）として候補に載せる＝情報が重なる
+    const known = existing.find((c) => normalize(c.name) === normalize(nm));
+    const idx = proposals.people.findIndex((p) => (known && p.customer_id === known.id) || normalize(p.name) === normalize(nm));
+    if (idx >= 0) {
+      if (known && !proposals.people[idx]!.customer_id) {
+        setProposals({
+          ...proposals,
+          people: proposals.people.map((p, i) => (i === idx ? { ...p, customer_id: known.id, name: known.name, similar: undefined } : p)),
+        });
+      }
+      return;
+    }
     setProposals({
       ...proposals,
-      people: [...proposals.people, { customer_id: null, name: nm, points: [], needs: [], next_actions: [], custom_fields: {} }],
+      people: [
+        ...proposals.people,
+        { customer_id: known?.id ?? null, name: known?.name ?? nm, points: [], needs: [], next_actions: [], custom_fields: {} },
+      ],
     });
   }
 
@@ -317,11 +379,25 @@ export function MeetingRecord() {
 
         {phase === 'idle' && gate === 'ok' && mode === 'pc' && (
           <>
-            <Card title="使い方（パソコン・Zoomアプリ）">
+            <Card title={`使い方（${OS_LABEL[platform.os]} の ${BROWSER_LABEL[platform.browser]}・Zoomアプリ）`}>
               <ol style={listStyle}>
                 <li>Zoom を開いたまま「録音を開始」を押す</li>
                 <li>
-                  共有ダイアログで<b>「画面全体」</b>を選び、<b>「システム音声を共有」をON</b>にして共有
+                  共有ダイアログで<b>「画面全体」</b>を選ぶ
+                </li>
+                <li>
+                  {platform.os === 'windows' ? (
+                    <>
+                      <b>「システム音声も共有する」にチェック</b>を入れてから「共有」
+                    </>
+                  ) : (
+                    <>
+                      左下の<b>「システム音声を共有」をON</b>にしてから「共有」
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--color-danger, #c0392b)' }}>
+                        ※このスイッチは<b>はじめはOFF</b>になっています。OFF のままだと相手の声が録れません（開始直後に警告が出ます）
+                      </span>
+                    </>
+                  )}
                   <span style={{ display: 'block', fontSize: 12 }}>
                     （Zoom をブラウザで開いている場合は、その<b>タブ</b>を選び「タブの音声も共有」をON）
                   </span>
@@ -330,7 +406,7 @@ export function MeetingRecord() {
               </ol>
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
                 相手にはボットも通知も一切表示されません。イヤホン推奨（スピーカーだと相手の声がマイクにも入り、話者の区別が付きにくくなります）。
-                システム音声の共有は Chrome 141 以降・macOS 14.2 以降で利用できます。初回は macOS の「画面収録」の許可が必要です。
+                {platform.os === 'mac' && ' システム音声の共有は Chrome 141 以降・macOS 14.2 以降。初回は macOS の「画面収録」の許可が必要です。'}
               </p>
             </Card>
             <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
@@ -339,9 +415,37 @@ export function MeetingRecord() {
           </>
         )}
 
-        {phase === 'idle' && gate === 'ok' && mode === 'mobile' && (
+        {phase === 'idle' && gate === 'ok' && mode === 'mic' && !platform.mobile && (
           <>
-            <Card title="使い方（スマホ・タブレット）">
+            <Card title={`${BROWSER_LABEL[platform.browser]} では相手の声を録音できません`}>
+              <p style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
+                Zoom の音声（相手の声）を取り込めるのは <b>Chrome または Edge</b> だけです。
+                Chrome / Edge でこのページを開き直してください。
+              </p>
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(window.location.href)}
+                style={{ marginTop: 10, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)', padding: '8px 12px', fontSize: 13 }}
+              >
+                このページのURLをコピー
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '12px 0 0' }}>
+                どうしても {BROWSER_LABEL[platform.browser]} で行う場合は、Zoom をスピーカーで再生してマイクで室内録音できます（精度は落ちます）。
+              </p>
+            </Card>
+            <button
+              type="button"
+              onClick={onStart}
+              style={{ minHeight: 48, fontSize: 14, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              スピーカー再生＋マイクで録音する
+            </button>
+          </>
+        )}
+
+        {phase === 'idle' && gate === 'ok' && mode === 'mic' && platform.mobile && (
+          <>
+            <Card title={`使い方（${OS_LABEL[platform.os]}）`}>
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
                 スマホでは相手の声を直接取り込めないため、<b>イヤホンを外して端末のスピーカーで会議を再生</b>し、
                 室内の音をマイクで録音します。
@@ -364,17 +468,85 @@ export function MeetingRecord() {
           </>
         )}
 
+        {phase === 'idle' && gate === 'ok' && mode !== 'none' && (
+          <details style={{ padding: 12, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 14 }}>文字起こしテキストを貼り付けて取り込む（Notta / Zoom など）</summary>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0' }}>
+              他のツールで文字起こし済みの会議を、そのまま議事録・予定・タスク・つながりに整理します。「話者名　00:01」の形式や「名前: 発言」の形式に対応。
+            </p>
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              rows={6}
+              placeholder="ここに文字起こしを貼り付け"
+              style={{ width: '100%', boxSizing: 'border-box', padding: 10, fontSize: 13, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8 }}
+            />
+            <button type="button" onClick={onImportText} disabled={!importText.trim()} style={{ marginTop: 8, minHeight: 44, width: '100%' }}>
+              取り込んで解析
+            </button>
+          </details>
+        )}
+
         {phase === 'recording' && (
           <section style={{ display: 'grid', gap: 16, placeItems: 'center', padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 18 }}>
-              <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#c0392b', display: 'inline-block' }} />
-              {pcRec.shareEnded ? '録音済み（共有が終了しました）' : '録音中'}
+              <span
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: paused ? '#9a9183' : '#c0392b',
+                  display: 'inline-block',
+                }}
+              />
+              {pcRec.shareEnded ? '録音済み（共有が終了しました）' : paused ? '一時停止中' : '録音中'}
             </div>
             <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums' }}>{fmt(elapsed)}</div>
+
+            {/* 入力レベル：本当に音が入っているかを見せる（不安対策・設定ミスの早期検知） */}
+            {!pcRec.shareEnded && (
+              <div style={{ width: '100%', display: 'grid', gap: 6 }}>
+                {mode === 'pc' ? (
+                  <>
+                    <LevelBar label="自分（マイク）" value={pcRec.levels.self} />
+                    <LevelBar label="相手（Zoomの音声）" value={pcRec.levels.other} />
+                  </>
+                ) : (
+                  <LevelBar label="マイク" value={micRec.level} />
+                )}
+              </div>
+            )}
+            {!paused && !pcRec.shareEnded && mode === 'pc' && pcRec.otherSilentSec >= 15 && (
+              <div style={{ width: '100%', padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-danger, #c0392b)', fontSize: 13 }}>
+                <strong>相手の音声が入っていません（{pcRec.otherSilentSec}秒）</strong>
+                <p style={{ margin: '6px 0 8px' }}>
+                  共有ダイアログで「システム音声を共有」が OFF のままだった可能性があります。相手が話している最中もこの表示なら、いったん録り直してください（共有をやり直す必要があります）。
+                </p>
+                <button type="button" onClick={onDiscardAndRestart} style={{ padding: '8px 12px', fontSize: 13 }}>
+                  録音を破棄してやり直す
+                </button>
+              </div>
+            )}
+            {!paused && mode === 'mic' && micRec.silentSec >= 15 && (
+              <div style={{ width: '100%', padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-danger, #c0392b)', fontSize: 13 }}>
+                <strong>音声が入っていません（{micRec.silentSec}秒）</strong>
+                <p style={{ margin: '6px 0 0' }}>Zoom の音がスピーカーから出ているか、マイクがミュートになっていないか確認してください。</p>
+              </div>
+            )}
+
             {pcRec.shareEnded && (
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
                 画面共有が終了したため、ここまでの録音を保持しています。「収録を終了」で解析に進んでください。
               </p>
+            )}
+            {!pcRec.shareEnded && (
+              <button
+                type="button"
+                onClick={() => (paused ? (mode === 'pc' ? pcRec.resume() : micRec.resume()) : mode === 'pc' ? pcRec.pause() : micRec.pause())}
+                style={{ minHeight: 48, fontSize: 15, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              >
+                {paused ? '録音を再開' : '一時停止（離席・別件の話題など）'}
+              </button>
             )}
             <button type="button" onClick={onStop} style={{ minHeight: 52, fontSize: 16, width: '100%' }}>
               収録を終了して解析
@@ -431,6 +603,7 @@ export function MeetingRecord() {
                   <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
                     誰の発言かを割り当てると、議事録や履歴が実名で残ります。
                     {mode !== 'pc' && ' 自分の発言には「自分」と入力してください。'}
+                    {existing.length > 0 && ' 登録済みのつながりは入力欄から選べます（選ぶとその人の情報に重なります）。'}
                   </p>
                 </div>
                 {speakers.map((s) => (
@@ -444,17 +617,21 @@ export function MeetingRecord() {
                         value={speakerNames[s.label] ?? ''}
                         onChange={(e) => setSpeakerNames((m) => ({ ...m, [s.label]: e.target.value }))}
                         onBlur={(e) => syncSpeakerToPeople(e.target.value)}
-                        placeholder={mode === 'pc' ? 'お名前（相手）' : 'お名前（自分なら「自分」）'}
+                        placeholder={mode === 'pc' ? 'お名前（相手）・登録済みなら選択' : 'お名前（自分なら「自分」）'}
                         style={{ padding: 8, fontSize: 14 }}
                       />
                     )}
                   </label>
                 ))}
                 <datalist id="meeting-people">
+                  {/* 既存のつながり → 選ぶとその人に情報が重なる。候補にだけいる新規の人も並べる */}
+                  {existing.map((c) => (
+                    <option key={c.id} value={c.name} />
+                  ))}
                   {proposals.people
-                    .filter((p) => p.name.trim())
+                    .filter((p) => p.name.trim() && !existing.some((c) => normalize(c.name) === normalize(p.name)))
                     .map((p, i) => (
-                      <option key={i} value={p.name} />
+                      <option key={`p${i}`} value={p.name} />
                     ))}
                 </datalist>
               </section>
@@ -520,6 +697,25 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       <strong>{title}</strong>
       {children}
     </section>
+  );
+}
+
+function LevelBar({ label, value }: { label: string; value: number }) {
+  const active = value > SILENCE_LEVEL;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-text-muted)' }}>
+      <span>{label}</span>
+      <div style={{ height: 10, borderRadius: 999, background: '#efeae0', overflow: 'hidden' }}>
+        <div
+          style={{
+            height: '100%',
+            width: `${Math.round(Math.min(1, value) * 100)}%`,
+            background: active ? 'var(--color-success, #2e8b57)' : '#c9c1b3',
+            transition: 'width 120ms linear',
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -6,8 +6,14 @@ export interface Speaker {
   isSelf: boolean;
 }
 
-/** 行頭の話者ラベル（自分 / 相手1 / 話者A …）。 */
+/** 行頭の話者ラベル（自分 / 相手1 / 話者A …）＝Gemini の文字起こしが付ける既知ラベル。 */
 const LABEL_LINE_RE = /^\s*(自分|相手\s*\d*|話者\s*[A-Za-z0-9]+)\s*[:：]/;
+/**
+ * 任意の話者名ラベル（取り込んだ文字起こし用・例「山田 太郎:」「Speaker 1:」）。
+ * 普通の文に含まれるコロン（「時間: 14時」）を話者と誤認しないよう、20文字以内・
+ * かつ transcript 内で2行以上に現れるものだけを話者とみなす。
+ */
+const GENERIC_LABEL_RE = /^\s*([^\s:：]{1,20}(?:[ \u3000][^\s:：]{1,20})?)\s*[:：]/;
 
 /** 「相手1」「話者B」など、名前ではなくラベルそのものか（人物名として保存させない）。 */
 export function isSpeakerLabel(name: string): boolean {
@@ -16,14 +22,58 @@ export function isSpeakerLabel(name: string): boolean {
 
 /** 文字起こしの行頭ラベルから話者ロスターを作る。「自分」は isSelf=true。 */
 export function parseSpeakers(transcript: string): Speaker[] {
-  const seen = new Map<string, boolean>();
+  const known = new Map<string, boolean>();
+  const generic = new Map<string, number>();
   for (const line of transcript.split('\n')) {
     const m = LABEL_LINE_RE.exec(line);
-    if (!m) continue;
-    const label = m[1]!.replace(/\s+/g, '');
-    seen.set(label, label === '自分');
+    if (m) {
+      const label = m[1]!.replace(/\s+/g, '');
+      known.set(label, label === '自分');
+      continue;
+    }
+    const g = GENERIC_LABEL_RE.exec(line);
+    if (g) {
+      const label = g[1]!.trim();
+      generic.set(label, (generic.get(label) ?? 0) + 1);
+    }
   }
-  return [...seen.entries()].map(([label, isSelf]) => ({ label, isSelf }));
+  const out: Speaker[] = [...known.entries()].map(([label, isSelf]) => ({ label, isSelf }));
+  for (const [label, count] of generic) {
+    if (count >= 2 && out.length < 10 && !out.some((s) => s.label === label)) out.push({ label, isSelf: false });
+  }
+  return out;
+}
+
+/**
+ * 他ツールの文字起こしを「話者: 発言」の1行形式に寄せる（T7b・Notta / Zoom 等の貼り付け用）。
+ * - 「話者名  00:01:23」（名前＋タイムスタンプの行）の次の行が発言 → 「話者名: 発言」
+ * - 「[00:01:23] 名前: 発言」「00:01 名前: 発言」→ 先頭のタイムスタンプを落とす
+ * - 既に「名前: 発言」ならそのまま。それ以外の行もそのまま残す
+ */
+export function normalizeImportedTranscript(text: string): string {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const out: string[] = [];
+  let pendingSpeaker: string | null = null;
+  const TS = '(?:\\[?\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?\\]?)';
+  const headerRe = new RegExp(`^\\s*(.{1,30}?)\\s*[ \\u3000]${TS}\\s*$`);
+  const leadTsRe = new RegExp(`^\\s*${TS}\\s*[-–—]?\\s*`);
+  for (const raw of lines) {
+    const line = raw.replace(leadTsRe, '');
+    if (!line.trim()) continue;
+    const h = headerRe.exec(line);
+    if (h && !/[:：]/.test(h[1]!)) {
+      // 「話者 1」「相手 2」は Gemini 由来の既知ラベルと同じ形（空白なし）に揃える
+      pendingSpeaker = h[1]!.trim().replace(/^(話者|相手)\s+/u, '$1');
+      continue;
+    }
+    if (pendingSpeaker) {
+      out.push(`${pendingSpeaker}: ${line.trim()}`);
+      pendingSpeaker = null;
+      continue;
+    }
+    out.push(line.trim());
+  }
+  return out.join('\n');
 }
 
 /** 行頭の話者ラベル「自分:」「相手1:」等を割当実名に置換する。空名はスキップ。本文中の同語は触らない。 */

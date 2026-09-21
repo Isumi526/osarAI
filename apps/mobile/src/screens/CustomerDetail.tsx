@@ -11,6 +11,7 @@ import {
 import { importRecording } from '../lib/recordings.js';
 import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
+import { MinutesView } from '../components/ReviewCard.js';
 import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
 
 // 録音取り込み機能はphase2に見送り（議事録『review』・回答A）。UIを非表示にする。
@@ -253,7 +254,7 @@ export function CustomerDetail() {
                 {summary?.minutes ? (
                   <details open style={{ marginTop: 8 }}>
                     <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>議事録</summary>
-                    <p style={{ margin: '6px 0 0', fontSize: 14, whiteSpace: 'pre-wrap' }}>{summary.minutes}</p>
+                    <MinutesView text={summary.minutes} />
                   </details>
                 ) : null}
                 {summary?.minutes && (ix.transcript ?? ix.raw_text) ? (

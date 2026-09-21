@@ -7,7 +7,7 @@ import type { Proposals } from './assistant.js';
 
 const BUCKET = 'recordings';
 
-export type MeetingCapture = 'pc_local' | 'mobile_speaker' | 'bot';
+export type MeetingCapture = 'pc_local' | 'mobile_speaker' | 'bot' | 'text_import';
 
 export interface Speaker {
   label: string;
@@ -53,6 +53,11 @@ export async function ingestMeeting(input: {
   consentAck?: boolean;
 }): Promise<IngestResponse> {
   return apiPost<IngestResponse>('/api/meeting/ingest', input);
+}
+
+/** 他ツール（Notta / Zoom 等）の文字起こしテキストを貼り付けて取り込む（録音なし・T7b）。 */
+export async function ingestTranscriptText(transcriptText: string): Promise<IngestResponse> {
+  return apiPost<IngestResponse>('/api/meeting/ingest', { transcriptText });
 }
 
 /** 確認カードで編集した最終版を確定登録する（議事録も顧客の履歴に残す）。 */
