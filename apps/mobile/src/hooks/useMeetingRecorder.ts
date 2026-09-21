@@ -172,10 +172,17 @@ export function useMeetingRecorder(): MeetingRecorder {
     try {
       // 共有ダイアログで「画面全体＋システム音声」または「タブ＋タブの音声」を選んでもらう（相手には何も見えない）。
       // systemAudio:'include' は Chrome 141+ で「システム音声を共有」を既定ONにするヒント（旧版は無視される）。
+      // 選択ダイアログ自体はブラウザ仕様で省略できない。ヒントで「画面全体」タブを初期選択にし、
+      // 「システム音声を共有」を既定ONにして、実質「録音を開始 → 共有」の2クリックにする。
       const display = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: { displaySurface: 'monitor' } as MediaTrackConstraints,
         audio: true,
-        ...({ systemAudio: 'include', selfBrowserSurface: 'exclude' } as Record<string, unknown>),
+        ...({
+          systemAudio: 'include',
+          selfBrowserSurface: 'exclude',
+          monitorTypeSurfaces: 'include',
+          surfaceSwitching: 'exclude',
+        } as Record<string, unknown>),
       } as DisplayMediaStreamOptions);
       displayRef.current = display;
       const sysAudio = display.getAudioTracks();
