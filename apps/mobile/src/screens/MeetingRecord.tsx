@@ -20,7 +20,7 @@ import { detectPlatform, BROWSER_LABEL, OS_LABEL } from '../lib/platform.js';
 import { SILENCE_LEVEL } from '../hooks/useMeetingRecorder.js';
 import type { Proposals } from '../lib/assistant.js';
 
-type Phase = 'idle' | 'recording' | 'processing' | 'failed' | 'reviewing' | 'committed';
+type Phase = 'idle' | 'starting' | 'recording' | 'processing' | 'failed' | 'reviewing' | 'committed';
 type Gate = 'checking' | 'ok' | 'inactive' | 'plan';
 
 const EMPTY: Proposals = { people: [], schedules: [], tasks: [], self_notes: [], self_fields: {} };
@@ -75,7 +75,7 @@ export function MeetingRecord() {
   recordingRef.current = mode === 'pc' ? pcRec.recording : micRec.recording;
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
-  const busy = phase === 'recording' || phase === 'processing' || phase === 'failed' || phase === 'reviewing';
+  const busy = phase === 'starting' || phase === 'recording' || phase === 'processing' || phase === 'failed' || phase === 'reviewing';
   // 下部ナビ／ブラウザの戻る・リロードで録音や未保存の解析結果を失わない
   useRegisterNavGuard(busy);
   useEffect(() => {
@@ -166,19 +166,24 @@ export function MeetingRecord() {
 
   async function onStart() {
     setError(null);
+    // 共有ダイアログ→マイク許可→AudioContext 準備で数秒かかる。その間「開始中」を見せる（無反応に見せない）
+    setPhase('starting');
     if (mode === 'pc') {
       const r = await pcRec.start();
       if (!r.ok) {
         setError(r.error);
+        setPhase('idle');
         return;
       }
     } else if (mode === 'mic') {
       const r = await micRec.start({ audioBitsPerSecond: MOBILE_BITRATE, meter: true });
       if (!r.ok) {
         setError(r.error);
+        setPhase('idle');
         return;
       }
     } else {
+      setPhase('idle');
       return;
     }
     setPending(null);
@@ -189,7 +194,8 @@ export function MeetingRecord() {
   /** ingest の結果を承認画面の state に展開する（録音・テキスト取り込み共通）。 */
   function applyIngest(res: IngestResponse) {
     setMeetingId(res.meetingId);
-    setProposals(res.proposals ?? EMPTY);
+    // 会議録音では「自分についての気づき」は相手の発言が混ざって不正確になりやすいので出さない
+    setProposals(res.proposals ? { ...res.proposals, self_notes: [], self_fields: {} } : EMPTY);
     setMinutes(res.minutes ?? '');
     setWarnings(res.warnings ?? []);
     setSpeakers(res.speakers ?? []);
@@ -277,6 +283,17 @@ export function MeetingRecord() {
     // 既存のつながりと名前が一致すれば、その人（customer_id 付き）として候補に載せる＝情報が重なる
     const known = existing.find((c) => normalize(c.name) === normalize(nm));
     const idx = proposals.people.findIndex((p) => (known && p.customer_id === known.id) || normalize(p.name) === normalize(nm));
+    // 名前が分からず空欄で出ている候補があれば、新しく足さずそこに名前を入れる（相手＝その人）
+    const unnamedIdx = idx >= 0 ? -1 : proposals.people.findIndex((p) => !p.customer_id && !p.name.trim());
+    if (unnamedIdx >= 0) {
+      setProposals({
+        ...proposals,
+        people: proposals.people.map((p, i) =>
+          i === unnamedIdx ? { ...p, customer_id: known?.id ?? null, name: known?.name ?? nm, similar: undefined } : p,
+        ),
+      });
+      return;
+    }
     if (idx >= 0) {
       if (known && !proposals.people[idx]!.customer_id) {
         setProposals({
@@ -479,6 +496,19 @@ export function MeetingRecord() {
           <p style={{ margin: 0, padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-border)', fontSize: 13 }}>
             マイページの<b>表示名を本名（漢字）</b>にしておくと、会話の中の「自分」と「相手」の判定が安定し、議事録の精度が上がります。
           </p>
+        )}
+
+        {phase === 'starting' && (
+          <section style={{ display: 'grid', gap: 12, placeItems: 'center', padding: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 16 }}>
+              <span className="meeting-spinner" style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', display: 'inline-block', animation: 'meeting-spin 0.8s linear infinite' }} />
+              録音を準備しています…
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
+              {mode === 'pc' ? '共有ダイアログで画面を選ぶと、数秒で録音が始まります。' : 'マイクの許可を確認しています。'}
+            </p>
+            <style>{'@keyframes meeting-spin { to { transform: rotate(360deg); } }'}</style>
+          </section>
         )}
 
         {phase === 'recording' && (

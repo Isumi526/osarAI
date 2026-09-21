@@ -5,6 +5,29 @@ import { type Proposals } from '../lib/assistant.js';
 import { AutoResizeTextarea } from './AutoResizeTextarea.js';
 
 const toLines = (v: string[]) => v.join('\n');
+/** 人物の各欄（要点/ニーズ/次アクション/つながりたい人）を1つのメモ行リストに畳む（表示・編集用）。 */
+function personMemoLines(p: { points: string[]; needs: string[]; next_actions: string[]; custom_fields?: Record<string, unknown> }): string[] {
+  const wants = wantsToMeet(p.custom_fields);
+  const out: string[] = [...p.points];
+  for (const n of p.needs) if (!out.includes(n)) out.push(n);
+  for (const a of p.next_actions) if (!out.includes(a)) out.push(a);
+  for (const w of wants) {
+    const line = `つながりたい人: ${w}`;
+    if (!out.includes(line)) out.push(line);
+  }
+  return out;
+}
+/** メモ行を人物に書き戻す。「つながりたい人: 〜」の行だけは custom_fields.wants_to_meet（将来のマッチング用）にも残す。 */
+function applyPersonMemo<T extends { points: string[]; needs: string[]; next_actions: string[]; custom_fields?: Record<string, unknown> }>(p: T, lines: string[]): T {
+  const wants: string[] = [];
+  const points: string[] = [];
+  for (const l of lines) {
+    const m = /^つながりたい人[:：]\s*(.+)$/.exec(l);
+    if (m) wants.push(m[1]!.trim());
+    else points.push(l);
+  }
+  return { ...p, points, needs: [], next_actions: [], custom_fields: { ...(p.custom_fields ?? {}), wants_to_meet: wants } };
+}
 const wantsToMeet = (cf?: Record<string, unknown>): string[] => {
   const v = cf?.wants_to_meet;
   return Array.isArray(v) ? v.map((x) => String(x)) : [];
@@ -191,42 +214,18 @@ export function ReviewCard({
               </div>
             </div>
           )}
+          {/* その人について知っていること・今回分かったこと・約束を1つのメモにまとめる（要点/ニーズ/次アクション
+              /つながりたい人の分割はフォーム負担が大きい＝2026-09-21 レビュー）。保存先は従来どおり points(行) */}
           <LinesField
-            label="要点"
-            value={p.points}
-            onChange={(v) =>
-              setProposals({ ...proposals, people: proposals.people.map((x, j) => (j === i ? { ...x, points: v } : x)) })
-            }
-          />
-          <LinesField
-            label="ニーズ"
-            value={p.needs}
-            onChange={(v) =>
-              setProposals({ ...proposals, people: proposals.people.map((x, j) => (j === i ? { ...x, needs: v } : x)) })
-            }
-          />
-          <LinesField
-            label="次アクション"
-            value={p.next_actions}
+            label="この人についてのメモ"
+            value={personMemoLines(p)}
             onChange={(v) =>
               setProposals({
                 ...proposals,
-                people: proposals.people.map((x, j) => (j === i ? { ...x, next_actions: v } : x)),
+                people: proposals.people.map((x, j) => (j === i ? applyPersonMemo(x, v) : x)),
               })
             }
-          />
-          {/* 相手が「どんな人とつながりたいか」（紹介希望・T7）。紹介TODOの元になる。 */}
-          <LinesField
-            label="つながりたい人（紹介希望）"
-            value={wantsToMeet(p.custom_fields)}
-            onChange={(v) =>
-              setProposals({
-                ...proposals,
-                people: proposals.people.map((x, j) =>
-                  j === i ? { ...x, custom_fields: { ...(x.custom_fields ?? {}), wants_to_meet: v } } : x,
-                ),
-              })
-            }
+            placeholder="話した内容・相手の状況・約束したことなど（1行に1つ）"
           />
         </div>
       ))}
@@ -407,13 +406,24 @@ function PersonSelect({
   );
 }
 
-function LinesField({ label, value, onChange }: { label: string; value: string[]; onChange: (v: string[]) => void }) {
+function LinesField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+}) {
   return (
     <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
-      {label}（1行に1つ）
+      {label}
       <AutoResizeTextarea
         value={toLines(value)}
         onChange={(e) => onChange(fromLines(e.target.value))}
+        placeholder={placeholder}
         rows={1}
         style={{ padding: 10, fontSize: 14, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8, resize: 'none' }}
       />
@@ -438,31 +448,98 @@ function MinutesBlock({ minutes, onChange }: { minutes: string; onChange?: (v: s
             onClick={() => setEditing((v) => !v)}
             style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 999, padding: '4px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}
           >
-            {editing ? '表示に戻す' : '編集'}
+            {editing ? '完了' : '編集'}
           </button>
         )}
       </div>
-      {editing && onChange ? (
-        <AutoResizeTextarea
-          value={minutes}
-          onChange={(e) => onChange(e.target.value)}
-          rows={8}
-          autoFocus
-          style={{
-            marginTop: 6,
-            width: '100%',
-            padding: 10,
-            fontSize: 13,
-            fontFamily: 'inherit',
-            border: '1px solid var(--color-border)',
-            borderRadius: 8,
-            resize: 'none',
-            boxSizing: 'border-box',
-          }}
-        />
-      ) : (
-        <MinutesView text={minutes} />
-      )}
+      {editing && onChange ? <MinutesEditor text={minutes} onChange={onChange} /> : <MinutesView text={minutes} />}
+    </div>
+  );
+}
+
+// 議事録のプレーンテキスト（【見出し】＋「- 」箇条書き）と、編集用の構造の相互変換。
+// 記法をユーザーに触らせず、見た目のまま行単位で直せるようにする（2026-09-21 レビュー）。
+interface MinutesSection {
+  title: string;
+  lines: string[];
+}
+function parseMinutes(text: string): MinutesSection[] {
+  const sections: MinutesSection[] = [];
+  let cur: MinutesSection | null = null;
+  for (const raw of text.split('\n')) {
+    const t = raw.trim();
+    if (!t) continue;
+    const h = /^【(.+)】$/.exec(t);
+    if (h) {
+      cur = { title: h[1]!, lines: [] };
+      sections.push(cur);
+      continue;
+    }
+    if (!cur) {
+      cur = { title: '', lines: [] };
+      sections.push(cur);
+    }
+    cur.lines.push(t.replace(/^[-・•]\s*/, ''));
+  }
+  return sections;
+}
+function serializeMinutes(sections: MinutesSection[]): string {
+  return sections
+    .map((sec) => [sec.title ? `【${sec.title}】` : '', ...sec.lines.filter((l) => l.trim()).map((l) => `- ${l.trim()}`)].filter(Boolean).join('\n'))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function MinutesEditor({ text, onChange }: { text: string; onChange: (v: string) => void }) {
+  const sections = parseMinutes(text);
+  const update = (next: MinutesSection[]) => onChange(serializeMinutes(next));
+  const lineStyle = {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    padding: '6px 8px',
+    fontSize: 14,
+    lineHeight: 1.5,
+    fontFamily: 'inherit',
+    border: '1px solid var(--color-border)',
+    borderRadius: 6,
+    resize: 'none' as const,
+    background: '#fff',
+  };
+  return (
+    <div style={{ marginTop: 6, display: 'grid', gap: 10 }}>
+      {sections.map((sec, si) => (
+        <div key={si} style={{ display: 'grid', gap: 4 }}>
+          {sec.title && <div style={{ fontWeight: 700, fontSize: 14 }}>{sec.title}</div>}
+          {sec.lines.map((line, li) => (
+            <div key={li} style={{ display: 'grid', gridTemplateColumns: '14px 1fr 24px', alignItems: 'start', gap: 4 }}>
+              <span style={{ fontSize: 14, lineHeight: '30px' }}>・</span>
+              <AutoResizeTextarea
+                value={line}
+                rows={1}
+                style={lineStyle}
+                onChange={(e) =>
+                  update(sections.map((x, i) => (i === si ? { ...x, lines: x.lines.map((l, j) => (j === li ? e.target.value : l)) } : x)))
+                }
+              />
+              <button
+                type="button"
+                aria-label="この行を削除"
+                onClick={() => update(sections.map((x, i) => (i === si ? { ...x, lines: x.lines.filter((_, j) => j !== li) } : x)))}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', padding: 4 }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => update(sections.map((x, i) => (i === si ? { ...x, lines: [...x.lines.filter((l) => l !== '特になし'), ''] } : x)))}
+            style={{ justifySelf: 'start', background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 13, padding: '2px 0' }}
+          >
+            ＋ 行を追加
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

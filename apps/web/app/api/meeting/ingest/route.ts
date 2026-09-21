@@ -251,6 +251,11 @@ export async function POST(req: Request) {
     `話の中で名前だけ出た第三者（紹介したい知人など）は people に入れず、必要なら tasks の題名に含めてください。` +
     `相手の名前が分からない場合は name を空文字にしてください（「相手1」のようなラベルを名前にしない）。` +
     `people は、ユーザーが直接やり取りした主要な相手を最大 ${MAX_PEOPLE} 人まで（発言量の多い順）にしてください。` +
+    `tasks は、ユーザー本人が「〜します」「送ります」と明示的に約束した、対象と内容がはっきりした行動だけにしてください` +
+    `（「連絡する」「検討する」のように何をするか曖昧なもの、相手側がやること、一般的な話題は入れない）。` +
+    `schedules は、日付（少なくとも「来週水曜」のように日が特定できる表現）が実際に発話されたものだけにしてください` +
+    `（「また会いましょう」のような日付の無い約束は入れない）。` +
+    `self_notes は空配列にしてください。` +
     `\n---\n${transcript}\n---`;
   const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history });
 
