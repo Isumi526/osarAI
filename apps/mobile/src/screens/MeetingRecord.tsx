@@ -14,7 +14,7 @@ import { useMeetingRecorder, type RecordingResult } from '../hooks/useMeetingRec
 import { useRecorder } from '../hooks/useRecorder.js';
 import { ApiError } from '../lib/api.js';
 import { getEntitlement } from '../lib/subscription.js';
-import { uploadMeetingAudio, ingestMeeting, ingestTranscriptText, commitMeeting, type IngestResponse, type MeetingCapture, type Speaker } from '../lib/meeting.js';
+import { uploadMeetingAudio, ingestMeeting, commitMeeting, type IngestResponse, type MeetingCapture, type Speaker } from '../lib/meeting.js';
 import { listCustomers, getMyProfile } from '../lib/db.js';
 import { detectPlatform, BROWSER_LABEL, OS_LABEL } from '../lib/platform.js';
 import { SILENCE_LEVEL } from '../hooks/useMeetingRecorder.js';
@@ -41,7 +41,6 @@ export function MeetingRecord() {
   const [gate, setGate] = useState<Gate>('checking');
   // 話者割当・手動追加で既存のつながりを選べるようにする（名前で一致したら customer_id を紐付け）
   const [existing, setExisting] = useState<{ id: string; name: string }[]>([]);
-  const [importText, setImportText] = useState('');
   // 表示名が未設定（メールの@前など）だと「自分/相手」の判定が弱くなるので案内する
   const [nameHint, setNameHint] = useState(false);
   const [importDate, setImportDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -64,6 +63,12 @@ export function MeetingRecord() {
   const [primaryCustomerId, setPrimaryCustomerId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const paused = mode === 'pc' ? pcRec.paused : micRec.paused;
+  // 録音開始後に相手側の音声を一度でも検知したか（PC）。検知前は「待ち」表示、検知後は緑。
+  const [otherDetected, setOtherDetected] = useState(false);
+  useEffect(() => {
+    if (phase !== 'recording') setOtherDetected(false);
+    else if (pcRec.levels.other > SILENCE_LEVEL) setOtherDetected(true);
+  }, [phase, pcRec.levels.other]);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
@@ -189,33 +194,6 @@ export function MeetingRecord() {
     for (const s of res.speakers ?? []) initNames[s.label] = s.isSelf ? '自分' : '';
     setSpeakerNames(initNames);
     setPhase('reviewing');
-  }
-
-  /** 他ツールの文字起こしを貼り付けて取り込む（録音なし・レビュー/検証にも使う）。 */
-  async function onImportText() {
-    const text = importText.trim();
-    if (!text) return;
-    setPhase('processing');
-    setError(null);
-    setPending(null);
-    setUploadedPath(null);
-    try {
-      // 会議日は JST の正午として渡す（相対日付の基準・履歴の日付）
-      applyIngest(await ingestTranscriptText(text, importDate ? `${importDate}T12:00:00+09:00` : undefined));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setPhase('idle');
-    }
-  }
-
-  /** 相手の音声が入っていない（共有の「システム音声」OFF 等）ので録音を破棄して最初から。 */
-  async function onDiscardAndRestart() {
-    const ok = await confirm('ここまでの録音を破棄して、録音の設定からやり直しますか？');
-    if (!ok) return;
-    if (mode === 'pc') await pcRec.stop();
-    else await micRec.stop();
-    setPhase('idle');
-    setError(null);
   }
 
   /** アップロード（必要なら）→ 解析。失敗しても pending / uploadedPath は残す。 */
@@ -486,29 +464,6 @@ export function MeetingRecord() {
           </p>
         )}
 
-        {phase === 'idle' && gate === 'ok' && mode !== 'none' && (
-          <details style={{ padding: 12, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
-            <summary style={{ cursor: 'pointer', fontSize: 14 }}>文字起こしテキストを貼り付けて取り込む（Notta / Zoom など）</summary>
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0' }}>
-              他のツールで文字起こし済みの会議を、そのまま議事録・予定・タスク・つながりに整理します。「話者名　00:01」の形式や「名前: 発言」の形式に対応。
-            </p>
-            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-              会議の日付（「来週」などの日付の基準になります）
-              <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} style={{ padding: 8, fontSize: 14 }} />
-            </label>
-            <textarea
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              rows={6}
-              placeholder="ここに文字起こしを貼り付け"
-              style={{ width: '100%', boxSizing: 'border-box', padding: 10, fontSize: 13, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8 }}
-            />
-            <button type="button" onClick={onImportText} disabled={!importText.trim()} style={{ marginTop: 8, minHeight: 44, width: '100%' }}>
-              取り込んで解析
-            </button>
-          </details>
-        )}
-
         {phase === 'recording' && (
           <section style={{ display: 'grid', gap: 16, placeItems: 'center', padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 18 }}>
@@ -538,22 +493,20 @@ export function MeetingRecord() {
                 )}
               </div>
             )}
-            {!paused && !pcRec.shareEnded && mode === 'pc' && pcRec.otherSilentSec >= 15 && (
-              <div style={{ width: '100%', padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-danger, #c0392b)', fontSize: 13 }}>
-                <strong>相手の音声が入っていません（{pcRec.otherSilentSec}秒）</strong>
-                <p style={{ margin: '6px 0 8px' }}>
-                  共有ダイアログで「システム音声を共有」が OFF のままだった可能性があります。相手が話している最中もこの表示なら、いったん録り直してください（共有をやり直す必要があります）。
-                </p>
-                <button type="button" onClick={onDiscardAndRestart} style={{ padding: '8px 12px', fontSize: 13 }}>
-                  録音を破棄してやり直す
-                </button>
-              </div>
+            {/* 相手の音声は「まだ検知していない／検知した」を静かに示すだけにする。
+                Zoom が始まる前に録音を開始して数分後に相手が入る運用が普通なので、無音を警告にしない。
+                共有の「システム音声」が OFF の事故は開始時点（音声トラック無し）で止めている。 */}
+            {!pcRec.shareEnded && mode === 'pc' && (
+              <p style={{ margin: 0, fontSize: 13, color: otherDetected ? 'var(--color-success, #2e8b57)' : 'var(--color-text-muted)', textAlign: 'center' }}>
+                {otherDetected
+                  ? '相手の音声を検知しました。このまま会議を続けてください。'
+                  : '相手の音声はまだ検知していません（相手が話し始めると自動で反応します）。'}
+              </p>
             )}
-            {!paused && mode === 'mic' && micRec.silentSec >= 15 && (
-              <div style={{ width: '100%', padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-danger, #c0392b)', fontSize: 13 }}>
-                <strong>音声が入っていません（{micRec.silentSec}秒）</strong>
-                <p style={{ margin: '6px 0 0' }}>Zoom の音がスピーカーから出ているか、マイクがミュートになっていないか確認してください。</p>
-              </div>
+            {!paused && mode === 'mic' && micRec.silentSec >= 60 && (
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                1分以上、音声を検知していません。会議が始まっているのに続く場合は、Zoom の音がスピーカーから出ているか・マイクがミュートでないかを確認してください。
+              </p>
             )}
 
             {pcRec.shareEnded && (
