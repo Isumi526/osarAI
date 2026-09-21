@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
-import { ReviewCard } from '../components/ReviewCard.js';
+import { ReviewCard, MinutesBlock, MinutesView } from '../components/ReviewCard.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { useMeetingSession, fmtSec } from '../components/MeetingSession.js';
@@ -20,7 +20,9 @@ import {
   uploadMeetingAudio,
   ingestMeeting,
   commitMeeting,
+  updateMeetingMinutes,
   listReviewingMeetings,
+  type MeetingCommitResponse,
   getMeetingStatus,
   parseSpeakersClient,
   type IngestResponse,
@@ -39,7 +41,7 @@ import {
 } from '../lib/recording-store.js';
 import type { Proposals } from '../lib/assistant.js';
 
-type Phase = 'idle' | 'processing' | 'failed' | 'reviewing' | 'committed';
+type Phase = 'idle' | 'processing' | 'failed' | 'reviewing' | 'saved' | 'committed';
 type Gate = 'checking' | 'ok' | 'inactive' | 'plan';
 type ReviewingRow = Awaited<ReturnType<typeof listReviewingMeetings>>[number];
 
@@ -71,6 +73,13 @@ export function MeetingRecord() {
   const [committing, setCommitting] = useState(false);
   const [stillProcessing, setStillProcessing] = useState(false);
   const [primaryCustomerId, setPrimaryCustomerId] = useState<string | null>(null);
+  // 自動保存の結果（承認ステップ廃止）
+  const [saved, setSaved] = useState<MeetingCommitResponse | null>(null);
+  const [transcript, setTranscript] = useState<string>('');
+  const [linkName, setLinkName] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [minutesSaving, setMinutesSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const minutesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 復旧候補（IndexedDB の未処理録音／サーバーの承認待ち）
   const [recoverable, setRecoverable] = useState<RecordingSession[]>([]);
   const [reviewingRows, setReviewingRows] = useState<ReviewingRow[]>([]);
@@ -190,14 +199,67 @@ export function MeetingRecord() {
     setMeetingId(res.meetingId);
     setProposals(res.proposals ? { ...res.proposals, self_notes: [], self_fields: {} } : EMPTY);
     setMinutes(res.minutes ?? '');
+    setTranscript(res.transcript ?? '');
     setWarnings(res.warnings ?? []);
     setSpeakers(res.speakers ?? []);
     const initNames: Record<string, string> = {};
     for (const s of res.speakers ?? []) initNames[s.label] = s.isSelf ? '自分' : '';
     setSpeakerNames(initNames);
-    setPhase('reviewing');
-    if (sid) void updateSession(sid, { status: 'ingested', meetingId: res.meetingId }).catch(() => {});
+    if (res.committed) {
+      // 自動保存済み: 承認は不要。結果を見せて、直したければその場で直す
+      setSaved(res.committed);
+      setPrimaryCustomerId(res.committed.customers[0]?.id ?? null);
+      setPhase('saved');
+      if (sid) void deleteSession(sid).catch(() => {});
+      ms.clearSession();
+    } else {
+      // 自動保存に失敗した時だけ、従来の確認カードで手動保存
+      setPhase('reviewing');
+      if (sid) void updateSession(sid, { status: 'ingested', meetingId: res.meetingId }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** 議事録の編集を自動保存（1秒デバウンス） */
+  function onMinutesEdit(v: string) {
+    setMinutes(v);
+    if (!meetingId) return;
+    setMinutesSaving('saving');
+    if (minutesTimer.current) clearTimeout(minutesTimer.current);
+    minutesTimer.current = setTimeout(async () => {
+      try {
+        await updateMeetingMinutes(meetingId, v);
+        setMinutesSaving('saved');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        setMinutesSaving('idle');
+      }
+    }, 1000);
+  }
+
+  /** 相手を特定できなかった録音に、後から相手を紐付ける（既存 or 新規） */
+  async function onLinkPerson() {
+    const nm = linkName.trim();
+    if (!meetingId || !nm) return;
+    setLinking(true);
+    setError(null);
+    try {
+      const known = existing.find((c) => normalize(c.name) === normalize(nm));
+      const res = await commitMeeting({
+        meetingId,
+        proposals: { ...EMPTY, people: [{ customer_id: known?.id ?? null, name: known?.name ?? nm, points: [], needs: [], next_actions: [], custom_fields: {} }] },
+        minutes,
+        speakerNames: {},
+      });
+      setSaved(res);
+      setPrimaryCustomerId(res.customers[0]?.id ?? null);
+      setLinkName('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLinking(false);
+    }
+  }
 
   /** アップロード（必要なら）→ 解析。失敗しても pending / uploadedPath は残す。 */
   const analyze = useCallback(
@@ -702,6 +764,83 @@ export function MeetingRecord() {
               onMinutesChange={setMinutes}
               allowAddPerson
             />
+          </>
+        )}
+
+        {phase === 'saved' && saved && (
+          <>
+            <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, display: 'grid', gap: 10 }}>
+              <strong>保存しました</strong>
+              {saved.customers.length > 0 ? (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {saved.customers.map((c) => (
+                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
+                      <span>
+                        相手: <b>{c.name}</b>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{c.isNew ? '（新しく登録）' : '（登録済み）'}</span>
+                      </span>
+                      <button type="button" onClick={() => navigate(`/customers/${c.id}`)} style={{ padding: '6px 10px', fontSize: 13 }}>
+                        カードを見る
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                    会話の中で相手の名前が分からなかったため、まだ誰の履歴にも紐付いていません。相手の名前を入れると、その人のカードに議事録が残ります。
+                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      list="meeting-people"
+                      value={linkName}
+                      onChange={(e) => setLinkName(e.target.value)}
+                      placeholder="相手のお名前（登録済みなら選択）"
+                      style={{ flex: 1, padding: 8, fontSize: 14 }}
+                    />
+                    <button type="button" onClick={() => void onLinkPerson()} disabled={linking || !linkName.trim()} style={{ padding: '8px 12px' }}>
+                      {linking ? '…' : '紐付ける'}
+                    </button>
+                  </div>
+                  <datalist id="meeting-people">
+                    {existing.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--color-text-muted)' }}>
+                <button type="button" onClick={() => navigate('/schedule')} style={{ background: 'none', border: 'none', padding: 0, color: saved.scheduleIds.length ? 'var(--color-primary)' : 'inherit' }}>
+                  予定 {saved.scheduleIds.length}件
+                </button>
+                <button type="button" onClick={() => navigate('/tasks')} style={{ background: 'none', border: 'none', padding: 0, color: saved.taskIds.length ? 'var(--color-primary)' : 'inherit' }}>
+                  タスク {saved.taskIds.length}件
+                </button>
+                {warnings.length > 0 && <span>（{warnings.join(' / ')}）</span>}
+              </div>
+            </section>
+            <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
+              <MinutesBlock minutes={minutes ?? ''} onChange={onMinutesEdit} />
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                {minutesSaving === 'saving' ? '保存中…' : minutesSaving === 'saved' ? '変更を保存しました' : '「編集」で直せます。変更は自動で保存されます。'}
+              </div>
+              {transcript && (
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--color-text-muted)' }}>全文（文字起こし）</summary>
+                  <MinutesView text={transcript} />
+                </details>
+              )}
+            </section>
+            <button
+              type="button"
+              onClick={() => {
+                resetToIdle();
+                navigate('/');
+              }}
+              style={{ minHeight: 48, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              ホームへ
+            </button>
           </>
         )}
 

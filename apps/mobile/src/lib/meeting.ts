@@ -1,7 +1,7 @@
 // 会議録音クライアント（T1）。録音Blobを Storage へ直接アップロード（署名付きURL）し、
 // パスを /api/meeting/ingest に渡す（長尺base64をJSON bodyに載せない）。承認は既存 ReviewCard、
 // 保存は /api/meeting/commit（サーバーで既存 commitProposals を再利用）。
-import { apiPost } from './api.js';
+import { apiPost, apiPatch } from './api.js';
 import { supabase } from './supabase.js';
 import type { Proposals } from './assistant.js';
 
@@ -23,6 +23,10 @@ export interface IngestResponse {
   /** 議事録生成・候補抽出の部分失敗（文字起こしは成功）。UIで知らせて再解析を促す。 */
   warnings?: string[];
   reused?: boolean;
+  /** 自動保存の結果（承認ステップ廃止・T7c）。null なら未保存（reviewing のまま） */
+  committed?: MeetingCommitResponse | null;
+  /** 会議の実施日時（ISO） */
+  metAt?: string;
 }
 
 export interface MeetingCommitResponse {
@@ -116,4 +120,9 @@ export async function commitMeeting(input: {
   speakerNames?: Record<string, string>;
 }): Promise<MeetingCommitResponse> {
   return apiPost<MeetingCommitResponse>('/api/meeting/commit', input);
+}
+
+/** 保存後に議事録を直す（meeting_recordings と紐付いた履歴の両方に反映）。 */
+export async function updateMeetingMinutes(meetingId: string, minutes: string): Promise<void> {
+  await apiPatch<{ ok: true }>(`/api/meeting/${meetingId}`, { minutes });
 }

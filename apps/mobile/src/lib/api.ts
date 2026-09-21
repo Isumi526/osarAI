@@ -18,13 +18,21 @@ export class ApiError extends Error {
 }
 
 export async function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  return apiRequest<T>('POST', path, body, signal);
+}
+
+export async function apiPatch<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  return apiRequest<T>('PATCH', path, body, signal);
+}
+
+async function apiRequest<T>(method: 'POST' | 'PATCH', path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
 
   const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
+    method,
     headers: {
       'content-type': 'application/json',
       ...(token ? { authorization: `Bearer ${token}` } : {}),

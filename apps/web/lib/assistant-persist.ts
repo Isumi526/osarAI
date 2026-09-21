@@ -74,6 +74,8 @@ export async function commitProposals(args: {
   source?: 'ai_dialogue' | 'zoom_rec' | 'in_person_rec' | 'manual';
   /** 実際に会った日時（ISO）。会議録音は録音開始時刻を渡す。省略時は保存時刻。 */
   metAt?: string;
+  /** 議事録を全員の履歴に付ける（会議録音の自動保存・各相手のカードから同じ会議を読み返せる） */
+  minutesForAll?: boolean;
 }): Promise<CommitResult> {
   const { supabase, orgId, userId, proposals, transcript, minutes } = args;
   const source = args.source ?? 'ai_dialogue';
@@ -155,7 +157,7 @@ export async function commitProposals(args: {
       next_actions: person.next_actions ?? [],
     };
     // 議事録は主たる相手（最初の1人）の履歴にだけ残す（全員に重複させない）。
-    const summaryWithMinutes = !minutesAttached && minutes ? { ...aiSummary, minutes } : aiSummary;
+    const summaryWithMinutes = minutes && (args.minutesForAll || !minutesAttached) ? { ...aiSummary, minutes } : aiSummary;
     if (!minutesAttached && minutes) minutesAttached = true;
     const [, interaction] = await Promise.all([
       recomputeTemperature(supabase, customerId, metAt),

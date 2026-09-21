@@ -441,7 +441,7 @@ function LinesField({
  * 直したい時だけ「編集」でテキストエリアに切り替える（テキストエリアは内側スクロールで
  * 全体が見渡せず、議事録の用途に合わないため・T7b）。
  */
-function MinutesBlock({ minutes, onChange }: { minutes: string; onChange?: (v: string) => void }) {
+export function MinutesBlock({ minutes, onChange }: { minutes: string; onChange?: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   return (
     <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--color-border)' }}>

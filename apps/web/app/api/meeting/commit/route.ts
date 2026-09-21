@@ -46,13 +46,15 @@ export async function POST(req: Request) {
   // reviewing 以外は受け付けない: processing/failed の行を空 proposals で done にすると二度と直せなくなる。
   const { data: rec, error: recErr } = await supabase
     .from('meeting_recordings')
-    .select('id, transcript, status, capture, duration_sec, created_at')
+    .select('id, transcript, status, capture, duration_sec, created_at, committed_interaction_ids')
     .eq('id', meetingId)
     .eq('user_id', user.id)
     .maybeSingle();
   if (recErr || !rec) return json({ error: 'meeting not found' }, 404);
-  if (rec.status === 'done') return json({ error: 'already_committed', message: 'この録音はすでに登録済みです。' }, 409);
-  if (rec.status !== 'reviewing') {
+  // 自動保存後（done）でも、相手が未特定で履歴が1件も無い録音は「後から相手を紐付ける」ために受け付ける（T7c）
+  const alreadyLinked = Array.isArray(rec.committed_interaction_ids) && (rec.committed_interaction_ids as unknown[]).length > 0;
+  if (rec.status === 'done' && alreadyLinked) return json({ error: 'already_committed', message: 'この録音はすでに登録済みです。' }, 409);
+  if (rec.status !== 'reviewing' && rec.status !== 'done') {
     return json({ error: 'not_reviewable', message: 'この録音はまだ解析が終わっていません（再解析してください）。' }, 409);
   }
   // 会議の実施日時 ＝ 録音行の作成時刻 − 録音時間（承認が翌日にずれても会議日を保つ）

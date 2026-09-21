@@ -13,7 +13,8 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
 import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
-import { parseSpeakers, normalizeImportedTranscript } from '@/lib/meeting-speakers';
+import { parseSpeakers, normalizeImportedTranscript, relabelSpeakers } from '@/lib/meeting-speakers';
+import { commitProposals } from '@/lib/assistant-persist';
 
 export const runtime = 'nodejs';
 // 長尺文字起こし(アップロード＋processing待ち＋生成)＋抽出を同期で行う。Vercel上限に合わせる。
@@ -291,20 +292,78 @@ export async function POST(req: Request) {
   }
   const proposals = toProposals(extracted, customers, now);
 
+  // --- 自動保存（承認ステップ廃止・2026-09-21 人判断）---
+  // 目的は「後で AI 相談が参照できる」「同じ人に会う前に読み返せる」こと。承認で止めず、
+  // 名前が分かった相手（既存一致 or 新規）に議事録＋全文を紐付け、予定/タスクも登録する。直したければ後から編集する。
+  // 名前が分からない相手（name 空）は customers を作らず、録音は「相手未設定」のまま残す（後で紐付け可）。
+  const namedPeople = proposals.people.filter((p) => p.customer_id || p.name.trim());
+  const speakersRoster = parseSpeakers(transcript);
+  // 相手が1人だけ特定できていれば、話者ラベル「相手1」をその名前に置き換えて保存する
+  const others = speakersRoster.filter((sp) => !sp.isSelf);
+  const speakerNames: Record<string, string> = {};
+  if (others.length === 1 && namedPeople.length === 1) {
+    const nm = namedPeople[0]!.name || customers.find((c) => c.id === namedPeople[0]!.customer_id)?.name || '';
+    if (nm) speakerNames[others[0]!.label] = nm;
+  }
+  const finalTranscript = relabelSpeakers(transcript, speakerNames);
+  const finalMinutes = minutes ? relabelSpeakers(minutes, speakerNames) : null;
+  const metAt = meetingStart.toISOString();
+
+  let committed: { customers: { id: string; name: string; isNew: boolean }[]; interactionIds: string[]; scheduleIds: string[]; taskIds: string[] } | null = null;
+  let commitError: string | null = null;
+  try {
+    committed = await commitProposals({
+      supabase,
+      orgId,
+      userId: user.id,
+      proposals: {
+        ...proposals,
+        // 1対1なら相手未指定の予定/タスクはその人に紐付ける
+        people: namedPeople,
+        schedules: proposals.schedules.map((x) => ({ ...x, person_index: x.person_index ?? (namedPeople.length === 1 ? 0 : null) })),
+        tasks: proposals.tasks.map((x) => ({ ...x, person_index: x.person_index ?? (namedPeople.length === 1 ? 0 : null) })),
+        self_notes: [],
+        self_fields: {},
+      },
+      transcript: finalTranscript,
+      minutes: finalMinutes,
+      minutesForAll: true,
+      source: capture === 'mobile_speaker' ? 'in_person_rec' : 'zoom_rec',
+      metAt,
+    });
+  } catch (e) {
+    commitError = `登録に失敗しました（議事録は残っています）: ${String(e)}`;
+    console.error('[meeting/ingest] commit failed', e);
+  }
+
   await supabase
     .from('meeting_recordings')
     .update({
-      transcript,
-      minutes,
+      transcript: finalTranscript,
+      minutes: finalMinutes,
       proposals: proposals as unknown as never,
-      status: 'reviewing',
-      error: [extractError, minutesError].filter(Boolean).join(' / ') || null,
+      status: committed ? 'done' : 'reviewing',
+      customer_id: committed?.customers[0]?.id ?? null,
+      committed_interaction_ids: (committed?.interactionIds ?? []) as unknown as never,
+      error: [extractError, minutesError, commitError].filter(Boolean).join(' / ') || null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', meetingId);
 
-  const warnings = [extractError, minutesError, peopleWarning].filter((w): w is string => !!w);
-  return json({ meetingId, transcript, minutes, proposals, speakers, warnings }, 200);
+  const warnings = [extractError, minutesError, peopleWarning, commitError].filter((w): w is string => !!w);
+  return json(
+    {
+      meetingId,
+      transcript: finalTranscript,
+      minutes: finalMinutes,
+      proposals,
+      speakers: parseSpeakers(finalTranscript),
+      warnings,
+      committed,
+      metAt,
+    },
+    200,
+  );
 }
 
 function json(payload: unknown, status: number) {
