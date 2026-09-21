@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     consentAck?: boolean;
     /** 他ツールの文字起こしを貼り付けて取り込む（T7b）。recordingPath の代わりに渡す */
     transcriptText?: string;
+    /** 会議の実施日時（ISO）。過去の録音/文字起こしを取り込む時に、相対日付の解決と met_at の基準にする */
+    recordedAt?: string;
   };
+  const recordedAt = body.recordedAt && !Number.isNaN(Date.parse(body.recordedAt)) ? new Date(body.recordedAt) : null;
   const importedText = typeof body.transcriptText === 'string' ? body.transcriptText.trim() : '';
   const recordingPath = (body.recordingPath ?? '').trim();
   const mimeType = body.mimeType ?? 'audio/webm';
@@ -132,6 +135,8 @@ export async function POST(req: Request) {
         duration_sec: typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null,
         consent_ack: body.consentAck === true,
         status: 'processing',
+        // 過去の会議を取り込む時は作成時刻を会議日時にする（commit の met_at = created_at − duration の基準）
+        ...(recordedAt ? { created_at: recordedAt.toISOString() } : {}),
       })
       .select('id')
       .single();
@@ -192,7 +197,8 @@ export async function POST(req: Request) {
     .filter(Boolean)
     .join('\n');
 
-  const now = new Date();
+  // 相対日付（「来週火曜」）の基準。取り込みで会議日時が指定されていればそれを使う
+  const now = recordedAt ?? new Date();
   const nowLabel = now.toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit',
@@ -201,7 +207,7 @@ export async function POST(req: Request) {
   let minutes: string | null = null;
   let minutesError: string | null = null;
   const durationSec = typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null;
-  const meetingStart = durationSec ? new Date(now.getTime() - durationSec * 1000) : now;
+  const meetingStart = recordedAt ?? (durationSec ? new Date(now.getTime() - durationSec * 1000) : now);
   const meetingAtLabel = meetingStart.toLocaleString('ja-JP', {
     timeZone: 'Asia/Tokyo',
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit',

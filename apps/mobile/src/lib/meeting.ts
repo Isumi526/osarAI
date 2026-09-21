@@ -56,8 +56,8 @@ export async function ingestMeeting(input: {
 }
 
 /** 他ツール（Notta / Zoom 等）の文字起こしテキストを貼り付けて取り込む（録音なし・T7b）。 */
-export async function ingestTranscriptText(transcriptText: string): Promise<IngestResponse> {
-  return apiPost<IngestResponse>('/api/meeting/ingest', { transcriptText });
+export async function ingestTranscriptText(transcriptText: string, recordedAt?: string): Promise<IngestResponse> {
+  return apiPost<IngestResponse>('/api/meeting/ingest', { transcriptText, ...(recordedAt ? { recordedAt } : {}) });
 }
 
 /** 確認カードで編集した最終版を確定登録する（議事録も顧客の履歴に残す）。 */

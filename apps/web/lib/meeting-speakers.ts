@@ -56,14 +56,31 @@ export function normalizeImportedTranscript(text: string): string {
   let pendingSpeaker: string | null = null;
   const TS = '(?:\\[?\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?\\]?)';
   const headerRe = new RegExp(`^\\s*(.{1,30}?)\\s*[ \\u3000]${TS}\\s*$`);
+  // Notta の TXT 書き出し（話者を含める・経過時間なし）は「remote:0」「local:1」「話者 1」だけの行の次に発言が来る。
+  // local=録音した本人側（自分）/ remote=相手側（Zoom 連携時）。
+  const bareLabelRe = /^\s*((?:local|remote|speaker|話者|相手)\s*[:：]?\s*(\d+))\s*$/iu;
   const leadTsRe = new RegExp(`^\\s*${TS}\\s*[-–—]?\\s*`);
+  const toLabel = (name: string): string => {
+    const m = /^(local|remote|speaker|話者|相手)\s*[:：]?\s*(\d+)$/iu.exec(name.trim());
+    if (!m) return name.trim().replace(/^(話者|相手)\s+/u, '$1');
+    const kind = m[1]!.toLowerCase();
+    const n = Number(m[2]);
+    if (kind === 'local') return '自分';
+    if (kind === 'remote') return `相手${n + 1}`;
+    return `${m[1]}${m[2]}`;
+  };
   for (const raw of lines) {
     const line = raw.replace(leadTsRe, '');
     if (!line.trim()) continue;
     const h = headerRe.exec(line);
     if (h && !/[:：]/.test(h[1]!)) {
       // 「話者 1」「相手 2」は Gemini 由来の既知ラベルと同じ形（空白なし）に揃える
-      pendingSpeaker = h[1]!.trim().replace(/^(話者|相手)\s+/u, '$1');
+      pendingSpeaker = toLabel(h[1]!);
+      continue;
+    }
+    const b = bareLabelRe.exec(line);
+    if (b) {
+      pendingSpeaker = toLabel(b[1]!);
       continue;
     }
     if (pendingSpeaker) {

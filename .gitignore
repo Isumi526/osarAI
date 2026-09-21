@@ -47,3 +47,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# 会議録音の精度評価用の実データ（個人情報を含む・コミット禁止）
+eval-data/
+eval-out/

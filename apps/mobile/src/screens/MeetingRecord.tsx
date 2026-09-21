@@ -42,6 +42,7 @@ export function MeetingRecord() {
   // 話者割当・手動追加で既存のつながりを選べるようにする（名前で一致したら customer_id を紐付け）
   const [existing, setExisting] = useState<{ id: string; name: string }[]>([]);
   const [importText, setImportText] = useState('');
+  const [importDate, setImportDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -189,7 +190,8 @@ export function MeetingRecord() {
     setPending(null);
     setUploadedPath(null);
     try {
-      applyIngest(await ingestTranscriptText(text));
+      // 会議日は JST の正午として渡す（相対日付の基準・履歴の日付）
+      applyIngest(await ingestTranscriptText(text, importDate ? `${importDate}T12:00:00+09:00` : undefined));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setPhase('idle');
@@ -474,6 +476,10 @@ export function MeetingRecord() {
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0' }}>
               他のツールで文字起こし済みの会議を、そのまま議事録・予定・タスク・つながりに整理します。「話者名　00:01」の形式や「名前: 発言」の形式に対応。
             </p>
+            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+              会議の日付（「来週」などの日付の基準になります）
+              <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} style={{ padding: 8, fontSize: 14 }} />
+            </label>
             <textarea
               value={importText}
               onChange={(e) => setImportText(e.target.value)}

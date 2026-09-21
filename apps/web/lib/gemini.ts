@@ -335,7 +335,10 @@ export async function geminiTranscribeLong(
   mimeType: string,
   opts: { model?: string; language?: string; cleanFillers?: boolean; channelSelfLeft?: boolean } = {},
 ): Promise<string> {
-  const model = opts.model ?? GEMINI_MODEL_LITE;
+  // 実会議30分の評価（2026-09-21・Notta参照）で Flash-Lite は同じ段落を数十回繰り返すループに入り
+  // 173秒/10万字の出力になった（CER 75%）。Flash＋thinking最小＋出力上限なら 22秒・ループ無し（CER 25%・
+  // 差分の大半はフィラー/表記揺れ）。長尺文字起こしは Flash を既定にする。
+  const model = opts.model ?? GEMINI_MODEL_DIALOGUE;
   const cleanup =
     opts.cleanFillers === false
       ? ''
@@ -364,7 +367,14 @@ export async function geminiTranscribeLong(
           headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey() },
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ fileData: { mimeType, fileUri: uri } }, { text: instruction }] }],
-            generationConfig: { temperature: 0 },
+            generationConfig: {
+              temperature: 0,
+              // thinking 既定の -latest 系は文字起こしで本文を返さないことがある（思考だけで STOP）。
+              // callGenerate と同じく最小値に固定する（0 は 400 で拒否される・上記コメント参照）。
+              thinkingConfig: { thinkingBudget: 1 },
+              // ループ時の被害を抑える上限（1時間の日本語会議 ≒ 2〜3万トークン）。
+              maxOutputTokens: 65536,
+            },
           }),
         },
         // 長尺は生成にも時間がかかる。ルート側 maxDuration と整合させる。
@@ -373,13 +383,35 @@ export async function geminiTranscribeLong(
       if (!res.ok) {
         throw new GeminiApiError(res.status, `Gemini STT(long) ${res.status}: ${(await res.text()).slice(0, 300)}`);
       }
-      const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-      return (data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '').trim();
+      const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+      const text = (data.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? '').join('') ?? '').trim();
+      const { text: cleaned, looped } = collapseTranscriptLoops(text);
+      // 繰り返しループに入っていたら、リトライ対象（TIMEOUT扱い）にして別モデル/再試行に回す
+      if (looped) throw new GeminiApiError(TIMEOUT_STATUS, 'Gemini STT(long): 出力が繰り返しループになりました');
+      return cleaned;
     };
-    return await withRetryAndFallback(runOnce, model, model);
+    return await withRetryAndFallback(runOnce, model, GEMINI_MODEL_LITE);
   } finally {
     void deleteGeminiFile(name);
   }
+}
+
+/**
+ * 文字起こしの「同じ段落の繰り返し」を検知して畳む。連続する同一行は1つに、
+ * 長い行の異なり率が極端に低い（同じ数十行を何十回も出力）場合は looped=true を返す。
+ */
+export function collapseTranscriptLoops(text: string): { text: string; looped: boolean } {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  for (const l of lines) {
+    if (out.length && out[out.length - 1] === l && l.trim().length > 0) continue;
+    out.push(l);
+  }
+  const long = out.filter((l) => l.trim().length > 20);
+  const distinct = new Set(long).size;
+  // 30分の会議で長い行は100本前後。150本以上あって異なり率が35%未満なら、ほぼ確実にループ。
+  const looped = long.length >= 150 && distinct / long.length < 0.35;
+  return { text: out.join('\n'), looped };
 }
 
 async function callGenerate(prompt: string, opts: GenerateOpts): Promise<string> {
