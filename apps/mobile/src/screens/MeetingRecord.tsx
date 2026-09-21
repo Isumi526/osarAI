@@ -71,6 +71,8 @@ export function MeetingRecord() {
   }, [phase, pcRec.levels.other]);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
+  const recordingRef = useRef(false);
+  recordingRef.current = mode === 'pc' ? pcRec.recording : micRec.recording;
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   const busy = phase === 'recording' || phase === 'processing' || phase === 'failed' || phase === 'reviewing';
@@ -123,7 +125,8 @@ export function MeetingRecord() {
     if (phase === 'recording') {
       setElapsed(0);
       timerRef.current = setInterval(() => {
-        if (!pausedRef.current) setElapsed((s) => s + 1);
+        // 一時停止中と、共有終了などで録音が確定した後は進めない（表示と録音長を一致させる）
+        if (!pausedRef.current && recordingRef.current) setElapsed((s) => s + 1);
       }, 1000);
       const originalTitle = document.title;
       const requestWakeLock = async () => {
@@ -225,6 +228,20 @@ export function MeetingRecord() {
     },
     [mode],
   );
+
+  // 共有元（Zoom画面/タブ）が閉じられた＝録音は確定済みで、できる操作は「解析」だけなので自動で進む。
+  const shareEndedHandled = useRef(false);
+  useEffect(() => {
+    if (phase !== 'recording') {
+      shareEndedHandled.current = false;
+      return;
+    }
+    if (pcRec.shareEnded && !shareEndedHandled.current) {
+      shareEndedHandled.current = true;
+      void onStop();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, pcRec.shareEnded]);
 
   async function onStop() {
     if (!pcRec.shareEnded) {
@@ -476,27 +493,25 @@ export function MeetingRecord() {
                   display: 'inline-block',
                 }}
               />
-              {pcRec.shareEnded ? '録音済み（共有が終了しました）' : paused ? '一時停止中' : '録音中'}
+              {paused ? '一時停止中' : '録音中'}
             </div>
             <div style={{ fontSize: 32, fontVariantNumeric: 'tabular-nums' }}>{fmt(elapsed)}</div>
 
             {/* 入力レベル：本当に音が入っているかを見せる（不安対策・設定ミスの早期検知） */}
-            {!pcRec.shareEnded && (
-              <div style={{ width: '100%', display: 'grid', gap: 6 }}>
-                {mode === 'pc' ? (
-                  <>
-                    <LevelBar label="自分（マイク）" value={pcRec.levels.self} />
-                    <LevelBar label="相手（Zoomの音声）" value={pcRec.levels.other} />
-                  </>
-                ) : (
-                  <LevelBar label="マイク" value={micRec.level} />
-                )}
-              </div>
-            )}
+            <div style={{ width: '100%', display: 'grid', gap: 6 }}>
+              {mode === 'pc' ? (
+                <>
+                  <LevelBar label="自分（マイク）" value={pcRec.levels.self} />
+                  <LevelBar label="相手（Zoomの音声）" value={pcRec.levels.other} />
+                </>
+              ) : (
+                <LevelBar label="マイク" value={micRec.level} />
+              )}
+            </div>
             {/* 相手の音声は「まだ検知していない／検知した」を静かに示すだけにする。
                 Zoom が始まる前に録音を開始して数分後に相手が入る運用が普通なので、無音を警告にしない。
                 共有の「システム音声」が OFF の事故は開始時点（音声トラック無し）で止めている。 */}
-            {!pcRec.shareEnded && mode === 'pc' && (
+            {mode === 'pc' && (
               <p style={{ margin: 0, fontSize: 13, color: otherDetected ? 'var(--color-success, #2e8b57)' : 'var(--color-text-muted)', textAlign: 'center' }}>
                 {otherDetected
                   ? '相手の音声を検知しました。このまま会議を続けてください。'
@@ -509,20 +524,13 @@ export function MeetingRecord() {
               </p>
             )}
 
-            {pcRec.shareEnded && (
-              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
-                画面共有が終了したため、ここまでの録音を保持しています。「収録を終了」で解析に進んでください。
-              </p>
-            )}
-            {!pcRec.shareEnded && (
-              <button
-                type="button"
-                onClick={() => (paused ? (mode === 'pc' ? pcRec.resume() : micRec.resume()) : mode === 'pc' ? pcRec.pause() : micRec.pause())}
-                style={{ minHeight: 48, fontSize: 15, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            <button
+              type="button"
+              onClick={() => (paused ? (mode === 'pc' ? pcRec.resume() : micRec.resume()) : mode === 'pc' ? pcRec.pause() : micRec.pause())}
+              style={{ minHeight: 48, fontSize: 15, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
               >
-                {paused ? '録音を再開' : '一時停止（離席・別件の話題など）'}
-              </button>
-            )}
+              {paused ? '録音を再開' : '一時停止（離席・別件の話題など）'}
+            </button>
             <button type="button" onClick={onStop} style={{ minHeight: 52, fontSize: 16, width: '100%' }}>
               収録を終了して解析
             </button>
@@ -537,7 +545,7 @@ export function MeetingRecord() {
             <div style={{ fontSize: 16 }}>{uploadedPath ? '文字起こし・解析中…' : 'アップロード中…'}</div>
             <div style={{ fontSize: 13, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmt(processingSec)}</div>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center' }}>
-              長い会議ほど時間がかかります（1時間の会議で数分かかることがあります）。この画面を開いたままお待ちください。
+              長い会議ほど時間がかかります（1時間の会議で1〜2分）。この画面を開いたままお待ちください。
             </p>
           </section>
         )}
