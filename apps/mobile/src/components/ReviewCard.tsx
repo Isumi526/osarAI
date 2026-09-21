@@ -1,5 +1,6 @@
 // 保存前の確認カード（共有）。AIの抽出をそのまま保存せず、必ずユーザーが目で見て直せるようにする。
 // 統合AIチャット(AssistantChat) と 会議録音(Meeting) の両方で使う（2026-08-25 会議録音T1で切り出し）。
+import { useState } from 'react';
 import { type Proposals } from '../lib/assistant.js';
 import { AutoResizeTextarea } from './AutoResizeTextarea.js';
 
@@ -79,29 +80,7 @@ export function ReviewCard({
       }}
     >
       {minutes != null && (minutes || onMinutesChange) && (
-        <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--color-border)' }}>
-          <strong style={{ fontSize: 13 }}>議事録</strong>
-          {onMinutesChange ? (
-            <AutoResizeTextarea
-              value={minutes}
-              onChange={(e) => onMinutesChange(e.target.value)}
-              rows={4}
-              style={{
-                marginTop: 6,
-                width: '100%',
-                padding: 10,
-                fontSize: 13,
-                fontFamily: 'inherit',
-                border: '1px solid var(--color-border)',
-                borderRadius: 8,
-                resize: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          ) : (
-            <p style={{ margin: '6px 0 0', fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--color-text)' }}>{minutes}</p>
-          )}
-        </div>
+        <MinutesBlock minutes={minutes} onChange={onMinutesChange} />
       )}
 
       <div>
@@ -439,5 +418,67 @@ function LinesField({ label, value, onChange }: { label: string; value: string[]
         style={{ padding: 10, fontSize: 14, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8, resize: 'none' }}
       />
     </label>
+  );
+}
+
+/**
+ * 議事録。既定は「一目で全部読める」読み取り表示（見出し行を太字・箇条書きをそのまま）。
+ * 直したい時だけ「編集」でテキストエリアに切り替える（テキストエリアは内側スクロールで
+ * 全体が見渡せず、議事録の用途に合わないため・T7b）。
+ */
+function MinutesBlock({ minutes, onChange }: { minutes: string; onChange?: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--color-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <strong style={{ fontSize: 13 }}>議事録</strong>
+        {onChange && (
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 999, padding: '4px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}
+          >
+            {editing ? '表示に戻す' : '編集'}
+          </button>
+        )}
+      </div>
+      {editing && onChange ? (
+        <AutoResizeTextarea
+          value={minutes}
+          onChange={(e) => onChange(e.target.value)}
+          rows={8}
+          autoFocus
+          style={{
+            marginTop: 6,
+            width: '100%',
+            padding: 10,
+            fontSize: 13,
+            fontFamily: 'inherit',
+            border: '1px solid var(--color-border)',
+            borderRadius: 8,
+            resize: 'none',
+            boxSizing: 'border-box',
+          }}
+        />
+      ) : (
+        <MinutesView text={minutes} />
+      )}
+    </div>
+  );
+}
+
+/** 「【見出し】」行を太字、「- 」行を箇条書きとして描画する軽量ビュー（markdown は使わない）。 */
+export function MinutesView({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.6, color: 'var(--color-text)' }}>
+      {lines.map((line, i) => {
+        const t = line.trim();
+        if (!t) return <div key={i} style={{ height: 6 }} />;
+        if (/^【.+】$/.test(t)) return <div key={i} style={{ fontWeight: 700, marginTop: i === 0 ? 0 : 10 }}>{t.replace(/^【|】$/g, '')}</div>;
+        if (/^[-・•]\s*/.test(t)) return <div key={i} style={{ paddingLeft: 14, textIndent: -14 }}>・{t.replace(/^[-・•]\s*/, '')}</div>;
+        return <div key={i}>{t}</div>;
+      })}
+    </div>
   );
 }

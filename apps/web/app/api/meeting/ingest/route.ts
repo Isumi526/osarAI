@@ -13,7 +13,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
 import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
-import { parseSpeakers } from '@/lib/meeting-speakers';
+import { parseSpeakers, normalizeImportedTranscript } from '@/lib/meeting-speakers';
 
 export const runtime = 'nodejs';
 // 長尺文字起こし(アップロード＋processing待ち＋生成)＋抽出を同期で行う。Vercel上限に合わせる。
@@ -23,7 +23,9 @@ export const maxDuration = 300;
 /** status='processing' のままこの時間を超えた行は、関数が打ち切られた残骸とみなして再処理する。 */
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
 
-const CAPTURES = ['pc_local', 'mobile_speaker', 'bot'] as const;
+const CAPTURES = ['pc_local', 'mobile_speaker', 'bot', 'text_import'] as const;
+/** 貼り付け取り込みの上限（1時間の会議でも 3〜5 万字程度） */
+const MAX_IMPORT_CHARS = 200_000;
 type Capture = (typeof CAPTURES)[number];
 
 export function OPTIONS() {
@@ -41,13 +43,21 @@ export async function POST(req: Request) {
     capture?: Capture;
     durationSec?: number;
     consentAck?: boolean;
+    /** 他ツールの文字起こしを貼り付けて取り込む（T7b）。recordingPath の代わりに渡す */
+    transcriptText?: string;
   };
+  const importedText = typeof body.transcriptText === 'string' ? body.transcriptText.trim() : '';
   const recordingPath = (body.recordingPath ?? '').trim();
   const mimeType = body.mimeType ?? 'audio/webm';
-  const capture: Capture = CAPTURES.includes(body.capture as Capture) ? (body.capture as Capture) : 'pc_local';
-  if (!recordingPath) return json({ error: 'recordingPath required' }, 400);
+  const capture: Capture = importedText
+    ? 'text_import'
+    : CAPTURES.includes(body.capture as Capture)
+      ? (body.capture as Capture)
+      : 'pc_local';
+  if (!recordingPath && !importedText) return json({ error: 'recordingPath required' }, 400);
+  if (importedText.length > MAX_IMPORT_CHARS) return json({ error: 'transcript too long', message: '文字起こしが長すぎます（20万字まで）。' }, 413);
   // 所有者チェック（他人のパスを読ませない）。パスは必ず user.id 配下。
-  if (!recordingPath.startsWith(`${user.id}/`)) return json({ error: 'forbidden path' }, 403);
+  if (recordingPath && !recordingPath.startsWith(`${user.id}/`)) return json({ error: 'forbidden path' }, 403);
 
   const [ent, profileRes] = await Promise.all([
     getEntitlement(supabase, user.id),
@@ -69,14 +79,16 @@ export async function POST(req: Request) {
   // - processing で新しい: まだ前回の処理が走っている可能性があるので待ってもらう（409）
   // - processing で古い(15分超): Vercel の打ち切り等で残った残骸とみなし、同じ行を再処理する
   // - failed: 再処理（新しい行は作らず同じ行を使う）
-  const { data: existingRec } = await supabase
-    .from('meeting_recordings')
-    .select('id, transcript, minutes, proposals, status, updated_at, error')
-    .eq('user_id', user.id)
-    .eq('audio_url', recordingPath)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: existingRec } = recordingPath
+    ? await supabase
+        .from('meeting_recordings')
+        .select('id, transcript, minutes, proposals, status, updated_at, error')
+        .eq('user_id', user.id)
+        .eq('audio_url', recordingPath)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
   let meetingId: string;
   if (existingRec && (existingRec.status === 'reviewing' || existingRec.status === 'done')) {
     return json(
@@ -115,8 +127,8 @@ export async function POST(req: Request) {
         org_id: orgId,
         user_id: user.id,
         capture,
-        audio_url: recordingPath,
-        mime_type: mimeType,
+        audio_url: recordingPath || null,
+        mime_type: importedText ? 'text/plain' : mimeType,
         duration_sec: typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null,
         consent_ack: body.consentAck === true,
         status: 'processing',
@@ -132,19 +144,24 @@ export async function POST(req: Request) {
     return json({ error: 'ingest_failed', meetingId, detail }, status);
   };
 
-  // --- Storage から音声を取得（service_role・非公開バケット） ---
-  const admin = createServiceRoleClient();
-  const { data: blob, error: dlErr } = await admin.storage.from(RECORDINGS_BUCKET).download(recordingPath);
-  if (dlErr || !blob) return fail(`音声の取得に失敗しました: ${dlErr?.message ?? 'not found'}`, 404);
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-
-  // --- 長尺文字起こし（Files API・話者ラベル付き） ---
   let transcript: string;
-  try {
-    // PC録音は2chステレオ（左=自分/右=相手）なので self/other を割り当てさせる（T4）。
-    transcript = await geminiTranscribeLong(bytes, mimeType, { channelSelfLeft: capture === 'pc_local' });
-  } catch (e) {
-    return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+  if (importedText) {
+    // --- 貼り付け取り込み: 文字起こしは済んでいるので形式だけ揃える（話者: 発言） ---
+    transcript = normalizeImportedTranscript(importedText);
+  } else {
+    // --- Storage から音声を取得（service_role・非公開バケット） ---
+    const admin = createServiceRoleClient();
+    const { data: blob, error: dlErr } = await admin.storage.from(RECORDINGS_BUCKET).download(recordingPath);
+    if (dlErr || !blob) return fail(`音声の取得に失敗しました: ${dlErr?.message ?? 'not found'}`, 404);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    // --- 長尺文字起こし（Files API・話者ラベル付き） ---
+    try {
+      // PC録音は2chステレオ（左=自分/右=相手）なので self/other を割り当てさせる（T4）。
+      transcript = await geminiTranscribeLong(bytes, mimeType, { channelSelfLeft: capture === 'pc_local' });
+    } catch (e) {
+      return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+    }
   }
   if (!transcript) return fail('文字起こし結果が空でした', 502);
   const speakers = parseSpeakers(transcript);
@@ -189,13 +206,17 @@ export async function POST(req: Request) {
     timeZone: 'Asia/Tokyo',
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit',
   });
+  const selfName = (profile.display_name ?? '').trim();
   try {
     minutes = await geminiText(
       buildMeetingMinutesPrompt({
         meetingAt: meetingAtLabel,
         duration: durationSec ? `${Math.max(1, Math.round(durationSec / 60))}分` : '',
         transcript,
-        userContext: formatUserProfile(userProfile),
+        // 本人の名前を渡し、取り込んだ文字起こし（自分ラベルが無い）でも「自分」と「相手」を取り違えにくくする
+        userContext: [selfName ? `ユーザー本人（議事録での「自分」）の名前: ${selfName}` : '', formatUserProfile(userProfile)]
+          .filter(Boolean)
+          .join('\n'),
       }),
       // 1時間分の文字起こしが入力になるため、対話用の既定15秒では足りない
       { model: GEMINI_MODEL_LITE, temperature: 0.2, timeoutMs: 90_000 },
@@ -208,7 +229,6 @@ export async function POST(req: Request) {
 
   // 会議の全文文字起こしを「対話履歴」枠に流し込む。ユーザー本人が参加した会議として、
   // 登場人物(相手)・発生した予定・タスクを抽出させる。返答(reply)は使わない。
-  const selfName = (profile.display_name ?? '').trim();
   const history =
     `以下はユーザーが参加した会議の全文文字起こしです。ここから、実際に会話に参加した相手（ユーザー本人以外）と、` +
     `会議で決まった予定・発生したタスクを抽出してください。` +

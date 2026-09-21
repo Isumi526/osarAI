@@ -51,8 +51,20 @@ export interface RecordingResult {
   durationSec: number;
 }
 
+/** 入力レベル（0〜1）。録音中に「本当に音が入っているか」を可視化するため（T7b）。 */
+export interface AudioLevels {
+  self: number;
+  other: number;
+}
+
 export interface MeetingRecorder {
   recording: boolean;
+  /** 一時停止中（MediaRecorder.pause。離席や別件の話題を録音から外す・T7b） */
+  paused: boolean;
+  /** 自分(マイク)/相手(システム音声)の入力レベル（約5回/秒で更新） */
+  levels: AudioLevels;
+  /** 相手側が無音のまま経過した秒数（共有の「システム音声」OFF 事故の早期検知） */
+  otherSilentSec: number;
   error: string | null;
   /** getDisplayMedia が使えるか（デスクトップ Chromium のみ）。 */
   supported: boolean;
@@ -62,12 +74,31 @@ export interface MeetingRecorder {
   /** 録音を開始する。失敗時は ok=false と理由（画面側はこの戻り値を使う・stale closure 対策）。 */
   start: () => Promise<{ ok: boolean; error: string | null }>;
   stop: () => Promise<RecordingResult | null>;
+  pause: () => void;
+  resume: () => void;
 }
+
+/** AnalyserNode から RMS レベル（0〜1）を取る。 */
+export function readLevel(analyser: AnalyserNode, buf: Float32Array<ArrayBuffer>): number {
+  analyser.getFloatTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i]! * buf[i]!;
+  const rms = Math.sqrt(sum / buf.length);
+  // 会話音声は RMS 0.01〜0.2 程度。0.15 で振り切る目盛りにする
+  return Math.min(1, rms / 0.15);
+}
+/** これ未満は無音とみなす（RMS 換算 ≈ 0.003） */
+export const SILENCE_LEVEL = 0.02;
 
 export function useMeetingRecorder(): MeetingRecorder {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [levels, setLevels] = useState<AudioLevels>({ self: 0, other: 0 });
+  const [otherSilentSec, setOtherSilentSec] = useState(0);
   const [shareEnded, setShareEnded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const meterRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silentSinceRef = useRef<number | null>(null);
 
   const mrRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -90,6 +121,8 @@ export function useMeetingRecorder(): MeetingRecorder {
     isDesktopChromium();
 
   const cleanup = useCallback(() => {
+    if (meterRef.current) clearInterval(meterRef.current);
+    meterRef.current = null;
     displayRef.current?.getTracks().forEach((t) => t.stop());
     micRef.current?.getTracks().forEach((t) => t.stop());
     ctxRef.current?.close().catch(() => {});
@@ -108,6 +141,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     pendingRef.current = result;
     cleanup();
     setRecording(false);
+    setPaused(false);
     return result;
   }, [cleanup]);
 
@@ -169,6 +203,29 @@ export function useMeetingRecorder(): MeetingRecorder {
       const dest = ctx.createMediaStreamDestination();
       merger.connect(dest);
 
+      // レベルメーター（録音には影響しない分岐）。相手側が無音のまま続いたら UI で警告する。
+      const micAn = ctx.createAnalyser();
+      const sysAn = ctx.createAnalyser();
+      micAn.fftSize = 1024;
+      sysAn.fftSize = 1024;
+      micSource.connect(micAn);
+      sysSource.connect(sysAn);
+      const buf = new Float32Array(1024) as Float32Array<ArrayBuffer>;
+      silentSinceRef.current = Date.now();
+      setOtherSilentSec(0);
+      meterRef.current = setInterval(() => {
+        if (mrRef.current?.state === 'paused') return;
+        const self = readLevel(micAn, buf);
+        const other = readLevel(sysAn, buf);
+        setLevels({ self, other });
+        if (other > SILENCE_LEVEL) {
+          silentSinceRef.current = Date.now();
+          setOtherSilentSec(0);
+        } else if (silentSinceRef.current !== null) {
+          setOtherSilentSec(Math.round((Date.now() - silentSinceRef.current) / 1000));
+        }
+      }, 200);
+
       const mimeType = pickMimeType() ?? 'audio/webm';
       mimeRef.current = mimeType;
       const mr = new MediaRecorder(dest.stream, { mimeType, audioBitsPerSecond: AUDIO_BITS_PER_SECOND });
@@ -192,6 +249,7 @@ export function useMeetingRecorder(): MeetingRecorder {
       mr.start(1000); // 1秒ごとにチャンク化（長時間でメモリを分割）
       mrRef.current = mr;
       startedAtRef.current = Date.now();
+      setPaused(false);
       setRecording(true);
       return { ok: true, error: null };
     } catch (e) {
@@ -225,5 +283,36 @@ export function useMeetingRecorder(): MeetingRecorder {
     });
   }, [finalize]);
 
-  return { recording, error, supported, shareEnded, mimeType: mimeRef.current, start, stop };
+  const pause = useCallback(() => {
+    const mr = mrRef.current;
+    if (mr && mr.state === 'recording') {
+      mr.pause();
+      setPaused(true);
+    }
+  }, []);
+  const resume = useCallback(() => {
+    const mr = mrRef.current;
+    if (mr && mr.state === 'paused') {
+      mr.resume();
+      // 再開時は無音カウントもリセット（離席中の無音を警告に数えない）
+      silentSinceRef.current = Date.now();
+      setOtherSilentSec(0);
+      setPaused(false);
+    }
+  }, []);
+
+  return {
+    recording,
+    paused,
+    levels,
+    otherSilentSec,
+    error,
+    supported,
+    shareEnded,
+    mimeType: mimeRef.current,
+    start,
+    stop,
+    pause,
+    resume,
+  };
 }
