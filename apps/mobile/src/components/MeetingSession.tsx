@@ -25,6 +25,10 @@ export interface MeetingSessionValue {
   micLevel: number;
   /** 実際に使われたマイクの名前（PC録音）。声が入らない時の切り分け用。 */
   micLabel: string | null;
+  /** 録音中にマイクが失われた（イヤホンの電池切れ等）。自動復帰に失敗している間だけ true。 */
+  micLost: boolean;
+  /** 録音を止めずにマイクを差し替える（null で OS の既定）。 */
+  switchMic: (deviceId?: string | null) => Promise<boolean>;
   micSilentSec: number;
   /** 現在（または直前）の IndexedDB セッション */
   session: RecordingSession | null;
@@ -142,6 +146,8 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     levels: pcRec.levels,
     micLevel: micRec.level,
     micLabel: pcRec.micLabel,
+    micLost: pcRec.micLost,
+    switchMic: pcRec.switchMic,
     micSilentSec: micRec.silentSec,
     session,
     start,

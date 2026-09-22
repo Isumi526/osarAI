@@ -23,7 +23,16 @@ function saveMicId(id: string) {
   }
 }
 
-export function MicPicker({ onChange }: { onChange?: (deviceId: string | null) => void }) {
+export function MicPicker({
+  onChange,
+  showTest = true,
+  title = '自分の声を録るマイク',
+}: {
+  onChange?: (deviceId: string | null) => void;
+  /** 録音中は事前テストを出さない（マイクを二重に掴まないため） */
+  showTest?: boolean;
+  title?: string;
+}) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selected, setSelected] = useState<string>(() => getSavedMicId() ?? '');
   const [testing, setTesting] = useState(false);
@@ -106,7 +115,7 @@ export function MicPicker({ onChange }: { onChange?: (deviceId: string | null) =
 
   return (
     <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, display: 'grid', gap: 10 }}>
-      <strong style={{ fontSize: 14 }}>自分の声を録るマイク</strong>
+      <strong style={{ fontSize: 14 }}>{title}</strong>
       <select
         value={selected}
         onChange={(e) => {
@@ -126,6 +135,7 @@ export function MicPicker({ onChange }: { onChange?: (deviceId: string | null) =
         ))}
       </select>
 
+      {showTest && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
           type="button"
@@ -138,13 +148,14 @@ export function MicPicker({ onChange }: { onChange?: (deviceId: string | null) =
           <div style={{ width: `${Math.round(level * 100)}%`, height: '100%', background: 'var(--color-primary)', transition: 'width 0.1s' }} />
         </div>
       </div>
+      )}
 
-      {testing && (
+      {showTest && testing && (
         <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
           {peak > 0.05 ? '✓ 声が届いています。このマイクで録音できます。' : '声を出してみてください。バーが動かない場合は別のマイクを選んでください。'}
         </p>
       )}
-      {!testing && (
+      {showTest && !testing && (
         <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
           声が入らない時はここでテストしてください。音声入力アプリ（常駐のディクテーション等）がマイクを掴んでいる場合や、
           iPhone の連携マイクが選ばれたまま切断された場合は、ここで別のマイクに変えると直ります。

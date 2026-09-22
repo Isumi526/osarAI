@@ -694,11 +694,38 @@ export function MeetingRecord() {
               </p>
             )}
             {/* どのマイクで録れているかを常に見せる（違う機器が選ばれていることに気づけるように） */}
-            {mode === 'pc' && ms.micLabel && (
+            {mode === 'pc' && ms.micLabel && !ms.micLost && (
               <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center' }}>
                 マイク: {ms.micLabel}
                 {!selfDetected && '（まだ自分の声を検知していません）'}
               </p>
+            )}
+            {/* 録音中でもマイクを変えられる（イヤホン→内蔵、など会議中の持ち替え） */}
+            {mode === 'pc' && (
+              <details style={{ width: '100%' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--color-text-muted)' }}>マイクを変える</summary>
+                <div style={{ marginTop: 8 }}>
+                  <MicPicker
+                    showTest={false}
+                    title="録音に使うマイク"
+                    onChange={(id) => {
+                      setMicId(id);
+                      void ms.switchMic(id);
+                    }}
+                  />
+                </div>
+              </details>
+            )}
+            {/* イヤホンの電池切れ等でマイクが外れた時。自動復帰に失敗している間だけ出す（録音は続いている） */}
+            {mode === 'pc' && ms.micLost && (
+              <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-primary)', width: '100%' }}>
+                <span style={{ fontSize: 13 }}>
+                  マイクが使えなくなりました（イヤホンが切れた可能性があります）。<b>相手の声は録音を続けています。</b>
+                </span>
+                <button type="button" onClick={() => void ms.switchMic(null)} style={{ minHeight: 40, fontSize: 13 }}>
+                  パソコンのマイクに切り替える
+                </button>
+              </div>
             )}
             {!ms.paused && mode === 'mic' && ms.micSilentSec >= 60 && (
               <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center' }}>

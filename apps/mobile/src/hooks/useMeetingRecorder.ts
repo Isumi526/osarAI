@@ -88,6 +88,13 @@ export interface MeetingRecorder {
   start: (opts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void; micDeviceId?: string | null }) => Promise<{ ok: boolean; error: string | null }>;
   /** 実際に使われたマイクの名前（「声が入らない」時の切り分け用に画面へ出す） */
   micLabel: string | null;
+  /** 録音中にマイクが失われた（イヤホンの電池切れ等）。別のマイクへ自動で切り替えを試みる。 */
+  micLost: boolean;
+  /**
+   * 録音を止めずにマイクを差し替える（deviceId=null で OS の既定）。
+   * イヤホンが切れた時に自動で呼ばれるほか、録音中のユーザー操作からも呼べる。
+   */
+  switchMic: (deviceId?: string | null) => Promise<boolean>;
   stop: () => Promise<RecordingResult | null>;
   pause: () => void;
   resume: () => void;
@@ -114,6 +121,7 @@ export function useMeetingRecorder(): MeetingRecorder {
   const [otherSilentSec, setOtherSilentSec] = useState(0);
   const [shareEnded, setShareEnded] = useState(false);
   const [micLabel, setMicLabel] = useState<string | null>(null);
+  const [micLost, setMicLost] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const meterRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const silentSinceRef = useRef<number | null>(null);
@@ -134,6 +142,13 @@ export function useMeetingRecorder(): MeetingRecorder {
   const selfSegmentsRef = useRef<[number, number][]>([]);
   const selfOpenRef = useRef<number | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  // 録音中のマイク差し替え（イヤホンの電池切れ等）用。グラフの接続先を覚えておく。
+  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micPairRef = useRef<ChannelMergerNode | null>(null);
+  const micAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micDeviceIdRef = useRef<string | null>(null);
+  // マイク喪失時の処理は下で定義するので、ref 越しに呼ぶ（start より後に宣言されるため）
+  const micLostHandlerRef = useRef<() => void>(() => {});
   const stopWaitersRef = useRef<((r: RecordingResult | null) => void)[]>([]);
 
   const supported =
@@ -162,6 +177,33 @@ export function useMeetingRecorder(): MeetingRecorder {
     ctxRef.current = null;
     mrRef.current = null;
     mrSelfRef.current = null;
+  }, []);
+
+  /**
+   * マイクのストリームを音声グラフへ繋ぎ直す（録音は止めない）。
+   * MediaRecorder は MediaStreamAudioDestinationNode を録っているので、
+   * 入力側の差し替えは録音ファイルに切れ目を作らない。
+   */
+  const attachMicStream = useCallback((stream: MediaStream, onLost: () => void) => {
+    const ctx = ctxRef.current;
+    const pair = micPairRef.current;
+    if (!ctx || !pair) return;
+    try {
+      micSourceRef.current?.disconnect();
+    } catch {
+      /* 既に切れていることがある */
+    }
+    micRef.current?.getTracks().forEach((t) => t.stop());
+    micRef.current = stream;
+    const src = ctx.createMediaStreamSource(stream);
+    src.connect(pair, 0, 0);
+    if (micAnalyserRef.current) src.connect(micAnalyserRef.current);
+    micSourceRef.current = src;
+    const track = stream.getAudioTracks()[0];
+    setMicLabel(track?.label ?? null);
+    // イヤホンの電池切れ・USBマイクの抜去はここに来る（mute は一時的なこともあるので ended と両方見る）
+    track?.addEventListener('ended', onLost);
+    track?.addEventListener('mute', onLost);
   }, []);
 
   /** 収録済みチャンクから結果を確定する（一度だけ）。 */
@@ -253,14 +295,10 @@ export function useMeetingRecorder(): MeetingRecorder {
       } catch {
         mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints });
       }
-      micRef.current = mic;
-      setMicLabel(mic.getAudioTracks()[0]?.label ?? null);
-
-      // WebAudio で 自分(マイク・ゲート後) と 相手(システム音声) を「別々の出力」に分ける。
+      // WebAudio で 自分(マイク) と 相手(システム音声) を「別々の出力」に分ける。
       // 1本のステレオにまとめると、文字起こし側がチャンネルを見ないため話者を取り違える。
       const ctx = new AudioContext();
       ctxRef.current = ctx;
-      const micSource = ctx.createMediaStreamSource(mic);
       const sysSource = ctx.createMediaStreamSource(new MediaStream(sysAudio));
       // マイクは「常にそのまま録る」（本人の声を絶対に落とさない）。
       // ここでは本人が話していた区間だけを記録し、後段のヒントに使う。相手の声の回り込みは
@@ -268,7 +306,7 @@ export function useMeetingRecorder(): MeetingRecorder {
       // ScriptProcessorNode は非推奨だが、外部ファイル不要で全ブラウザで動くためここでは採用。
       const gate = ctx.createScriptProcessor(2048, 2, 1);
       const pair = ctx.createChannelMerger(2);
-      micSource.connect(pair, 0, 0);
+      micPairRef.current = pair;
       sysSource.connect(pair, 0, 1);
       pair.connect(gate);
       selfSegmentsRef.current = [];
@@ -312,8 +350,12 @@ export function useMeetingRecorder(): MeetingRecorder {
       const sysAn = ctx.createAnalyser();
       micAn.fftSize = 1024;
       sysAn.fftSize = 1024;
-      micSource.connect(micAn); // 生のマイク＝話せば必ず振れる
+      micAnalyserRef.current = micAn; // 生のマイク＝話せば必ず振れる（差し替え時もここに繋ぎ直す）
       sysSource.connect(sysAn);
+      // マイクをグラフに接続。以降 track が ended/mute になったら既定マイクへ自動で繋ぎ直す。
+      micDeviceIdRef.current = startOpts?.micDeviceId ?? null;
+      setMicLost(false);
+      attachMicStream(mic, () => micLostHandlerRef.current());
       const buf = new Float32Array(1024) as Float32Array<ArrayBuffer>;
       silentSinceRef.current = Date.now();
       setOtherSilentSec(0);
@@ -400,7 +442,42 @@ export function useMeetingRecorder(): MeetingRecorder {
       setError(msg);
       return { ok: false, error: msg };
     }
-  }, [supported, cleanup, finalize]);
+  }, [supported, cleanup, finalize, attachMicStream]);
+
+  const switchMic = useCallback(
+    async (deviceId: string | null = null): Promise<boolean> => {
+      if (!ctxRef.current || !micPairRef.current) return false;
+      const base = { echoCancellation: true, noiseSuppression: true, autoGainControl: true } as MediaTrackConstraints;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: deviceId ? { ...base, deviceId: { exact: deviceId } } : base,
+        });
+        micDeviceIdRef.current = deviceId;
+        attachMicStream(stream, () => micLostHandlerRef.current());
+        setMicLost(false);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [attachMicStream],
+  );
+
+  /**
+   * 録音中にマイクが失われた時の復帰（イヤホンの電池切れ→内蔵マイクへ、など）。
+   * OS の既定マイクへ繋ぎ直す。取れなければ UI に出して、ユーザーに選んでもらう。
+   */
+  const handleMicLost = useCallback(async () => {
+    setMicLost(true);
+    // 機器が切り替わるまで少し待ってから既定マイクを取りに行く（切断直後は一覧が古い）
+    await new Promise((r) => setTimeout(r, 800));
+    const ok = await switchMic(null);
+    if (ok) setMicLost(false);
+  }, [switchMic]);
+  useEffect(() => {
+    micLostHandlerRef.current = () => void handleMicLost();
+  }, [handleMicLost]);
 
   const stop = useCallback((): Promise<RecordingResult | null> => {
     // 共有終了などで既に確定済みならそれを返す（1時間分を捨てない）
@@ -443,6 +520,8 @@ export function useMeetingRecorder(): MeetingRecorder {
     supported,
     shareEnded,
     micLabel,
+    micLost,
+    switchMic,
     mimeType: mimeRef.current,
     start,
     stop,
