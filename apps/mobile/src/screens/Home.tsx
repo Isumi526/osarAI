@@ -156,6 +156,26 @@ export function Home() {
         会議を録音する
       </button>
 
+      {/* 保存済みの会議を読み返す入口（T8）。承認を廃止して自動保存になったので、
+          「あの会議どこ行った」をここから辿れるようにする。 */}
+      <button
+        onClick={() => navigate('/meetings')}
+        aria-label="会議の記録を見る"
+        style={{
+          width: '100%',
+          margin: '0 0 8px',
+          padding: '10px 20px',
+          fontSize: 14,
+          borderRadius: 12,
+          background: 'none',
+          color: 'var(--color-text-muted)',
+          border: 'none',
+          textDecoration: 'underline',
+        }}
+      >
+        会議の記録を見る
+      </button>
+
       {/* 入口はAIチャット1つに統一する（2026-08-06 UI/UX刷新）。
           旧: おさらいする/AIに相談の2ボタン・つながりAI登録ボタン・予定登録バナー・
           右下の＋FAB・つながり一覧 をホームから撤去し、情報過多を解消した。

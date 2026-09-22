@@ -27,7 +27,8 @@ export function buildMeetingMinutesPrompt(ctx: MeetingMinutesContext): string {
   const sections = MEETING_MINUTES_SECTIONS.map((s) => `【${s}】`).join('\n');
   return [
     `次の会議の全文文字起こしから、後日その相手に会う直前に読み返して思い出せる「ペラ一の議事録」を日本語で作成してください。`,
-    `- 以下の見出しを必ずこの順で使い、各見出しの下に箇条書き（「- 」始まり）で書く。該当が無い見出しは「- 特になし」。`,
+    `- 以下の見出しをこの順で使い、各見出しの下に箇条書き（「- 」始まり）で書く。`,
+    `- 該当する内容が無い見出しは、見出しごと省略する（「特になし」「なし」等の空の項目は書かない）。`,
     `- 全体で400〜800字程度。話し言葉のまま引用せず、要点に整理する。`,
     `- 文字起こしに無いことを推測で補わない。固有名詞は文字起こしの表記に従う。`,
     `- 「自分:」は録音者本人（ユーザー）、「相手1:」等は会議相手の発言。誰の発言かを踏まえる。`,
@@ -45,4 +46,26 @@ export function buildMeetingMinutesPrompt(ctx: MeetingMinutesContext): string {
   ]
     .filter((l) => l !== undefined)
     .join('\n');
+}
+
+/** 「- 特になし」だけの見出しを丸ごと落とす（プロンプトで抑止しきれなかった時の保険）。 */
+const EMPTY_BULLET_RE = /^[-・*]?\s*(?:特に)?(?:なし|無し|ありません|言及なし|記載なし|不明|該当なし)[。.．]?$/u;
+
+export function pruneEmptyMinutesSections(minutes: string): string {
+  const lines = minutes.replace(/\r\n?/g, '\n').split('\n');
+  const blocks: { head: string | null; body: string[] }[] = [];
+  for (const line of lines) {
+    if (/^\s*【.+】\s*$/u.test(line)) blocks.push({ head: line.trim(), body: [] });
+    else if (blocks.length) blocks[blocks.length - 1]!.body.push(line);
+    else blocks.push({ head: null, body: [line] });
+  }
+  const kept = blocks.filter((b) => {
+    if (!b.head) return true;
+    const content = b.body.filter((l) => l.trim());
+    return content.length > 0 && !content.every((l) => EMPTY_BULLET_RE.test(l.trim()));
+  });
+  return kept
+    .map((b) => [b.head, ...b.body].filter((l) => l !== null).join('\n').replace(/\n+$/, ''))
+    .join('\n\n')
+    .trim();
 }

@@ -18,6 +18,8 @@ import { SchedulePage } from './screens/Schedule.js';
 import { SelfOsarai } from './screens/SelfOsarai.js';
 import { Welcome } from './screens/Welcome.js';
 import { MeetingRecord } from './screens/MeetingRecord.js';
+import { MeetingList } from './screens/MeetingList.js';
+import { MeetingDetail } from './screens/MeetingDetail.js';
 import { BottomNav, BOTTOM_NAV_HEIGHT, useBottomNavVisible } from './components/BottomNav.js';
 import { NavGuardProvider } from './components/NavGuard.js';
 import { MeetingSessionProvider } from './components/MeetingSession.js';
@@ -38,6 +40,8 @@ function AppRoutes() {
           <Route path="/customers/:id" element={<CustomerDetail />} />
           <Route path="/chat" element={<AssistantChat />} />
           <Route path="/meeting" element={<MeetingRecord />} />
+          <Route path="/meetings" element={<MeetingList />} />
+          <Route path="/meetings/:id" element={<MeetingDetail />} />
           <Route path="/chat/legacy" element={<AiChat />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/tasks" element={<Tasks />} />

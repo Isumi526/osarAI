@@ -5,7 +5,7 @@
 // 承認後の登録は /api/meeting/commit（既存 commitProposals を再利用）。
 // 抽出スキーマ/整形は lib/proposal-extraction を共有（統合AIチャットと同一ロジック）。
 import { NextResponse } from 'next/server';
-import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT, buildMeetingMinutesPrompt } from '@osarai/shared';
+import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT, buildMeetingMinutesPrompt, pruneEmptyMinutesSections } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
 import { formatUserProfile } from '@/lib/customer-context';
@@ -306,7 +306,7 @@ export async function POST(req: Request) {
     if (nm) speakerNames[others[0]!.label] = nm;
   }
   const finalTranscript = relabelSpeakers(transcript, speakerNames);
-  const finalMinutes = minutes ? relabelSpeakers(minutes, speakerNames, { inline: true }) : null;
+  const finalMinutes = minutes ? pruneEmptyMinutesSections(relabelSpeakers(minutes, speakerNames, { inline: true })) : null;
   const metAt = meetingStart.toISOString();
 
   let committed: { customers: { id: string; name: string; isNew: boolean }[]; interactionIds: string[]; scheduleIds: string[]; taskIds: string[] } | null = null;

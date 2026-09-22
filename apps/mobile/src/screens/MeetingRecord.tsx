@@ -877,13 +877,20 @@ export function MeetingRecord() {
           <section style={{ display: 'grid', gap: 12, placeItems: 'center', padding: 24 }}>
             <div style={{ fontSize: 18 }}>登録しました</div>
             <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
-              議事録は相手のカードの履歴から、次回会う前にいつでも読み返せます。
+              議事録は相手のカードの履歴と「会議の記録」から、次回会う前にいつでも読み返せます。
             </p>
             {primaryCustomerId && (
               <button type="button" onClick={() => navigate(`/customers/${primaryCustomerId}`)} style={{ minHeight: 48, width: '100%' }}>
                 相手のカードを見る
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => navigate('/meetings')}
+              style={{ minHeight: 48, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            >
+              会議の記録を見る
+            </button>
             <button
               type="button"
               onClick={() => navigate('/')}

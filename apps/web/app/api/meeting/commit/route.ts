@@ -6,6 +6,7 @@ import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { commitProposals, type Proposals } from '@/lib/assistant-persist';
 import { getEntitlement } from '@/lib/entitlement';
 import { relabelSpeakers } from '@/lib/meeting-speakers';
+import { pruneEmptyMinutesSections } from '@osarai/shared';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
   // transcript も議事録も同じ置換を通し、履歴で「誰が話したか」が実名で読めるようにする。
   const speakerNames = body.speakerNames ?? {};
   const transcript = relabelSpeakers(rec.transcript ?? '', speakerNames);
-  const minutes = body.minutes ? relabelSpeakers(body.minutes, speakerNames, { inline: true }) : null;
+  const minutes = body.minutes ? pruneEmptyMinutesSections(relabelSpeakers(body.minutes, speakerNames, { inline: true })) : null;
 
   let result;
   try {

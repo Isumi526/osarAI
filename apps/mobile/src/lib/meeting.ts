@@ -126,3 +126,36 @@ export async function commitMeeting(input: {
 export async function updateMeetingMinutes(meetingId: string, minutes: string): Promise<void> {
   await apiPatch<{ ok: true }>(`/api/meeting/${meetingId}`, { minutes });
 }
+
+export interface SavedMeeting {
+  id: string;
+  created_at: string;
+  duration_sec: number | null;
+  customer_id: string | null;
+  minutes: string | null;
+  transcript: string | null;
+  capture: string | null;
+}
+
+/** 保存済みの会議（status=done）を新しい順に。一覧は本文を持たない軽い形で返す。 */
+export async function listSavedMeetings(limit = 50): Promise<SavedMeeting[]> {
+  const { data, error } = await supabase
+    .from('meeting_recordings')
+    .select('id, created_at, duration_sec, customer_id, minutes, capture')
+    .eq('status', 'done')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ ...r, transcript: null }) as SavedMeeting);
+}
+
+/** 会議1件（議事録・全文つき）。 */
+export async function getMeeting(id: string): Promise<SavedMeeting | null> {
+  const { data, error } = await supabase
+    .from('meeting_recordings')
+    .select('id, created_at, duration_sec, customer_id, minutes, transcript, capture')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as SavedMeeting | null) ?? null;
+}
