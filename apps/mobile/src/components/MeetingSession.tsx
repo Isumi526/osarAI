@@ -23,10 +23,12 @@ export interface MeetingSessionValue {
   elapsed: number;
   levels: { self: number; other: number };
   micLevel: number;
+  /** 実際に使われたマイクの名前（PC録音）。声が入らない時の切り分け用。 */
+  micLabel: string | null;
   micSilentSec: number;
   /** 現在（または直前）の IndexedDB セッション */
   session: RecordingSession | null;
-  start: () => Promise<{ ok: boolean; error: string | null }>;
+  start: (opts?: { micDeviceId?: string | null }) => Promise<{ ok: boolean; error: string | null }>;
   /** 録音を止めて結果を返す。IndexedDB のセッションは 'stopped' に更新 */
   stop: () => Promise<(RecordingResult & { sessionId: string | null }) | null>;
   pause: () => void;
@@ -68,7 +70,7 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [paused, recording]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (startOpts?: { micDeviceId?: string | null }) => {
     setStarting(true);
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
     const capture = mode === 'pc' ? 'pc_local' : 'mobile_speaker';
@@ -78,7 +80,7 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     };
     try {
       let r: { ok: boolean; error: string | null };
-      if (mode === 'pc') r = await pcRec.start({ onChunk });
+      if (mode === 'pc') r = await pcRec.start({ onChunk, micDeviceId: startOpts?.micDeviceId ?? null });
       else if (mode === 'mic') r = await micRec.start({ audioBitsPerSecond: MOBILE_BITRATE, meter: true, onChunk });
       else r = { ok: false, error: 'この端末では録音できません。' };
       if (!r.ok) return r;
@@ -139,6 +141,7 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     elapsed,
     levels: pcRec.levels,
     micLevel: micRec.level,
+    micLabel: pcRec.micLabel,
     micSilentSec: micRec.silentSec,
     session,
     start,

@@ -14,6 +14,7 @@ import { useConfirm } from '../components/ConfirmDialog.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { useMeetingSession, fmtSec } from '../components/MeetingSession.js';
 import { SILENCE_LEVEL, type RecordingResult } from '../hooks/useMeetingRecorder.js';
+import { MicPicker, getSavedMicId } from '../components/MicPicker.js';
 import { ApiError } from '../lib/api.js';
 import { getEntitlement } from '../lib/subscription.js';
 import {
@@ -81,6 +82,8 @@ export function MeetingRecord() {
   const [minutesSaving, setMinutesSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
   // 未保存の解析結果を後から保存している最中（復旧リスト）
   const [saving, setSaving] = useState(false);
+  // 「自分の声を録るマイク」の選択（PC録音のみ・localStorage に保存）
+  const [micId, setMicId] = useState<string | null>(() => getSavedMicId());
   const minutesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 復旧候補（IndexedDB の未処理録音／サーバーの未保存の解析結果）
   const [recoverable, setRecoverable] = useState<RecordingSession[]>([]);
@@ -183,17 +186,22 @@ export function MeetingRecord() {
     return () => clearInterval(t);
   }, [phase]);
 
-  // 相手側の音声を一度でも検知したか（PC）
+  // 相手側／自分側の音声を一度でも検知したか（PC）
   const [otherDetected, setOtherDetected] = useState(false);
+  const [selfDetected, setSelfDetected] = useState(false);
   useEffect(() => {
     if (!ms.recording) setOtherDetected(false);
     else if (ms.levels.other > SILENCE_LEVEL) setOtherDetected(true);
   }, [ms.recording, ms.levels.other]);
+  useEffect(() => {
+    if (!ms.recording) setSelfDetected(false);
+    else if (ms.levels.self > SILENCE_LEVEL) setSelfDetected(true);
+  }, [ms.recording, ms.levels.self]);
 
   async function onStart() {
     setError(null);
     setPhase('idle');
-    const r = await ms.start();
+    const r = await ms.start({ micDeviceId: micId });
     if (!r.ok) setError(r.error);
   }
 
@@ -596,6 +604,7 @@ export function MeetingRecord() {
                 {platform.os === 'mac' && ' システム音声の共有は Chrome 141 以降・macOS 14.2 以降。初回は macOS の「画面収録」の許可が必要です。'}
               </p>
             </Card>
+            <MicPicker onChange={setMicId} />
             {nameHint && <NameHint />}
             <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
               録音を開始
@@ -682,6 +691,13 @@ export function MeetingRecord() {
             {mode === 'pc' && (
               <p style={{ margin: 0, fontSize: 13, color: otherDetected ? 'var(--color-success, #2e8b57)' : 'var(--color-text-muted)', textAlign: 'center' }}>
                 {otherDetected ? '相手の音声を検知しました。このまま会議を続けてください。' : '相手の音声はまだ検知していません（相手が話し始めると自動で反応します）。'}
+              </p>
+            )}
+            {/* どのマイクで録れているかを常に見せる（違う機器が選ばれていることに気づけるように） */}
+            {mode === 'pc' && ms.micLabel && (
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                マイク: {ms.micLabel}
+                {!selfDetected && '（まだ自分の声を検知していません）'}
               </p>
             )}
             {!ms.paused && mode === 'mic' && ms.micSilentSec >= 60 && (

@@ -85,7 +85,9 @@ export interface MeetingRecorder {
   mimeType: string;
   /** 録音を開始する。失敗時は ok=false と理由（画面側はこの戻り値を使う・stale closure 対策）。 */
   /** 録音を開始する。onChunk は timeslice ごとの Blob（IndexedDB への逐次保存用・T7c）。track でどちらの音声かを区別する。 */
-  start: (opts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void }) => Promise<{ ok: boolean; error: string | null }>;
+  start: (opts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void; micDeviceId?: string | null }) => Promise<{ ok: boolean; error: string | null }>;
+  /** 実際に使われたマイクの名前（「声が入らない」時の切り分け用に画面へ出す） */
+  micLabel: string | null;
   stop: () => Promise<RecordingResult | null>;
   pause: () => void;
   resume: () => void;
@@ -111,6 +113,7 @@ export function useMeetingRecorder(): MeetingRecorder {
   const [levels, setLevels] = useState<AudioLevels>({ self: 0, other: 0 });
   const [otherSilentSec, setOtherSilentSec] = useState(0);
   const [shareEnded, setShareEnded] = useState(false);
+  const [micLabel, setMicLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const meterRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const silentSinceRef = useRef<number | null>(null);
@@ -199,7 +202,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     };
   }, [cleanup]);
 
-  const start = useCallback(async (startOpts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void }): Promise<{ ok: boolean; error: string | null }> => {
+  const start = useCallback(async (startOpts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void; micDeviceId?: string | null }): Promise<{ ok: boolean; error: string | null }> => {
     setError(null);
     setShareEnded(false);
     pendingRef.current = null;
@@ -240,10 +243,18 @@ export function useMeetingRecorder(): MeetingRecorder {
 
       // スピーカー再生時に相手の声がマイクへ回り込む分は、まずブラウザのエコーキャンセルに消させる。
       // （ゲートで強く削ると、イヤホンを外した時に本人の声まで落ちる。2026-09-22 の実機レビューで発覚）
-      const mic = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      // 選んだマイクが使えない（iPhone 連携を切った等）場合は既定のマイクで録り直す
+      const micConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true } as MediaTrackConstraints;
+      let mic: MediaStream;
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({
+          audio: startOpts?.micDeviceId ? { ...micConstraints, deviceId: { exact: startOpts.micDeviceId } } : micConstraints,
+        });
+      } catch {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints });
+      }
       micRef.current = mic;
+      setMicLabel(mic.getAudioTracks()[0]?.label ?? null);
 
       // WebAudio で 自分(マイク・ゲート後) と 相手(システム音声) を「別々の出力」に分ける。
       // 1本のステレオにまとめると、文字起こし側がチャンネルを見ないため話者を取り違える。
@@ -431,6 +442,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     error,
     supported,
     shareEnded,
+    micLabel,
     mimeType: mimeRef.current,
     start,
     stop,
