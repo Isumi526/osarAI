@@ -116,3 +116,26 @@ export function relabelSpeakers(text: string, map: Record<string, string>, opts:
   }
   return out;
 }
+
+/**
+ * 録音者本人がほぼ無音だった時に、紛れ込んだ「自分:」行を相手の発言に寄せる（T7c）。
+ * マイクゲートの取りこぼし（スピーカーの回り込みが一瞬だけ通る）で1行だけ「自分:」に
+ * なることがあり、議事録で「自分が話した」と読めてしまうため、プロンプトの指示だけに
+ * 頼らず決定的に潰す。直前の話者が分かればその人に、分からなければ fallback に寄せる。
+ */
+export function dropSelfLabels(transcript: string, fallback = '相手1'): string {
+  const lines = transcript.split('\n');
+  let last = fallback;
+  return lines
+    .map((line) => {
+      const m = /^\s*(自分|相手\s*\d*|話者\s*[A-Za-z0-9]+)\s*[:：][ 　]*/.exec(line);
+      if (!m) return line;
+      const label = m[1]!.replace(/\s+/g, '');
+      if (label !== '自分') {
+        last = label;
+        return line;
+      }
+      return `${last}: ${line.slice(m[0].length)}`;
+    })
+    .join('\n');
+}

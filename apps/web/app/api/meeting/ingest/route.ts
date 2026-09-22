@@ -13,7 +13,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
 import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
-import { parseSpeakers, normalizeImportedTranscript, relabelSpeakers } from '@/lib/meeting-speakers';
+import { parseSpeakers, normalizeImportedTranscript, relabelSpeakers, dropSelfLabels } from '@/lib/meeting-speakers';
 import { commitProposals } from '@/lib/assistant-persist';
 
 export const runtime = 'nodejs';
@@ -162,6 +162,12 @@ export async function POST(req: Request) {
   };
 
   const durationSecBody = typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null;
+  // マイクゲートを通った合計が3秒未満なら、本人は実質無音とみなす。スピーカーの回り込みが
+  // 一瞬だけゲートを通ると、それを根拠に1行だけ「自分:」が付いてしまうため（人レビュー 2026-09-22）。
+  const SELF_SPEECH_MIN_SEC = 3;
+  const selfTotalSec = (selfSegments ?? []).reduce((sum, [a, b]) => sum + Math.max(0, b - a), 0);
+  const selfSilent = capture === 'pc_local' && selfSegments !== undefined && selfTotalSec < SELF_SPEECH_MIN_SEC;
+  const effectiveSelfSegments = selfSilent ? [] : selfSegments;
   let transcript: string;
   if (importedText) {
     // --- 貼り付け取り込み: 文字起こしは済んでいるので形式だけ揃える（話者: 発言） ---
@@ -179,12 +185,14 @@ export async function POST(req: Request) {
       transcript = await geminiTranscribeLong(bytes, mimeType, {
       channelSelfLeft: capture === 'pc_local',
       selfName: (profile.display_name ?? '').trim() || undefined,
-      selfSegments: capture === 'pc_local' ? selfSegments : undefined,
+      selfSegments: capture === 'pc_local' ? effectiveSelfSegments : undefined,
       durationSec: durationSecBody ?? undefined,
     });
     } catch (e) {
       return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
     }
+    // 本人が実質無音だったのに「自分:」が紛れ込んだら相手に寄せる（プロンプト任せにしない）
+    if (selfSilent && transcript) transcript = dropSelfLabels(transcript);
   }
   if (!transcript) return fail('文字起こし結果が空でした', 502);
   const speakers = parseSpeakers(transcript);
@@ -238,7 +246,12 @@ export async function POST(req: Request) {
         duration: durationSec ? `${Math.max(1, Math.round(durationSec / 60))}分` : '',
         transcript,
         // 本人の名前を渡し、取り込んだ文字起こし（自分ラベルが無い）でも「自分」と「相手」を取り違えにくくする
-        userContext: [selfName ? `ユーザー本人（議事録での「自分」）の名前: ${selfName}` : '', formatUserProfile(userProfile)]
+        userContext: [
+          selfName ? `ユーザー本人（議事録での「自分」）の名前: ${selfName}` : '',
+          // マイクが実質無音だった録音では、本人が話した前提の記述を書かせない
+          selfSilent ? `この録音でユーザー本人はほとんど発言していません。本人が話した・約束したという記述は書かないでください。` : '',
+          formatUserProfile(userProfile),
+        ]
           .filter(Boolean)
           .join('\n'),
       }),
@@ -306,7 +319,10 @@ export async function POST(req: Request) {
     if (nm) speakerNames[others[0]!.label] = nm;
   }
   const finalTranscript = relabelSpeakers(transcript, speakerNames);
-  const finalMinutes = minutes ? pruneEmptyMinutesSections(relabelSpeakers(minutes, speakerNames, { inline: true })) : null;
+  // 議事録は人が読むものなので、名前が分からない相手は「相手1」ではなく「相手」と書く
+  const minutesNames = { ...speakerNames };
+  if (others.length === 1 && !minutesNames[others[0]!.label]) minutesNames[others[0]!.label] = '相手';
+  const finalMinutes = minutes ? pruneEmptyMinutesSections(relabelSpeakers(minutes, minutesNames, { inline: true })) : null;
   const metAt = meetingStart.toISOString();
 
   let committed: { customers: { id: string; name: string; isNew: boolean }[]; interactionIds: string[]; scheduleIds: string[]; taskIds: string[] } | null = null;

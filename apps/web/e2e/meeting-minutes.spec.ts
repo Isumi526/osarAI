@@ -39,3 +39,22 @@ test('pruneEmptyMinutesSections: 中身のある見出しと本文は保つ', ()
 test('pruneEmptyMinutesSections: 見出しの無い議事録はそのまま', () => {
   expect(pruneEmptyMinutesSections('ただのメモ\n2行目')).toBe('ただのメモ\n2行目');
 });
+
+import { dropSelfLabels } from '../lib/meeting-speakers';
+
+// 本人が無言なのに議事録で「自分が話した」ことにされる問題（人レビュー 2026-09-22）。
+// マイクゲートの取りこぼしで1行だけ「自分:」が付くので、決定的に相手へ寄せる。
+
+test('dropSelfLabels: 紛れ込んだ「自分:」を直前の話者に寄せる', () => {
+  const t = ['相手1: おもろいやろ。', '自分: なんかもうどっしり', '相手1: ほっこり。'].join('\n');
+  expect(dropSelfLabels(t)).toBe(['相手1: おもろいやろ。', '相手1: なんかもうどっしり', '相手1: ほっこり。'].join('\n'));
+});
+
+test('dropSelfLabels: 先頭が「自分:」なら fallback に寄せる', () => {
+  expect(dropSelfLabels('自分: あー', '相手1')).toBe('相手1: あー');
+});
+
+test('dropSelfLabels: 相手のラベルと本文はそのまま', () => {
+  const t = '相手2: 自分の話をします。\n相手1: どうぞ。';
+  expect(dropSelfLabels(t)).toBe(t);
+});
