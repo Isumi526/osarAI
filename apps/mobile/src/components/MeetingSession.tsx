@@ -73,8 +73,8 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
     const capture = mode === 'pc' ? 'pc_local' : 'mobile_speaker';
     let sess: RecordingSession | null = null;
-    const onChunk = (blob: Blob, index: number) => {
-      if (sess) void appendChunk(sess.id, index, blob).catch(() => {});
+    const onChunk = (blob: Blob, index: number, track: 'other' | 'self' = 'other') => {
+      if (sess) void appendChunk(sess.id, index, blob, track).catch(() => {});
     };
     try {
       let r: { ok: boolean; error: string | null };
@@ -106,7 +106,8 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     if (mode === 'pc') rec = await pcRec.stop();
     else {
       const blob = await micRec.stop();
-      if (blob) rec = { blob, mimeType: blob.type || 'audio/webm', durationSec: elapsed };
+      // スマホの室内録音は1本（マイクのみ）。自分/相手の分離はできないので selfBlob は無し。
+      if (blob) rec = { blob, selfBlob: null, mimeType: blob.type || 'audio/webm', durationSec: elapsed };
     }
     if (!rec) return null;
     const durationSec = elapsed || rec.durationSec;

@@ -58,3 +58,35 @@ test('dropSelfLabels: 相手のラベルと本文はそのまま', () => {
   const t = '相手2: 自分の話をします。\n相手1: どうぞ。';
   expect(dropSelfLabels(t)).toBe(t);
 });
+
+import { parseTimedTranscript, mergeTimedTranscripts } from '../lib/meeting-speakers';
+
+// 2トラック録音（2026-09-22）: 相手と自分を別ファイルで文字起こしし、時刻で1本に合成する。
+// これで話者の取り違えが原理的に起きなくなる（Notta と同じ仕組み）。
+
+test('parseTimedTranscript: [MM:SS] を秒に直し、行内のラベルがあれば優先する', () => {
+  const lines = parseTimedTranscript('[00:03] はい、もしもし。\n[01:10] 相手2: 途中から失礼します。', '相手1');
+  expect(lines).toEqual([
+    { sec: 3, label: '相手1', text: 'はい、もしもし。' },
+    { sec: 70, label: '相手2', text: '途中から失礼します。' },
+  ]);
+});
+
+test('parseTimedTranscript: 時刻の無い行は直前の時刻に続けて拾う（落とさない）', () => {
+  const lines = parseTimedTranscript('[00:05] あー\n続きの行', '自分');
+  expect(lines.map((l) => l.sec)).toEqual([5, 5]);
+  expect(lines[1]!.text).toBe('続きの行');
+});
+
+test('mergeTimedTranscripts: 時刻順に合成し、1行1発話のまま残す', () => {
+  const other = parseTimedTranscript('[00:00] もしもし\n[00:08] どうした？', '相手1');
+  const self = parseTimedTranscript('[00:04] すいません\n[00:05] 相談があって', '自分');
+  expect(mergeTimedTranscripts(other, self)).toBe(
+    ['相手1: もしもし', '自分: すいません', '自分: 相談があって', '相手1: どうした？'].join('\n'),
+  );
+});
+
+test('mergeTimedTranscripts: 自分トラックが空なら相手だけの文字起こしになる', () => {
+  const other = parseTimedTranscript('[00:00] おもろいやろ。\n[00:03] ほっこり。', '相手1');
+  expect(mergeTimedTranscripts(other, [])).toBe('相手1: おもろいやろ。\n相手1: ほっこり。');
+});

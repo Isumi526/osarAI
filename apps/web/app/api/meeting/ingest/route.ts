@@ -13,7 +13,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
 import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
-import { parseSpeakers, normalizeImportedTranscript, relabelSpeakers, dropSelfLabels } from '@/lib/meeting-speakers';
+import { parseSpeakers, normalizeImportedTranscript, relabelSpeakers, dropSelfLabels, parseTimedTranscript, mergeTimedTranscripts } from '@/lib/meeting-speakers';
 import { commitProposals } from '@/lib/assistant-persist';
 
 export const runtime = 'nodejs';
@@ -46,6 +46,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as {
     recordingPath?: string;
+    selfRecordingPath?: string;
     mimeType?: string;
     capture?: Capture;
     durationSec?: number;
@@ -63,6 +64,8 @@ export async function POST(req: Request) {
   const recordedAt = body.recordedAt && !Number.isNaN(Date.parse(body.recordedAt)) ? new Date(body.recordedAt) : null;
   const importedText = typeof body.transcriptText === 'string' ? body.transcriptText.trim() : '';
   const recordingPath = (body.recordingPath ?? '').trim();
+  // 自分（マイク）だけを録った別ファイル。相手トラックと別々に文字起こしして時刻で合成する。
+  const selfRecordingPath = (body.selfRecordingPath ?? '').trim();
   const mimeType = body.mimeType ?? 'audio/webm';
   const capture: Capture = importedText
     ? 'text_import'
@@ -73,6 +76,7 @@ export async function POST(req: Request) {
   if (importedText.length > MAX_IMPORT_CHARS) return json({ error: 'transcript too long', message: '文字起こしが長すぎます（20万字まで）。' }, 413);
   // 所有者チェック（他人のパスを読ませない）。パスは必ず user.id 配下。
   if (recordingPath && !recordingPath.startsWith(`${user.id}/`)) return json({ error: 'forbidden path' }, 403);
+  if (selfRecordingPath && !selfRecordingPath.startsWith(`${user.id}/`)) return json({ error: 'forbidden path' }, 403);
 
   const [ent, profileRes] = await Promise.all([
     getEntitlement(supabase, user.id),
@@ -179,20 +183,43 @@ export async function POST(req: Request) {
     if (dlErr || !blob) return fail(`音声の取得に失敗しました: ${dlErr?.message ?? 'not found'}`, 404);
     const bytes = new Uint8Array(await blob.arrayBuffer());
 
-    // --- 長尺文字起こし（Files API・話者ラベル付き） ---
-    try {
-      // PC録音は2chステレオ（左=自分/右=相手）なので self/other を割り当てさせる（T4）。
-      transcript = await geminiTranscribeLong(bytes, mimeType, {
-      channelSelfLeft: capture === 'pc_local',
-      selfName: (profile.display_name ?? '').trim() || undefined,
-      selfSegments: capture === 'pc_local' ? effectiveSelfSegments : undefined,
-      durationSec: durationSecBody ?? undefined,
-    });
-    } catch (e) {
-      return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+    if (selfRecordingPath) {
+      // --- 2トラック録音（2026-09-22）---
+      // 相手（システム音声）と自分（マイク）を別ファイルで録り、別々に文字起こしして時刻で合成する。
+      // 1本にまとめると Gemini はチャンネルを見ず役割で話者を推測するため、本人が無言でも
+      // 相手の発言が「自分」になっていた。トラックを分ければ取り違えは原理的に起きない。
+      const { data: selfBlob } = await admin.storage.from(RECORDINGS_BUCKET).download(selfRecordingPath);
+      const selfBytes = selfBlob ? new Uint8Array(await selfBlob.arrayBuffer()) : null;
+      let otherText: string;
+      let selfText = '';
+      try {
+        [otherText, selfText] = await Promise.all([
+          geminiTranscribeLong(bytes, mimeType, { singleTrack: { speaker: 'other' }, durationSec: durationSecBody ?? undefined }),
+          selfBytes && !selfSilent
+            ? geminiTranscribeLong(selfBytes, mimeType, { singleTrack: { speaker: 'self' }, durationSec: durationSecBody ?? undefined })
+            : Promise.resolve(''),
+        ]);
+      } catch (e) {
+        return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+      }
+      const otherLines = parseTimedTranscript(otherText, '相手1');
+      const selfLines = parseTimedTranscript(selfText, '自分');
+      transcript = mergeTimedTranscripts(otherLines, selfLines);
+    } else {
+      // --- 1トラック（スマホの室内録音・旧データの再解析） ---
+      try {
+        transcript = await geminiTranscribeLong(bytes, mimeType, {
+          channelSelfLeft: capture === 'pc_local',
+          selfName: (profile.display_name ?? '').trim() || undefined,
+          selfSegments: capture === 'pc_local' ? effectiveSelfSegments : undefined,
+          durationSec: durationSecBody ?? undefined,
+        });
+      } catch (e) {
+        return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+      }
+      // 本人が実質無音だったのに「自分:」が紛れ込んだら相手に寄せる（プロンプト任せにしない）
+      if (selfSilent && transcript) transcript = dropSelfLabels(transcript);
     }
-    // 本人が実質無音だったのに「自分:」が紛れ込んだら相手に寄せる（プロンプト任せにしない）
-    if (selfSilent && transcript) transcript = dropSelfLabels(transcript);
   }
   if (!transcript) return fail('文字起こし結果が空でした', 502);
   const speakers = parseSpeakers(transcript);

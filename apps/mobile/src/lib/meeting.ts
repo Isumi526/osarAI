@@ -51,6 +51,8 @@ export async function uploadMeetingAudio(blob: Blob, mimeType: string): Promise<
 /** アップロード済みパスから文字起こし→3データ抽出→自動保存（committed を返す）。 */
 export async function ingestMeeting(input: {
   recordingPath: string;
+  /** 自分（マイク）だけを録った別ファイル。相手トラックと別々に文字起こしして時刻で合成する。 */
+  selfRecordingPath?: string;
   mimeType: string;
   capture: MeetingCapture;
   durationSec?: number;

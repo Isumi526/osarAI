@@ -1,7 +1,10 @@
 // PC透明ローカル録音フック（T1）。getDisplayMedia で画面/タブのシステム音声（相手）を、
-// getUserMedia でマイク（自分）を取得し、WebAudio で「自分=左ch / 相手=右ch」のステレオ1本に
-// まとめて録音する。会議にボットは入れず、相手には録音が一切見えない（透明）。
-// チャンネル分離により、後段(T4)で自分/相手を機械的に切り分けられる。
+// getUserMedia でマイク（自分）を取得する。会議にボットは入れず、相手には録音が一切見えない（透明）。
+//
+// 2026-09-22: ステレオ1本（左=自分/右=相手）を止め、マイクとシステム音声を「別々の2ファイル」
+//   として録音するように変更した。Gemini はチャンネルを見ておらず、役割から話者を推測するため、
+//   本人が無言でも相手の発言を「自分」と誤認していた（人レビューで発覚）。Notta と同じく
+//   トラックを物理的に分けて別々に文字起こしすれば、話者の取り違えは原理的に起きない。
 // 対応: デスクトップ Chrome/Edge のみ（Safari/Firefox は getDisplayMedia の音声不可・iOS/Android は非対応）。
 //
 // T7: 共有元（Zoom画面/タブ）が先に閉じられて共有トラックが ended になっても録音データを失わない。
@@ -46,7 +49,10 @@ function isDesktopChromium(): boolean {
 }
 
 export interface RecordingResult {
+  /** 相手（システム音声）のトラック。会議の主たる音声。 */
   blob: Blob;
+  /** 自分（マイク・ゲート後）のトラック。本人がほぼ無言なら null（送らない＝誤認も費用も無し）。 */
+  selfBlob: Blob | null;
   mimeType: string;
   durationSec: number;
   /**
@@ -78,8 +84,8 @@ export interface MeetingRecorder {
   shareEnded: boolean;
   mimeType: string;
   /** 録音を開始する。失敗時は ok=false と理由（画面側はこの戻り値を使う・stale closure 対策）。 */
-  /** 録音を開始する。onChunk は timeslice ごとの Blob（IndexedDB への逐次保存用・T7c） */
-  start: (opts?: { onChunk?: (blob: Blob, index: number) => void }) => Promise<{ ok: boolean; error: string | null }>;
+  /** 録音を開始する。onChunk は timeslice ごとの Blob（IndexedDB への逐次保存用・T7c）。track でどちらの音声かを区別する。 */
+  start: (opts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void }) => Promise<{ ok: boolean; error: string | null }>;
   stop: () => Promise<RecordingResult | null>;
   pause: () => void;
   resume: () => void;
@@ -96,6 +102,8 @@ export function readLevel(analyser: AnalyserNode, buf: Float32Array<ArrayBuffer>
 }
 /** これ未満は無音とみなす（RMS 換算 ≈ 0.003） */
 export const SILENCE_LEVEL = 0.02;
+/** マイク側がこの秒数未満しか通っていなければ「本人は発言していない」とみなし、自分トラックを送らない。 */
+export const SELF_SPEECH_MIN_SEC = 3;
 
 export function useMeetingRecorder(): MeetingRecorder {
   const [recording, setRecording] = useState(false);
@@ -107,8 +115,11 @@ export function useMeetingRecorder(): MeetingRecorder {
   const meterRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const silentSinceRef = useRef<number | null>(null);
 
+  // 相手（システム音声）／自分（マイク）を別々の MediaRecorder で録る
   const mrRef = useRef<MediaRecorder | null>(null);
+  const mrSelfRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const selfChunksRef = useRef<Blob[]>([]);
   const displayRef = useRef<MediaStream | null>(null);
   const micRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
@@ -147,6 +158,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     micRef.current = null;
     ctxRef.current = null;
     mrRef.current = null;
+    mrSelfRef.current = null;
   }, []);
 
   /** 収録済みチャンクから結果を確定する（一度だけ）。 */
@@ -158,7 +170,12 @@ export function useMeetingRecorder(): MeetingRecorder {
       selfSegmentsRef.current.push([selfOpenRef.current, durationSec]);
       selfOpenRef.current = null;
     }
-    const result = blob.size > 0 ? { blob, mimeType: mimeRef.current, durationSec, selfSegments: selfSegmentsRef.current } : null;
+    // 本人がほとんど話していない録音では、マイク側は送らない。
+    // （送ると「漏れ込んだ相手の声」を自分の発言として文字起こししてしまう）
+    const selfSpokenSec = selfSegmentsRef.current.reduce((sum, [a, b]) => sum + Math.max(0, b - a), 0);
+    const selfRaw = new Blob(selfChunksRef.current, { type: mimeRef.current });
+    const selfBlob = selfSpokenSec >= SELF_SPEECH_MIN_SEC && selfRaw.size > 0 ? selfRaw : null;
+    const result = blob.size > 0 ? { blob, selfBlob, mimeType: mimeRef.current, durationSec, selfSegments: selfSegmentsRef.current } : null;
     pendingRef.current = result;
     cleanup();
     setRecording(false);
@@ -169,19 +186,20 @@ export function useMeetingRecorder(): MeetingRecorder {
   // 画面遷移などでアンマウントされた時にマイク/画面共有を掴んだまま漏らさない。
   useEffect(() => {
     return () => {
-      const mr = mrRef.current;
-      if (mr && mr.state !== 'inactive') {
-        try {
-          mr.stop();
-        } catch {
-          /* ignore */
+      for (const mr of [mrRef.current, mrSelfRef.current]) {
+        if (mr && mr.state !== 'inactive') {
+          try {
+            mr.stop();
+          } catch {
+            /* ignore */
+          }
         }
       }
       cleanup();
     };
   }, [cleanup]);
 
-  const start = useCallback(async (startOpts?: { onChunk?: (blob: Blob, index: number) => void }): Promise<{ ok: boolean; error: string | null }> => {
+  const start = useCallback(async (startOpts?: { onChunk?: (blob: Blob, index: number, track: 'other' | 'self') => void }): Promise<{ ok: boolean; error: string | null }> => {
     setError(null);
     setShareEnded(false);
     pendingRef.current = null;
@@ -223,12 +241,12 @@ export function useMeetingRecorder(): MeetingRecorder {
       const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
       micRef.current = mic;
 
-      // WebAudio で 自分(マイク)=左ch / 相手(システム音声)=右ch のステレオにまとめる。
+      // WebAudio で 自分(マイク・ゲート後) と 相手(システム音声) を「別々の出力」に分ける。
+      // 1本のステレオにまとめると、文字起こし側がチャンネルを見ないため話者を取り違える。
       const ctx = new AudioContext();
       ctxRef.current = ctx;
       const micSource = ctx.createMediaStreamSource(mic);
       const sysSource = ctx.createMediaStreamSource(new MediaStream(sysAudio));
-      const merger = ctx.createChannelMerger(2);
       // マイク側のゲート: スピーカー再生時に相手の声がマイクへ漏れる分（相手より小さい）を落とし、
       // 本人が話している時（相手より十分大きい）だけ通す。イヤホン時は常に通る。
       // ScriptProcessorNode は非推奨だが、外部ファイル不要で全ブラウザで動くためここでは採用。
@@ -267,11 +285,11 @@ export function useMeetingRecorder(): MeetingRecorder {
         if (pass) out.set(micIn);
         else out.fill(0);
       };
-      gate.connect(merger, 0, 0); // 左 = 自分（ゲート後）
-      sysSource.connect(merger, 0, 1); // 右 = 相手
       processorRef.current = gate;
-      const dest = ctx.createMediaStreamDestination();
-      merger.connect(dest);
+      const otherDest = ctx.createMediaStreamDestination();
+      const selfDest = ctx.createMediaStreamDestination();
+      sysSource.connect(otherDest);
+      gate.connect(selfDest);
 
       // レベルメーター（録音には影響しない分岐）。相手側が無音のまま続いたら UI で警告する。
       const micAn = ctx.createAnalyser();
@@ -298,25 +316,42 @@ export function useMeetingRecorder(): MeetingRecorder {
 
       const mimeType = pickMimeType() ?? 'audio/webm';
       mimeRef.current = mimeType;
-      const mr = new MediaRecorder(dest.stream, { mimeType, audioBitsPerSecond: AUDIO_BITS_PER_SECOND });
       chunksRef.current = [];
-      let chunkIndex = 0;
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-          try {
-            startOpts?.onChunk?.(e.data, chunkIndex++);
-          } catch {
-            /* 保存失敗で録音は止めない */
+      selfChunksRef.current = [];
+      const mkRecorder = (stream: MediaStream, track: 'other' | 'self', sink: Blob[]): MediaRecorder => {
+        const r = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: AUDIO_BITS_PER_SECOND });
+        let index = 0;
+        r.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            sink.push(e.data);
+            try {
+              startOpts?.onChunk?.(e.data, index++, track);
+            } catch {
+              /* 保存失敗で録音は止めない */
+            }
           }
-        }
+        };
+        return r;
       };
+      const mr = mkRecorder(otherDest.stream, 'other', chunksRef.current);
+      const mrSelf = mkRecorder(selfDest.stream, 'self', selfChunksRef.current);
       // onstop は start 時点で設定する（共有終了で先に止まっても Blob 化されるように）。
+      // 相手側の onstop で確定するが、自分側が止まりきるのを待ってから Blob 化する。
       mr.onstop = () => {
-        const result = finalize();
-        const waiters = stopWaitersRef.current;
-        stopWaitersRef.current = [];
-        waiters.forEach((w) => w(result));
+        const done = () => {
+          const result = finalize();
+          const waiters = stopWaitersRef.current;
+          stopWaitersRef.current = [];
+          waiters.forEach((w) => w(result));
+        };
+        if (mrSelf.state !== 'inactive') {
+          mrSelf.addEventListener('stop', done, { once: true });
+          try {
+            mrSelf.stop();
+          } catch {
+            done();
+          }
+        } else done();
       };
       // ユーザーがブラウザUIから共有を停止した／共有していたZoom画面・タブを閉じた場合:
       // 録音を確定して保持し、画面には「共有が終了した」ことを知らせる（停止ボタンで解析に進める）。
@@ -325,7 +360,9 @@ export function useMeetingRecorder(): MeetingRecorder {
         if (mrRef.current && mrRef.current.state !== 'inactive') mrRef.current.stop();
       });
       mr.start(1000); // 1秒ごとにチャンク化（長時間でメモリを分割）
+      mrSelf.start(1000);
       mrRef.current = mr;
+      mrSelfRef.current = mrSelf;
       startedAtRef.current = Date.now();
       setPaused(false);
       setRecording(true);
@@ -365,6 +402,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     const mr = mrRef.current;
     if (mr && mr.state === 'recording') {
       mr.pause();
+      if (mrSelfRef.current?.state === 'recording') mrSelfRef.current.pause(); // 2トラックを揃えて止める
       setPaused(true);
     }
   }, []);
@@ -372,6 +410,7 @@ export function useMeetingRecorder(): MeetingRecorder {
     const mr = mrRef.current;
     if (mr && mr.state === 'paused') {
       mr.resume();
+      if (mrSelfRef.current?.state === 'paused') mrSelfRef.current.resume();
       // 再開時は無音カウントもリセット（離席中の無音を警告に数えない）
       silentSinceRef.current = Date.now();
       setOtherSilentSec(0);

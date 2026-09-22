@@ -4,7 +4,10 @@
 // 次にアプリを開いた時に未処理の録音を検出して、アップロード→解析→保存を続きから行う。
 // 音声は端末内にだけ残る（サーバーへは従来どおりアップロード時に送る）。
 const DB_NAME = 'osarai-recordings';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // v2: チャンクを相手/自分の2トラックに分けた（2026-09-22）
+
+/** 録音トラック。other=相手（システム音声）/ self=自分（マイク・ゲート後）。 */
+export type RecordingTrack = 'other' | 'self';
 
 export type RecordingStatus =
   | 'recording' // 録音中（または録音中に離脱した）
@@ -23,6 +26,8 @@ export interface RecordingSession {
   status: RecordingStatus;
   durationSec?: number;
   uploadedPath?: string;
+  /** 自分（マイク）トラックのアップロード先。本人が無言なら作られない。 */
+  uploadedSelfPath?: string;
   meetingId?: string;
   chunkCount: number;
 }
@@ -37,10 +42,12 @@ function open(): Promise<IDBDatabase> {
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('chunks')) {
-        const st = db.createObjectStore('chunks', { keyPath: ['sessionId', 'index'] });
-        st.createIndex('bySession', 'sessionId');
-      }
+      // v1 は ['sessionId','index']（1トラック）。2トラック化に伴い作り直す。
+      // 未処理の録音があれば失われるが、移行できる形が無いので作り直しを選ぶ。
+      if (db.objectStoreNames.contains('chunks')) db.deleteObjectStore('chunks');
+      const st = db.createObjectStore('chunks', { keyPath: ['sessionId', 'track', 'index'] });
+      st.createIndex('bySession', 'sessionId');
+      st.createIndex('bySessionTrack', ['sessionId', 'track']);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -99,16 +106,16 @@ export async function listSessions(): Promise<RecordingSession[]> {
 }
 
 /** 録音チャンクを追記。失敗しても録音自体は止めない（呼び出し側で握りつぶす）。 */
-export async function appendChunk(sessionId: string, index: number, blob: Blob): Promise<void> {
-  await tx('chunks', 'readwrite', (st) => st.put({ sessionId, index, blob }));
-  // chunkCount/updatedAt は頻繁になるので sessions 側は 10 チャンクごとに更新
-  if (index % 10 === 0) await updateSession(sessionId, { chunkCount: index + 1 });
+export async function appendChunk(sessionId: string, index: number, blob: Blob, track: RecordingTrack = 'other'): Promise<void> {
+  await tx('chunks', 'readwrite', (st) => st.put({ sessionId, track, index, blob }));
+  // chunkCount/updatedAt は頻繁になるので sessions 側は 10 チャンクごとに更新（相手トラック基準）
+  if (track === 'other' && index % 10 === 0) await updateSession(sessionId, { chunkCount: index + 1 });
 }
 
 /** 保存済みチャンクを順に結合して 1 つの Blob にする（MediaRecorder の timeslice 出力は連結で再生可能）。 */
-export async function assembleBlob(sessionId: string, mimeType: string): Promise<Blob | null> {
-  const rows = await tx<{ sessionId: string; index: number; blob: Blob }[]>('chunks', 'readonly', (st) =>
-    st.index('bySession').getAll(sessionId),
+export async function assembleBlob(sessionId: string, mimeType: string, track: RecordingTrack = 'other'): Promise<Blob | null> {
+  const rows = await tx<{ sessionId: string; track: RecordingTrack; index: number; blob: Blob }[]>('chunks', 'readonly', (st) =>
+    st.index('bySessionTrack').getAll([sessionId, track]),
   );
   if (!rows || rows.length === 0) return null;
   rows.sort((a, b) => a.index - b.index);

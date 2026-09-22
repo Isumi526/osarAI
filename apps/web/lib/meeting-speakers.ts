@@ -139,3 +139,59 @@ export function dropSelfLabels(transcript: string, fallback = '相手1'): string
     })
     .join('\n');
 }
+
+/** [MM:SS] 付きの1行。単一トラックの文字起こしを時刻順に合成するために使う。 */
+export interface TimedLine {
+  sec: number;
+  label: string;
+  text: string;
+}
+
+const TIMED_LINE_RE = /^\s*[[［(]?(\d{1,2}):(\d{2})(?::(\d{2}))?[\]］)]?\s*(.*)$/;
+
+/**
+ * 「[MM:SS] 発話」形式の文字起こしを行に分解する（2026-09-22・2トラック録音）。
+ * 行内に「相手1:」等のラベルがあればそれを、無ければ defaultLabel を話者にする。
+ * 時刻が取れない行は直前の時刻に続くものとして扱い、落とさない。
+ */
+export function parseTimedTranscript(text: string, defaultLabel: string): TimedLine[] {
+  const out: TimedLine[] = [];
+  let last = 0;
+  for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = TIMED_LINE_RE.exec(line);
+    let sec = last;
+    let body = line;
+    if (m) {
+      // [H:MM:SS] と [MM:SS] の両方を受ける
+      sec = m[3] ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : Number(m[1]) * 60 + Number(m[2]);
+      body = (m[4] ?? '').trim();
+      last = sec;
+    }
+    if (!body) continue;
+    let label = defaultLabel;
+    const lm = /^(相手\s*\d*|話者\s*[A-Za-z0-9]+)\s*[:：]\s*/.exec(body);
+    if (lm) {
+      label = lm[1]!.replace(/\s+/g, '');
+      body = body.slice(lm[0].length).trim();
+    }
+    if (body) out.push({ sec, label, text: body });
+  }
+  return out;
+}
+
+/**
+ * 相手トラックと自分トラックの行を時刻順に1本の文字起こしへ合成する。
+ * 同時刻なら相手を先に置く（相手の問いかけ→自分の応答、が会話として自然なため）。
+ * 発話は1行1発話のまま残す（まとめると長い独白になって読みにくく、時刻の情報も失う）。
+ */
+export function mergeTimedTranscripts(other: TimedLine[], self: TimedLine[]): string {
+  return [
+    ...other.map((l, i) => ({ ...l, order: 0, i })),
+    ...self.map((l, i) => ({ ...l, order: 1, i })),
+  ]
+    .sort((a, b) => a.sec - b.sec || a.order - b.order || a.i - b.i)
+    .map((l) => `${l.label}: ${l.text}`)
+    .join('\n');
+}

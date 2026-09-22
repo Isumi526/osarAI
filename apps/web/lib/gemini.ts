@@ -342,6 +342,12 @@ export async function geminiTranscribeLong(
     /** 本人（左ch）が話していた区間 [開始秒, 終了秒]。無ければ渡さない */
     selfSegments?: [number, number][];
     durationSec?: number;
+    /**
+     * 1トラックだけを文字起こしし、各行に [MM:SS] を付けさせる（2026-09-22）。
+     * 相手（システム音声）と自分（マイク）を別ファイルで録るようにしたので、
+     * それぞれを単独で文字起こしして、あとで時刻順に1本へ合成する。
+     */
+    singleTrack?: { speaker: 'self' | 'other' };
   } = {},
 ): Promise<string> {
   // 実会議30分の評価（2026-09-21・Notta参照）で Flash-Lite は同じ段落を数十回繰り返すループに入り
@@ -368,7 +374,19 @@ export async function geminiTranscribeLong(
             .join('、')}${segs.length > 60 ? ' ほか' : ''} です（録音開始からの経過時間）。` +
           `それ以外の時間帯の発話は相手のものです。この時間帯を「自分:」の判定に使ってください。`
       : '';
-  const diarization = opts.channelSelfLeft
+  const single = opts.singleTrack;
+  const singleInstruction = single
+    ? single.speaker === 'self'
+      ? `この音声には録音者本人の声だけが入っています（相手の声は別ファイルです）。無音区間は飛ばし、` +
+        `発話ごとに1行、行頭に録音開始からの経過時間を [MM:SS] の形式で付けてください。話者ラベルは付けないでください。` +
+        `声が入っていない場合は何も出力しないでください。`
+      : `この音声には会議相手の声だけが入っています（録音者本人の声は別ファイルです）。無音区間は飛ばし、` +
+        `発話ごとに1行、行頭に録音開始からの経過時間を [MM:SS] の形式で付けてください。` +
+        `相手が複数いる場合のみ、時刻のあとに「相手1:」「相手2:」のように話者を書き分けてください（1人なら話者ラベルは不要）。`
+    : '';
+  const diarization = single
+    ? singleInstruction
+    : opts.channelSelfLeft
     ? `この音声は2chステレオで、左チャンネルが録音者本人（あなたの利用者=「自分」）、右チャンネルが相手です。` +
       `話者が替わったら改行し、行頭に「自分:」または相手が複数なら「相手1:」「相手2:」のようにラベルを付けてください。` +
       selfHint

@@ -265,19 +265,24 @@ export function MeetingRecord() {
 
   /** アップロード（必要なら）→ 解析。失敗しても pending / uploadedPath は残す。 */
   const analyze = useCallback(
-    async (rec: RecordingResult, knownPath: string | null, sid: string | null, capture: MeetingCapture) => {
+    async (rec: RecordingResult, knownPath: string | null, sid: string | null, capture: MeetingCapture, knownSelfPath?: string | null) => {
       setPhase('processing');
       setError(null);
       setStillProcessing(false);
       try {
         let path = knownPath;
+        // 自分（マイク）は別ファイルとしてアップロードし、サーバー側で別々に文字起こしする。
+        // 本人が無言の録音では selfBlob が無く、そもそも送らない。
+        let selfPath = knownSelfPath ?? null;
         if (!path) {
           path = await uploadMeetingAudio(rec.blob, rec.mimeType);
+          if (rec.selfBlob) selfPath = await uploadMeetingAudio(rec.selfBlob, rec.mimeType).catch(() => null);
           setUploadedPath(path);
-          if (sid) await updateSession(sid, { status: 'uploaded', uploadedPath: path }).catch(() => {});
+          if (sid) await updateSession(sid, { status: 'uploaded', uploadedPath: path, ...(selfPath ? { uploadedSelfPath: selfPath } : {}) }).catch(() => {});
         }
         const res = await ingestMeeting({
           recordingPath: path,
+          selfRecordingPath: selfPath ?? undefined,
           mimeType: rec.mimeType,
           capture,
           durationSec: rec.durationSec,
@@ -389,7 +394,7 @@ export function MeetingRecord() {
           return;
         }
       }
-      const blob = await assembleBlob(s.id, s.mimeType);
+      const [blob, selfBlob] = await Promise.all([assembleBlob(s.id, s.mimeType), assembleBlob(s.id, s.mimeType, 'self')]);
       if (!blob && !s.uploadedPath) {
         setError('録音データが見つかりませんでした（保存前に閉じられた可能性があります）。');
         await deleteSession(s.id);
@@ -398,12 +403,13 @@ export function MeetingRecord() {
       }
       const rec: RecordingResult = {
         blob: blob ?? new Blob([], { type: s.mimeType }),
+        selfBlob,
         mimeType: s.mimeType,
         durationSec: s.durationSec ?? Math.round((s.updatedAt - s.startedAt) / 1000),
       };
       setPending(rec);
       setUploadedPath(s.uploadedPath ?? null);
-      await analyze(rec, s.uploadedPath ?? null, s.id, s.capture);
+      await analyze(rec, s.uploadedPath ?? null, s.id, s.capture, s.uploadedSelfPath ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
