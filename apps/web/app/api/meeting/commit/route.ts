@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   // transcript も議事録も同じ置換を通し、履歴で「誰が話したか」が実名で読めるようにする。
   const speakerNames = body.speakerNames ?? {};
   const transcript = relabelSpeakers(rec.transcript ?? '', speakerNames);
-  const minutes = body.minutes ? relabelSpeakers(body.minutes, speakerNames) : null;
+  const minutes = body.minutes ? relabelSpeakers(body.minutes, speakerNames, { inline: true }) : null;
 
   let result;
   try {

@@ -39,6 +39,19 @@ test('relabelSpeakers: 全角コロンと前後の空白も吸収する', () => 
   expect(relabelSpeakers('相手1：　はい', { 相手1: '佐藤' })).toBe('佐藤: はい');
 });
 
+test('relabelSpeakers: 議事録は本文中の「相手N」も実名化し、括弧書きのラベルは消す', () => {
+  const minutes = ['【会議の概要】', '- 参加者: 自分、山田氏（相手1）', '- 相手1の事業について伺った。'].join('\n');
+  const out = relabelSpeakers(minutes, { 相手1: '山田', 自分: '伊角' }, { inline: true });
+  expect(out).toContain('- 参加者: 自分、山田氏');
+  expect(out).not.toContain('相手1');
+  expect(out).toContain('- 山田の事業について伺った。');
+  expect(out).toContain('自分'); // 「自分」は inline でも置換しない
+});
+
+test('relabelSpeakers: inline でも「相手1」が「相手10」を壊さない', () => {
+  expect(relabelSpeakers('相手10の件と相手1の件', { 相手1: '山田' }, { inline: true })).toBe('相手10の件と山田の件');
+});
+
 test('isSpeakerLabel: ラベルそのものは人物名として扱わない', () => {
   for (const s of ['相手1', '相手 2', '話者A', '話者B', '自分', '相手', '話者']) expect(isSpeakerLabel(s)).toBe(true);
   for (const s of ['山田', '相手方株式会社', '話者太郎', '']) expect(isSpeakerLabel(s)).toBe(false);

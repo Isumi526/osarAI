@@ -93,8 +93,14 @@ export function normalizeImportedTranscript(text: string): string {
   return out.join('\n');
 }
 
-/** 行頭の話者ラベル「自分:」「相手1:」等を割当実名に置換する。空名はスキップ。本文中の同語は触らない。 */
-export function relabelSpeakers(text: string, map: Record<string, string>): string {
+/**
+ * 行頭の話者ラベル「自分:」「相手1:」等を割当実名に置換する。空名はスキップ。
+ * 既定では本文中の同語は触らない（文字起こしは発言そのままを残したいため）。
+ * `inline: true` を渡すと本文中の「相手N」も実名化する（議事録用。Gemini が
+ * 「村田涼太氏（相手1）」のようにラベルを書き残すことがあるので、括弧書きは消す）。
+ * 「自分」は inline でも置換しない＝誰の発言か分かる方が親切。
+ */
+export function relabelSpeakers(text: string, map: Record<string, string>, opts: { inline?: boolean } = {}): string {
   let out = text;
   for (const [label, name] of Object.entries(map)) {
     const nm = (name ?? '').trim();
@@ -102,6 +108,11 @@ export function relabelSpeakers(text: string, map: Record<string, string>): stri
     const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // コロン直後の空白も一緒に飲み込み、置換後に二重スペースが残らないようにする。
     out = out.replace(new RegExp(`(^|\\n)\\s*${esc}\\s*[:：][ 　]*`, 'g'), `$1${nm}: `);
+    if (opts.inline && /^相手\s*\d*$/u.test(label.trim())) {
+      // 「相手1」が「相手10」の一部を壊さないよう、後ろに数字が続く場合は除外する。
+      out = out.replace(new RegExp(`[（(]\\s*${esc}(?![0-9０-９])\\s*[）)]`, 'g'), '');
+      out = out.replace(new RegExp(`${esc}(?![0-9０-９])`, 'g'), nm);
+    }
   }
   return out;
 }

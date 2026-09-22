@@ -306,7 +306,7 @@ export async function POST(req: Request) {
     if (nm) speakerNames[others[0]!.label] = nm;
   }
   const finalTranscript = relabelSpeakers(transcript, speakerNames);
-  const finalMinutes = minutes ? relabelSpeakers(minutes, speakerNames) : null;
+  const finalMinutes = minutes ? relabelSpeakers(minutes, speakerNames, { inline: true }) : null;
   const metAt = meetingStart.toISOString();
 
   let committed: { customers: { id: string; name: string; isNew: boolean }[]; interactionIds: string[]; scheduleIds: string[]; taskIds: string[] } | null = null;
