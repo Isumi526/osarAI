@@ -195,3 +195,30 @@ export function mergeTimedTranscripts(other: TimedLine[], self: TimedLine[]): st
     .map((l) => `${l.label}: ${l.text}`)
     .join('\n');
 }
+
+/** 比較用の正規化（記号・空白・長音の揺れを落として、同じ発話かどうかだけを見る）。 */
+function normalizeForCompare(s: string): string {
+  return s
+    .replace(/[\s　、。，．,.!！?？「」『』（）()…・ー～~]/g, '')
+    .toLowerCase();
+}
+
+/** 2つの文字列が「ほぼ同じ発話」か（短い方が長い方に含まれる／片方が他方の大部分を占める）。 */
+function nearlySame(a: string, b: string): boolean {
+  const x = normalizeForCompare(a);
+  const y = normalizeForCompare(b);
+  if (!x || !y) return false;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (short.length < 4) return short === long;
+  return long.includes(short) && short.length >= long.length * 0.5;
+}
+
+/**
+ * スピーカー再生で相手の声がマイクに回り込み、自分トラックにも同じ発話が入った分を落とす（2026-09-22）。
+ * エコーキャンセルで消しきれなかった漏れが「自分の発言」として議事録に載るのを防ぐ。
+ * 相手トラックの近い時刻（既定±8秒）に同じ内容があれば、自分側は漏れとみなして捨てる。
+ */
+export function dropLeakedSelfLines(self: TimedLine[], other: TimedLine[], windowSec = 8): TimedLine[] {
+  if (other.length === 0) return self;
+  return self.filter((s) => !other.some((o) => Math.abs(o.sec - s.sec) <= windowSec && nearlySame(o.text, s.text)));
+}

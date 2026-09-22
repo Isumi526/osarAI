@@ -90,3 +90,26 @@ test('mergeTimedTranscripts: 自分トラックが空なら相手だけの文字
   const other = parseTimedTranscript('[00:00] おもろいやろ。\n[00:03] ほっこり。', '相手1');
   expect(mergeTimedTranscripts(other, [])).toBe('相手1: おもろいやろ。\n相手1: ほっこり。');
 });
+
+import { dropLeakedSelfLines } from '../lib/meeting-speakers';
+
+// スピーカー再生時にマイクへ回り込んだ相手の声（イヤホン無し）。エコーキャンセルの取りこぼしを
+// テキストで落とす。ゲートで音を削ると本人の声まで消えるため、この順にする（2026-09-22）。
+
+test('dropLeakedSelfLines: 相手と同じ発話が近い時刻に自分側へ入っていたら落とす', () => {
+  const other = parseTimedTranscript('[00:10] 来週の水曜日はいかがですか。', '相手1');
+  const self = parseTimedTranscript('[00:11] 来週の水曜日はいかがですか\n[00:20] はい、大丈夫です。', '自分');
+  const kept = dropLeakedSelfLines(self, other);
+  expect(kept.map((l) => l.text)).toEqual(['はい、大丈夫です。']);
+});
+
+test('dropLeakedSelfLines: 時刻が離れていれば本人の発言として残す', () => {
+  const other = parseTimedTranscript('[00:10] ありがとうございます。', '相手1');
+  const self = parseTimedTranscript('[05:00] ありがとうございます。', '自分');
+  expect(dropLeakedSelfLines(self, other)).toHaveLength(1);
+});
+
+test('dropLeakedSelfLines: 相手トラックが空なら何も落とさない', () => {
+  const self = parseTimedTranscript('[00:03] はい。', '自分');
+  expect(dropLeakedSelfLines(self, [])).toHaveLength(1);
+});

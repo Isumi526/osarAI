@@ -13,7 +13,15 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
 import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
-import { parseSpeakers, normalizeImportedTranscript, relabelSpeakers, dropSelfLabels, parseTimedTranscript, mergeTimedTranscripts } from '@/lib/meeting-speakers';
+import {
+  parseSpeakers,
+  normalizeImportedTranscript,
+  relabelSpeakers,
+  dropSelfLabels,
+  parseTimedTranscript,
+  mergeTimedTranscripts,
+  dropLeakedSelfLines,
+} from '@/lib/meeting-speakers';
 import { commitProposals } from '@/lib/assistant-persist';
 
 export const runtime = 'nodejs';
@@ -203,7 +211,8 @@ export async function POST(req: Request) {
         return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
       }
       const otherLines = parseTimedTranscript(otherText, '相手1');
-      const selfLines = parseTimedTranscript(selfText, '自分');
+      // マイクに回り込んだ相手の声が「自分の発言」にならないよう、相手側と重複する発話は落とす
+      const selfLines = dropLeakedSelfLines(parseTimedTranscript(selfText, '自分'), otherLines);
       transcript = mergeTimedTranscripts(otherLines, selfLines);
     } else {
       // --- 1トラック（スマホの室内録音・旧データの再解析） ---

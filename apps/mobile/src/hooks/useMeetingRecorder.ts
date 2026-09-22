@@ -102,8 +102,8 @@ export function readLevel(analyser: AnalyserNode, buf: Float32Array<ArrayBuffer>
 }
 /** これ未満は無音とみなす（RMS 換算 ≈ 0.003） */
 export const SILENCE_LEVEL = 0.02;
-/** マイク側がこの秒数未満しか通っていなければ「本人は発言していない」とみなし、自分トラックを送らない。 */
-export const SELF_SPEECH_MIN_SEC = 3;
+/** マイク側でこの秒数も話していなければ「本人は発言していない」とみなし、自分トラックを送らない。 */
+export const SELF_SPEECH_MIN_SEC = 1;
 
 export function useMeetingRecorder(): MeetingRecorder {
   const [recording, setRecording] = useState(false);
@@ -238,7 +238,11 @@ export function useMeetingRecorder(): MeetingRecorder {
       // 映像は不要なので即停止（音声のみ使う）。
       display.getVideoTracks().forEach((t) => t.stop());
 
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // スピーカー再生時に相手の声がマイクへ回り込む分は、まずブラウザのエコーキャンセルに消させる。
+      // （ゲートで強く削ると、イヤホンを外した時に本人の声まで落ちる。2026-09-22 の実機レビューで発覚）
+      const mic = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       micRef.current = mic;
 
       // WebAudio で 自分(マイク・ゲート後) と 相手(システム音声) を「別々の出力」に分ける。
@@ -247,8 +251,9 @@ export function useMeetingRecorder(): MeetingRecorder {
       ctxRef.current = ctx;
       const micSource = ctx.createMediaStreamSource(mic);
       const sysSource = ctx.createMediaStreamSource(new MediaStream(sysAudio));
-      // マイク側のゲート: スピーカー再生時に相手の声がマイクへ漏れる分（相手より小さい）を落とし、
-      // 本人が話している時（相手より十分大きい）だけ通す。イヤホン時は常に通る。
+      // マイクは「常にそのまま録る」（本人の声を絶対に落とさない）。
+      // ここでは本人が話していた区間だけを記録し、後段のヒントに使う。相手の声の回り込みは
+      // ①エコーキャンセル ②サーバー側で相手トラックと重複する発話を落とす、の2段で処理する。
       // ScriptProcessorNode は非推奨だが、外部ファイル不要で全ブラウザで動くためここでは採用。
       const gate = ctx.createScriptProcessor(2048, 2, 1);
       const pair = ctx.createChannelMerger(2);
@@ -271,19 +276,19 @@ export function useMeetingRecorder(): MeetingRecorder {
         }
         const micRms = Math.sqrt(m / micIn.length);
         const sysRms = Math.sqrt(sy / sysIn.length);
-        // 本人が話している判定: マイクが無音でなく、かつ相手側の 1.5 倍以上（漏れなら相手側より小さい）
-        const speaking = micRms > 0.004 && micRms > sysRms * 1.5;
+        // 本人が話している判定（録音は止めない・区間の記録だけに使う）。
+        // 相手より十分小さい入力は回り込みとみなして「発言」には数えない。
+        const speaking = micRms > 0.01 && micRms > sysRms * 0.6;
         if (speaking) holdBlocks = 8; // 語尾が切れないよう約0.4秒ホールド
         else if (holdBlocks > 0) holdBlocks--;
-        const pass = speaking || holdBlocks > 0;
+        const speakingNow = speaking || holdBlocks > 0;
         const t = Math.max(0, Math.round(ev.playbackTime - gateStart));
-        if (pass && selfOpenRef.current === null) selfOpenRef.current = t;
-        if (!pass && selfOpenRef.current !== null) {
+        if (speakingNow && selfOpenRef.current === null) selfOpenRef.current = t;
+        if (!speakingNow && selfOpenRef.current !== null) {
           if (t - selfOpenRef.current >= 1) selfSegmentsRef.current.push([selfOpenRef.current, t]);
           selfOpenRef.current = null;
         }
-        if (pass) out.set(micIn);
-        else out.fill(0);
+        out.set(micIn); // マイクは常にそのまま通す
       };
       processorRef.current = gate;
       const otherDest = ctx.createMediaStreamDestination();
@@ -296,7 +301,7 @@ export function useMeetingRecorder(): MeetingRecorder {
       const sysAn = ctx.createAnalyser();
       micAn.fftSize = 1024;
       sysAn.fftSize = 1024;
-      gate.connect(micAn); // ゲート後＝「自分が話している」時だけ振れる
+      micSource.connect(micAn); // 生のマイク＝話せば必ず振れる
       sysSource.connect(sysAn);
       const buf = new Float32Array(1024) as Float32Array<ArrayBuffer>;
       silentSinceRef.current = Date.now();
