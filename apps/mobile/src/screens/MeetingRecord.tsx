@@ -1,10 +1,10 @@
-// 会議録音。相手にボットを見せず端末側で録音 → 文字起こし → 3データ抽出 → ReviewCard承認 → 登録。
+// 会議録音。相手にボットを見せず端末側で録音 → 文字起こし → 3データ抽出 → 自動保存（承認ステップは廃止）。
 // - PC(T1): getDisplayMedia で画面全体/タブのシステム音声(相手)＋マイク(自分)を分離録音（透明）。
 // - スマホ(T2): getDisplayMedia 非対応のためスピーカー再生＋マイクで室内録音（イヤホンは外す）。
 // - T7/T7b: プラン確認／共有終了で自動解析／再試行／議事録の見たまま編集／人物メモ1本／端末別ガイド。
 // - T7c（録音データの死守）: レコーダーはアプリ全体の MeetingSessionProvider に常駐し、録音チャンクは
 //   IndexedDB に逐次保存。他画面へ移動しても録音は続き、タブを閉じても「ここまで」は残る。
-//   次回 /meeting を開いた時に未処理の録音（録音中に離脱／未アップロード／解析済み未承認）を検出して続きから再開する。
+//   次回 /meeting を開いた時に未処理の録音（録音中に離脱／未アップロード／解析済み未保存）を検出して続きから再開する。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScreenHeader } from '../components/ScreenHeader.js';
@@ -79,15 +79,17 @@ export function MeetingRecord() {
   const [linkName, setLinkName] = useState('');
   const [linking, setLinking] = useState(false);
   const [minutesSaving, setMinutesSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // 未保存の解析結果を後から保存している最中（復旧リスト）
+  const [saving, setSaving] = useState(false);
   const minutesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 復旧候補（IndexedDB の未処理録音／サーバーの承認待ち）
+  // 復旧候補（IndexedDB の未処理録音／サーバーの未保存の解析結果）
   const [recoverable, setRecoverable] = useState<RecordingSession[]>([]);
   const [reviewingRows, setReviewingRows] = useState<ReviewingRow[]>([]);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   const isRecording = ms.starting || ms.recording;
   // 録音中は他画面へ移動しても録音が続く（Provider 常駐）ので下部ナビは止めない。
-  // 解析中〜承認前は画面の state に結果があるので、移動には確認を挟む（IndexedDB/サーバーから復旧はできる）。
+  // 解析中〜保存前は画面の state に結果があるので、移動には確認を挟む（IndexedDB/サーバーから復旧はできる）。
   const busy = phase === 'processing' || phase === 'failed' || phase === 'reviewing';
   useRegisterNavGuard(busy);
   useEffect(() => {
@@ -328,15 +330,42 @@ export function MeetingRecord() {
     void analyze(pending, uploadedPath, sessionId, mode === 'pc' ? 'pc_local' : 'mobile_speaker');
   }
 
-  /** サーバーの承認待ち録音（status=reviewing）から承認画面を復元する。 */
-  const restoreFromRow = useCallback(
-    (row: ReviewingRow, sid: string | null) => {
+  /**
+   * サーバーに残っている未保存の録音（status=reviewing）を保存する。
+   * 承認ステップは廃止したので、解析済みの候補をそのまま登録して「保存しました」画面に進む。
+   * 保存に失敗した時だけ、従来の確認カードにフォールバックする。
+   */
+  const saveFromRow = useCallback(
+    async (row: ReviewingRow, sid: string | null) => {
       const transcript = row.transcript ?? '';
-      applyIngest(
-        { meetingId: row.id, transcript, minutes: row.minutes, proposals: row.proposals, speakers: parseSpeakersClient(transcript), warnings: [] },
-        sid,
-      );
+      const p = row.proposals ? { ...row.proposals, self_notes: [], self_fields: {} } : EMPTY;
+      setError(null);
+      setMeetingId(row.id);
+      setProposals(p);
+      setMinutes(row.minutes ?? '');
+      setTranscript(transcript);
+      setWarnings([]);
+      setSpeakers(parseSpeakersClient(transcript));
+      setSpeakerNames({});
+      setSaving(true);
+      try {
+        const res = await commitMeeting({ meetingId: row.id, proposals: p, minutes: row.minutes ?? '', speakerNames: {} });
+        setSaved(res);
+        setPrimaryCustomerId(res.customers[0]?.id ?? null);
+        setPhase('saved');
+        if (sid) void deleteSession(sid).catch(() => {});
+        ms.clearSession();
+      } catch {
+        // 名前が無い等で保存できない場合は、確認カードで手当てしてもらう
+        applyIngest(
+          { meetingId: row.id, transcript, minutes: row.minutes, proposals: row.proposals, speakers: parseSpeakersClient(transcript), warnings: [] },
+          sid,
+        );
+      } finally {
+        setSaving(false);
+      }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [applyIngest],
   );
 
@@ -350,7 +379,7 @@ export function MeetingRecord() {
         if (st === 'reviewing') {
           const row = (await listReviewingMeetings()).find((r) => r.id === s.meetingId);
           if (row) {
-            restoreFromRow(row, s.id);
+            await saveFromRow(row, s.id);
             return;
           }
         }
@@ -500,7 +529,7 @@ export function MeetingRecord() {
           </Card>
         )}
 
-        {/* 復旧: 未処理の録音（端末に残っている）／承認待ち（サーバー） */}
+        {/* 復旧: 未処理の録音（端末に残っている）／未保存の解析結果（サーバー） */}
         {showIdle && gate === 'ok' && (recoverable.length > 0 || reviewingRows.length > 0) && (
           <section style={{ padding: 16, background: '#fff7f0', border: '1px solid var(--color-primary)', borderRadius: 12, display: 'grid', gap: 10 }}>
             <strong>前回の続きがあります</strong>
@@ -508,11 +537,11 @@ export function MeetingRecord() {
               <div key={s.id} style={{ display: 'grid', gap: 6, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
                 <span style={{ fontSize: 13 }}>
                   {new Date(s.startedAt).toLocaleString('ja-JP')} の録音（{fmtSec(s.durationSec ?? Math.round((s.updatedAt - s.startedAt) / 1000))}・
-                  {s.status === 'recording' ? '録音中に閉じられました' : s.status === 'stopped' ? '未アップロード' : s.status === 'uploaded' ? '解析前' : '解析済み・未承認'}）
+                  {s.status === 'recording' ? '録音中に閉じられました' : s.status === 'stopped' ? '未アップロード' : s.status === 'uploaded' ? '解析前' : '解析済み・未保存'}）
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button type="button" onClick={() => void onRecover(s)} style={{ flex: 1, minHeight: 40 }}>
-                    {s.status === 'ingested' ? '承認画面を開く' : '解析する'}
+                    {s.status === 'ingested' ? '保存する' : '解析する'}
                   </button>
                   <button type="button" onClick={() => void onDiscard(s)} style={{ minHeight: 40, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
                     破棄
@@ -525,10 +554,10 @@ export function MeetingRecord() {
               .map((r) => (
                 <div key={r.id} style={{ display: 'grid', gap: 6, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
                   <span style={{ fontSize: 13 }}>
-                    {new Date(r.created_at).toLocaleString('ja-JP')} の会議（{r.duration_sec ? fmtSec(r.duration_sec) : '長さ不明'}・承認待ち）
+                    {new Date(r.created_at).toLocaleString('ja-JP')} の会議（{r.duration_sec ? fmtSec(r.duration_sec) : '長さ不明'}・未保存）
                   </span>
-                  <button type="button" onClick={() => restoreFromRow(r, null)} style={{ minHeight: 40 }}>
-                    承認画面を開く
+                  <button type="button" onClick={() => void saveFromRow(r, null)} disabled={saving} style={{ minHeight: 40 }}>
+                    {saving ? '保存中…' : '保存する'}
                   </button>
                 </div>
               ))}

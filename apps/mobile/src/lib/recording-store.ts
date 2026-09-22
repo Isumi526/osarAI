@@ -1,7 +1,7 @@
 // 録音データの死守（T7c・2026-09-21）。
 // 録音中のチャンク（MediaRecorder の timeslice ごとの Blob）を IndexedDB に逐次保存し、
 // タブを閉じる・リロード・誤操作で離脱しても「ここまで録れた分」が端末に必ず残るようにする。
-// 次にアプリを開いた時に未処理の録音を検出して、アップロード→解析→承認を続きから行う。
+// 次にアプリを開いた時に未処理の録音を検出して、アップロード→解析→保存を続きから行う。
 // 音声は端末内にだけ残る（サーバーへは従来どおりアップロード時に送る）。
 const DB_NAME = 'osarai-recordings';
 const DB_VERSION = 1;
@@ -10,8 +10,8 @@ export type RecordingStatus =
   | 'recording' // 録音中（または録音中に離脱した）
   | 'stopped' // 停止済み・未アップロード
   | 'uploaded' // Storage へアップロード済み・解析前
-  | 'ingested' // 解析済み（meeting_recordings.status=reviewing）・未承認
-  | 'done'; // 承認済み（削除待ち）
+  | 'ingested' // 解析済み（meeting_recordings.status=reviewing）・未保存
+  | 'done'; // 保存済み（削除待ち）
 
 export interface RecordingSession {
   id: string;
@@ -144,13 +144,13 @@ export async function deleteSession(id: string): Promise<void> {
   });
 }
 
-/** 未処理（承認まで終わっていない）録音。復旧候補として画面に出す。 */
+/** 未処理（保存まで終わっていない）録音。復旧候補として画面に出す。 */
 export async function listPendingSessions(): Promise<RecordingSession[]> {
   const all = await listSessions();
   return all.filter((s) => s.status !== 'done');
 }
 
-/** 古い完了済みセッションの掃除（承認済みは即削除するが、念のため 7 日超は掃く）。 */
+/** 古い完了済みセッションの掃除（保存済みは即削除するが、念のため 7 日超は掃く）。 */
 export async function purgeOldSessions(maxAgeMs = 7 * 24 * 60 * 60 * 1000): Promise<void> {
   const all = await listSessions();
   for (const s of all) {

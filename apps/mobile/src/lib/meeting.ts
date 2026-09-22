@@ -48,7 +48,7 @@ export async function uploadMeetingAudio(blob: Blob, mimeType: string): Promise<
   return path;
 }
 
-/** アップロード済みパスから文字起こし→3データ抽出（承認前 proposals を返す）。 */
+/** アップロード済みパスから文字起こし→3データ抽出→自動保存（committed を返す）。 */
 export async function ingestMeeting(input: {
   recordingPath: string;
   mimeType: string;
@@ -80,7 +80,7 @@ export function parseSpeakersClient(transcript: string): Speaker[] {
   return out;
 }
 
-/** 承認待ち（status=reviewing）の録音を DB から読む（本人分のみ・RLS）。リロードや別端末からの再開用。 */
+/** 未保存（status=reviewing）の録音を DB から読む（本人分のみ・RLS）。リロードや別端末からの再開用。 */
 export async function listReviewingMeetings(): Promise<
   { id: string; created_at: string; duration_sec: number | null; transcript: string | null; minutes: string | null; proposals: Proposals | null }[]
 > {

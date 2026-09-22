@@ -76,6 +76,7 @@ export async function POST(req: Request) {
       proposals,
       transcript,
       minutes,
+      minutesForAll: true,
       source,
       metAt,
     });
