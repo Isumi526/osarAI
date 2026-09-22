@@ -117,6 +117,18 @@ export function MeetingSessionProvider({ children }: { children: ReactNode }) {
     return { ...rec, durationSec, sessionId: session?.id ?? null };
   }, [mode, pcRec, micRec, elapsed, session]);
 
+  // 録音中はどの画面にいてもタブを閉じる操作に確認を挟む（チャンクは IndexedDB に残るが、
+  // 「閉じたら録音が終わる」ことに気づかないまま離脱されるのを防ぐ・T7c）。
+  useEffect(() => {
+    if (!recording) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [recording]);
+
   const value: MeetingSessionValue = {
     mode,
     starting,
