@@ -48,11 +48,16 @@ export function MicPicker({
       probe.getTracks().forEach((t) => t.stop());
       const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
       setDevices(list);
-      // 保存済みの機器が無くなっていたら（iPhone を切断した等）既定に戻す
+      const fallback = list.some((d) => d.deviceId === 'default') ? 'default' : '';
+      // 保存済みの機器が無くなっていたら（イヤホンを切った・iPhone を切断した等）「自動」に戻す
       if (selected && !list.some((d) => d.deviceId === selected)) {
-        setSelected('');
-        saveMicId('');
-        onChange?.(null);
+        setSelected(fallback);
+        saveMicId(fallback);
+        onChange?.(fallback || null);
+      } else if (!selected && fallback) {
+        // 初回は「自動」を選んだ状態にする（OS の既定に追従させるのが最も事故が少ない）
+        setSelected(fallback);
+        onChange?.(fallback);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -113,6 +118,12 @@ export function MicPicker({
     }
   }
 
+  // ブラウザが用意する仮想の「既定」機器（deviceId='default'）。OS の既定変更に追従する。
+  const hasBrowserDefault = devices.some((d) => d.deviceId === 'default');
+  const realDevices = devices.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications');
+  // 「既定 - AirPods」のようなラベルから機器名だけを取り出して「自動（いまは AirPods）」と見せる
+  const defaultNow = (devices.find((d) => d.deviceId === 'default')?.label ?? '').replace(/^.*?[-－—]\s*/, '').trim() || null;
+
   return (
     <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, display: 'grid', gap: 10 }}>
       <strong style={{ fontSize: 14 }}>{title}</strong>
@@ -127,8 +138,12 @@ export function MicPicker({
         }}
         style={{ padding: 10, fontSize: 14, borderRadius: 8, border: '1px solid var(--color-border)', background: '#fff' }}
       >
-        <option value="">パソコンの既定のマイク</option>
-        {devices.map((d, i) => (
+        {/* 先頭は必ず「自動」。ブラウザの default 機器は OS の既定が変わると追従するので、
+            イヤホンが切れて内蔵マイクに変わるようなケースをブラウザ側が吸収してくれる。 */}
+        <option value={hasBrowserDefault ? 'default' : ''}>
+          {defaultNow ? `自動（いまは ${defaultNow}）` : '自動（パソコンの設定に従う）'}
+        </option>
+        {realDevices.map((d, i) => (
           <option key={d.deviceId} value={d.deviceId}>
             {d.label || `マイク ${i + 1}`}
           </option>
@@ -157,8 +172,8 @@ export function MicPicker({
       )}
       {showTest && !testing && (
         <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
-          声が入らない時はここでテストしてください。音声入力アプリ（常駐のディクテーション等）がマイクを掴んでいる場合や、
-          iPhone の連携マイクが選ばれたまま切断された場合は、ここで別のマイクに変えると直ります。
+          「自動」はパソコンのマイク設定に従います（イヤホンが切れたら内蔵マイクに切り替わります）。特定の機器で録りたい時だけ選んでください。
+          声が入らない時はここでテストを。音声入力アプリ（常駐のディクテーション等）がマイクを掴んでいる場合は、機器を変えると直ることがあります。
         </p>
       )}
       {error && <p style={{ fontSize: 12, color: '#c0392b', margin: 0 }}>{error}</p>}
