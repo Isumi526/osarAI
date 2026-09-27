@@ -37,6 +37,8 @@ export interface TaskProposal {
   title: string;
   due_at: string | null;
   person_index: number | null;
+  /** 誰が引き受けたか（省略時 self）。other は「相手待ち」として別枠に並ぶ */
+  assignee?: 'self' | 'other';
 }
 
 export interface Proposals {
@@ -209,6 +211,7 @@ export async function commitProposals(args: {
         customer_id: t.person_index !== null ? (personIds[t.person_index] ?? null) : null,
         title: t.title,
         due_at: t.due_at,
+        assignee: t.assignee === 'other' ? 'other' : 'self',
         source: 'assistant',
       })
       .select('id')

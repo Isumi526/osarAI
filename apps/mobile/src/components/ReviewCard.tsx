@@ -308,7 +308,7 @@ export function ReviewCard({
       {proposals.tasks.map((t, i) => (
         <div key={i} style={{ display: 'grid', gap: 6, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>タスク</span>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{t.assignee === 'other' ? '相手待ち（相手がやること）' : 'タスク'}</span>
             <button
               type="button"
               onClick={() => setProposals({ ...proposals, tasks: proposals.tasks.filter((_, j) => j !== i) })}

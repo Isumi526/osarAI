@@ -29,6 +29,8 @@ export interface TaskProposal {
   title: string;
   due_at: string | null;
   person_index: number | null;
+  /** self=自分がやる / other=相手がやる（相手待ち）。省略時 self */
+  assignee?: 'self' | 'other';
 }
 export interface Proposals {
   people: PersonProposal[];

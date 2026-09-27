@@ -30,6 +30,8 @@ export interface ExtractedTask {
   title: string;
   due_date?: string | null;
   person_name?: string | null;
+  /** 誰が引き受けたか。other=相手がやる（自分は待っている＝相手待ち） */
+  assignee?: 'self' | 'other';
 }
 export interface Extracted {
   people?: ExtractedPerson[];
@@ -118,8 +120,12 @@ export const TURN_SCHEMA: GeminiSchema = {
               title: { type: 'string' },
               due_date: { type: 'string', nullable: true },
               person_name: { type: 'string', nullable: true },
+              // self=ユーザー本人がやる / other=相手が引き受けた（ユーザーは返事や成果物を待つ）
+              assignee: { type: 'string', enum: ['self', 'other'] },
             },
-            required: ['title'],
+            // due_date / assignee も必ず出力させる。required に入れないとキーごと落ちて、
+            // 「土日の間に」と話しても期限が空になっていた（2026-09-27 Notta 7本の評価で全件空欄）。
+            required: ['title', 'due_date', 'assignee'],
           },
         },
         self_notes: { type: 'array', items: { type: 'string' } },
@@ -191,18 +197,21 @@ export function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted
     if (!t0?.title?.trim()) continue;
     const t = { ...t0, title: cleanTitle(t0.title) };
     const key = compactKey(t.title);
+    const assignee = t.assignee === 'other' ? 'other' : 'self';
     const i = tasks.findIndex((x) => {
+      if ((x.assignee ?? 'self') !== assignee) return false; // 自分の用件と相手の用件は混ぜない
       const k = compactKey(x.title);
       return k === key || k.includes(key) || key.includes(k);
     });
     if (i === -1) {
-      tasks.push({ title: t.title, due_date: t.due_date ?? null, person_name: t.person_name ?? null });
+      tasks.push({ title: t.title, due_date: t.due_date ?? null, person_name: t.person_name ?? null, assignee });
     } else {
       const prev = tasks[i]!;
       tasks[i] = {
         title: t.title.length > prev.title.length ? t.title : prev.title,
         due_date: t.due_date ?? prev.due_date ?? null,
         person_name: t.person_name ?? prev.person_name ?? null,
+        assignee,
       };
     }
   }
@@ -239,11 +248,15 @@ function mergeList(a?: string[], b?: string[]): string[] {
 }
 
 /** 人名を落とした後のタイトルで、もう一度重複を統合する（より具体的な方を残す）。 */
-function dedupeTitles<T extends { title: string; due_at?: string | null; person_index: number | null }>(items: T[]): T[] {
+function dedupeTitles<T extends { title: string; due_at?: string | null; person_index: number | null; assignee?: 'self' | 'other' }>(
+  items: T[],
+): T[] {
   const out: T[] = [];
   for (const item of items) {
     const key = compactKey(item.title);
     const i = out.findIndex((x) => {
+      // 「資料を送る」を自分も相手も引き受けることはあるので、引き受けた側が違えば別物として残す
+      if ((x.assignee ?? 'self') !== (item.assignee ?? 'self')) return false;
       const k = compactKey(x.title);
       return k === key || k.includes(key) || key.includes(k);
     });
@@ -333,6 +346,7 @@ export function toProposals(acc: Extracted, customers: { id: string; name: strin
       title: stripPersonFromTitle(t.title, personNames),
       due_at: t.due_date ? jstToIso(t.due_date, '23:59', now) : null,
       person_index: indexOfPerson(t.person_name),
+      assignee: t.assignee === 'other' ? ('other' as const) : ('self' as const),
     })),
   );
   return { people, schedules, tasks, self_notes: acc.self_notes ?? [], self_fields: acc.self_fields ?? {} };

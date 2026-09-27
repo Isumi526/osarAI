@@ -13,6 +13,8 @@ export interface Task {
   status: 'open' | 'done';
   completed_at: string | null;
   source: 'manual' | 'assistant';
+  /** self=自分がやる / other=相手がやる（相手待ち・会議録音から登録される） */
+  assignee: 'self' | 'other';
   notes: string | null;
   created_at: string;
   updated_at: string;

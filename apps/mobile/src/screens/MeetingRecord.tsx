@@ -82,6 +82,9 @@ export function MeetingRecord() {
   const [minutesSaving, setMinutesSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
   // 未保存の解析結果を後から保存している最中（復旧リスト）
   const [saving, setSaving] = useState(false);
+  // 保存したタスクを「自分がやること」と「相手待ち」に分けて見せる（保存画面）
+  const myTasks = proposals.tasks.filter((t) => t.assignee !== 'other');
+  const waitingTasks = proposals.tasks.filter((t) => t.assignee === 'other');
   // 「自分の声を録るマイク」の選択（PC録音のみ・localStorage に保存）
   const [micId, setMicId] = useState<string | null>(() => getSavedMicId());
   // 録音中に画面が消えていた合計秒（スマホ）。その間は録れていないので知らせる
@@ -918,11 +921,45 @@ export function MeetingRecord() {
                 <button type="button" onClick={() => navigate('/schedule')} style={{ background: 'none', border: 'none', padding: 0, color: saved.scheduleIds.length ? 'var(--color-primary)' : 'inherit' }}>
                   予定 {saved.scheduleIds.length}件
                 </button>
-                <button type="button" onClick={() => navigate('/tasks')} style={{ background: 'none', border: 'none', padding: 0, color: saved.taskIds.length ? 'var(--color-primary)' : 'inherit' }}>
-                  タスク {saved.taskIds.length}件
+                <button type="button" onClick={() => navigate('/tasks')} style={{ background: 'none', border: 'none', padding: 0, color: myTasks.length ? 'var(--color-primary)' : 'inherit' }}>
+                  タスク {myTasks.length}件
+                </button>
+                <button type="button" onClick={() => navigate('/tasks')} style={{ background: 'none', border: 'none', padding: 0, color: waitingTasks.length ? 'var(--color-primary)' : 'inherit' }}>
+                  相手待ち {waitingTasks.length}件
                 </button>
                 {warnings.length > 0 && <span>（{warnings.join(' / ')}）</span>}
               </div>
+              {/* 何が登録されたかをその場で見せる（件数だけだと、正しく拾えたか分からない） */}
+              {(myTasks.length > 0 || waitingTasks.length > 0) && (
+                <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                  {myTasks.length > 0 && (
+                    <div>
+                      <strong style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>自分がやること</strong>
+                      <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>
+                        {myTasks.map((t, i) => (
+                          <li key={i}>
+                            {t.title}
+                            {t.due_at && <span style={{ color: 'var(--color-text-muted)' }}>（{new Date(t.due_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' })}まで）</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {waitingTasks.length > 0 && (
+                    <div>
+                      <strong style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>相手待ち</strong>
+                      <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>
+                        {waitingTasks.map((t, i) => (
+                          <li key={i}>
+                            {t.title}
+                            {t.due_at && <span style={{ color: 'var(--color-text-muted)' }}>（{new Date(t.due_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' })}まで）</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
             <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12 }}>
               <MinutesBlock minutes={minutes ?? ''} onChange={onMinutesEdit} />
