@@ -1,14 +1,17 @@
-// 定期的な行動提案プッシュ通知（習慣化・自発的アクション促進）。
-// 週次でVercel Cronから呼ばれ、直近7日おさらいしていない顧客がいるユーザーへ
-// 「今週まだおさらいしていない顧客がいます」を個別に通知する。
-// 既存 cron/remind（毎日・全員一律）とは別ジョブ・別スケジュール。
+// 週1回の「返事待ち」通知（Vercel Cron・毎週月曜朝）。2026-09-27 に作り替え。
+// 旧: 7日おさらいしていない顧客がいる人に「今週まだおさらいしていない顧客がいます」（CRM 的な入力の催促）。
+// 新: 会議で相手が引き受けたこと（TODO の相手待ち・tasks.assignee='other'）のうち、
+//     期限を過ぎたもの・期限なしで1週間たったものを知らせる。「あの件、返事が来ていない」に
+//     気づいて催促できるようにするのが目的。該当が無い人には送らない。
+// アプリ内通知（ベル）に必ず残し、プッシュ用トークンがあれば push も送る（lib/notify）。
 // T10#4: cron/スケジューラは共有シークレットヘッダ必須。secret未設定時の素通しフォールバック禁止。
 import { NextResponse } from 'next/server';
 import { jstDateString } from '@osarai/shared';
-import { sendPush } from '@/lib/push-fcm';
 import { createServiceRoleClient } from '@/lib/supabase/server';
+import { activeUsers, notifyUser } from '@/lib/notify';
 
 const JOB_NAME = 'action_suggest';
+/** 期限の無い相手待ちは、これだけ日が経ったら「返事待ち」とみなす */
 const STALE_DAYS = 7;
 
 export const runtime = 'nodejs';
@@ -27,9 +30,7 @@ export async function GET(req: Request) {
 
   // Vercel Cronはat-least-once実行(まれに二重起動/リトライ)のため、同日2回目の
   // 実行はここで弾く（cron/remindと同じ job+日付一意制約パターン・T5対策踏襲）。
-  const { error: dedupeError } = await db
-    .from('cron_runs')
-    .insert({ job: JOB_NAME, run_date: jstDateString() });
+  const { error: dedupeError } = await db.from('cron_runs').insert({ job: JOB_NAME, run_date: jstDateString() });
   if (dedupeError) {
     if (dedupeError.code === '23505') {
       return NextResponse.json({ skipped: true, reason: 'already ran today' });
@@ -37,44 +38,46 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'dedupe insert failed' }, { status: 500 });
   }
 
-  // 契約中(trialing/active)ユーザーのみ対象（RLSバイパス・システムジョブのため）
-  const { data: activeSubs } = await db
-    .from('subscriptions')
-    .select('user_id')
-    .in('status', ['trialing', 'active']);
-  const activeUserIds = (activeSubs ?? []).map((s) => s.user_id);
-
-  const staleBefore = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - STALE_DAYS * 24 * 3600_000).toISOString();
 
   let targeted = 0;
-  let sent = 0;
-  let failed = 0;
-  let configured = true;
+  let pushSent = 0;
+  let configured = false;
 
-  for (const userId of activeUserIds) {
-    // 自分の担当顧客のうち、直近7日以内に接触していない(未接触含む)アクティブ顧客数
-    const { count } = await db
-      .from('customers')
-      .select('id', { count: 'exact', head: true })
+  for (const { userId, orgId } of await activeUsers(db)) {
+    // 相手待ちのうち「期限を過ぎた」か「期限なしで1週間たった」もの
+    const { data: waiting } = await db
+      .from('tasks')
+      .select('id, title, customer_id')
       .eq('owner_id', userId)
-      .eq('status', 'active')
-      .or(`last_met_at.is.null,last_met_at.lt.${staleBefore}`);
-    if (!count || count === 0) continue;
-
-    const { data: tokenRows } = await db.from('push_tokens').select('token').eq('user_id', userId);
-    const tokens = (tokenRows ?? []).map((t) => t.token);
-    if (tokens.length === 0) continue;
-
+      .eq('status', 'open')
+      .eq('assignee', 'other')
+      .or(`due_at.lt.${now},and(due_at.is.null,created_at.lt.${staleBefore})`)
+      .order('created_at', { ascending: true })
+      .limit(20);
+    const items = waiting ?? [];
+    if (items.length === 0) continue;
     targeted += 1;
-    const result = await sendPush(tokens, {
-      title: '今週まだおさらいしていない顧客がいます',
-      body: `${count}人の顧客が、しばらくおさらいできていません。5分で振り返ってみませんか？`,
-      data: { screen: 'home' },
+
+    const first = items[0]!;
+    let who = '';
+    if (first.customer_id) {
+      const { data: c } = await db.from('customers').select('name').eq('id', first.customer_id).maybeSingle();
+      if (c?.name) who = `（${c.name}さん）`;
+    }
+    const r = await notifyUser(db, {
+      userId,
+      orgId,
+      title: `返事待ちが${items.length}件あります`,
+      body: `「${first.title}」${who}${items.length > 1 ? `ほか${items.length - 1}件` : ''}。そろそろ確認してみませんか？`,
+      linkPath: '/tasks',
+      customerId: first.customer_id,
+      taskId: items.length === 1 ? first.id : null,
     });
-    configured = result.configured;
-    sent += result.sent;
-    failed += result.failed;
+    pushSent += r.pushSent;
+    configured = configured || r.pushConfigured;
   }
 
-  return NextResponse.json({ configured, targeted, sent, failed });
+  return NextResponse.json({ configured, targeted, sent: pushSent });
 }

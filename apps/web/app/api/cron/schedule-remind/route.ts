@@ -1,4 +1,5 @@
-// スケジュール終了時刻の「おさらいしませんか」通知（§14後追加・スケジュール管理機能）。
+// スケジュール終了時刻の通知（§14後追加・スケジュール管理機能）。2026-09-27 に文言を
+// 「おさらいしませんか」から「録音できなかった時はメモを」に変更（会議録音が主導線になったため）。
 // Vercel Cronから短い間隔(例: 5〜15分毎)で呼ばれる想定。終了時刻を過ぎたばかりの
 // 未通知(reminded_at is null)スケジュールを検出し、その所有者へpushする。
 // 他のcron(remind/action-suggest)はjob+日付でdedupするが、本ジョブは対象がスケジュール単位で
@@ -49,9 +50,10 @@ export async function GET(req: Request) {
     const { data: tokenRows } = await db.from('push_tokens').select('token').eq('user_id', s.owner_id);
     const tokens = (tokenRows ?? []).map((t) => t.token);
     const result = await sendPush(tokens, {
-      title: 'おさらいしませんか？',
-      body: `「${s.title}」が終わりました。記憶が新しいうちにおさらいしましょう。`,
-      data: { screen: 'osarai' },
+      // 2026-09-27: 「おさらいしませんか」（入力の催促）から、録音できなかった時のメモの案内へ
+      title: `「${s.title}」が終わりました`,
+      body: '録音できなかった時は、話したことを「AIと話す」で一言メモしておきましょう。',
+      data: { screen: 'chat' },
     });
     configured = result.configured;
     sent += result.sent;

@@ -66,7 +66,7 @@ export function PlanPicker({ code, amountOff }: { code: string | null; amountOff
               </p>
             )}
             <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358', margin: '0 0 16px' }}>
-              <li>AI対話でのおさらい・顧客管理</li>
+              <li>会議の録音・議事録・予定とTODOの自動保存</li>
               <li>AI相談: {p.aiAdviceLimit === null ? '無制限' : `月${p.aiAdviceLimit}回`}</li>
             </ul>
             <button

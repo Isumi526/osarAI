@@ -6,7 +6,8 @@ import { NavGate } from './NavGate';
 
 export const metadata: Metadata = {
   title: 'osarAI 〜おさらい〜',
-  description: '忙しくても、人を大切にできる自分に。',
+  // 2026-09-27: 検索結果・共有時の説明も会議録音中心の訴求に揃える
+  description: '忙しくても、人を大切にできる自分に。会う前に録音ボタンを押すだけで、議事録・次の予定・TODOをAIが残します。',
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

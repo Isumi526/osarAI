@@ -482,7 +482,7 @@ export function Settings() {
       >
         <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>通知</h2>
         <p style={{ margin: '0 0 12px', color: '#6b6358', fontSize: 14 }}>
-          人と会ったあと「今日会った人、おさらいする？」を通知でお知らせします（習慣化の中核）。
+          前日の夜に「明日会う人と、その人との前回の話」「明日までのTODO」を、週に1回「返事待ち」をお知らせします。お知らせは右上のベルにも届きます。
         </p>
         <button onClick={onEnablePush} disabled={busy} style={{ padding: 12, fontSize: 15 }}>
           {busy ? '設定中…' : '通知をオンにする'}

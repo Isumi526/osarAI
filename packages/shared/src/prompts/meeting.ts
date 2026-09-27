@@ -69,3 +69,32 @@ export function pruneEmptyMinutesSections(minutes: string): string {
     .join('\n\n')
     .trim();
 }
+
+/**
+ * 議事録から「前回の話」の1行を作る。会う直前に思い出すのが目的なので、
+ * 相手の事業・プロフィールの最初の要点を優先し、無ければ会議の概要から取る。
+ */
+export function meetingRecapLine(minutes: string | null): string | null {
+  if (!minutes) return null;
+  const sections = new Map<string, string[]>();
+  let cur = '';
+  for (const raw of minutes.split('\n')) {
+    const h = /^\s*【(.+)】\s*$/u.exec(raw);
+    if (h) {
+      cur = h[1]!;
+      sections.set(cur, []);
+      continue;
+    }
+    const line = raw.replace(/^[-・*]\s*/, '').trim();
+    if (line && cur) sections.get(cur)!.push(line);
+  }
+  // 「氏名：」「日時：」のようなラベル行は情報にならないので飛ばす
+  const useful = (l: string) => !/^(氏名|日時|開催日時|参加者)[:：]/u.test(l);
+  const pick =
+    sections.get('相手の事業・プロフィール')?.find(useful) ??
+    sections.get('会議の概要')?.find(useful) ??
+    [...sections.values()].flat().find(useful);
+  if (!pick) return null;
+  const text = pick.replace(/^[^:：]{1,12}[:：]\s*/u, ''); // 「事業内容：」等の見出しを落とす
+  return text.length > 40 ? `${text.slice(0, 40)}…` : text;
+}

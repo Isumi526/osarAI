@@ -7,8 +7,9 @@ import { sendPush } from '@/lib/push-fcm';
 
 export const runtime = 'nodejs';
 
-const TITLE = 'おさらいしませんか？';
-const BODY = '今日会った人、記憶が新しいうちに5分でおさらいしましょう。';
+// 2026-09-27: 実機での到達確認用。文言は「おさらい促し」から中立的な確認文に変更
+const TITLE = 'osarAI の通知';
+const BODY = '通知が届くことを確認しました。明日会う人や返事待ちを、ここでお知らせします。';
 
 export function OPTIONS() {
   return corsPreflight();
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
     .eq('user_id', user.id);
 
   const tokenList = (tokens ?? []).map((t) => t.token);
-  const result = await sendPush(tokenList, { title: TITLE, body: BODY, data: { screen: 'osarai' } });
+  const result = await sendPush(tokenList, { title: TITLE, body: BODY, data: { screen: 'home' } });
 
   return NextResponse.json(
     { tokens: tokenList.length, ...result },
