@@ -136,3 +136,11 @@ body.has-sidebar .screen-header {
   .home-grid > .ga-mt { grid-area: mt; }
   .home-grid > .ga-ai { grid-area: ai; }
 }
+
+/* PC ではヘッダーの「← ホーム」・ホームのロゴと通知ベルはサイドバーと重複するので隠す（2026-09-27）。
+   画面の名前と右側の操作（予定の月/週/日など）は残す。
+   「← ホーム」は visibility で隠し、中央の画面名の位置がずれないようにする。 */
+.show-on-desktop { display: none; }
+body.has-sidebar .back-home { visibility: hidden; }
+body.has-sidebar .hide-on-desktop { display: none !important; }
+body.has-sidebar .show-on-desktop { display: block; }

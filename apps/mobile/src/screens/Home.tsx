@@ -114,13 +114,16 @@ export function Home() {
   return (
     <main className="screen screen--wide" style={{ paddingBottom: 'calc(56px + env(safe-area-inset-bottom) + 40px)' }}>
       <ScreenHeader>
-        <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
+        {/* PC ではサイドバーにロゴと通知があるので、ロゴとベルは隠して画面名だけにする（2026-09-27） */}
+        <h1 className="hide-on-desktop" style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
+        <h1 className="show-on-desktop" style={{ margin: 0, fontSize: 20 }}>ホーム</h1>
         <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           {/* 使い方はヘッダーから外した（2026-09-27・機能が絞られ初回案内で足りるため）。マイページの下に残す */}
           {/* 通知ベル。未読があれば赤いバッジで気づけるようにする */}
           <Link
             to="/notifications"
             aria-label="通知"
+            className="hide-on-desktop"
             style={{ color: 'var(--color-text)', display: 'inline-flex' }}
           >
             <BellIcon unread={unreadCount} />

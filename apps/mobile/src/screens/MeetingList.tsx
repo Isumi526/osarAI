@@ -42,7 +42,7 @@ export function MeetingList() {
   return (
     <main className="screen screen--wide">
       <ScreenHeader>
-        <Link to="/">← ホーム</Link>
+        <Link to="/" className="back-home">← ホーム</Link>
         <strong>会議の記録</strong>
         <span style={{ width: 48 }} />
       </ScreenHeader>

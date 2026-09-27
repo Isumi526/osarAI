@@ -155,7 +155,7 @@ export function Settings() {
   return (
     <main className="screen">
       <ScreenHeader>
-        <Link to="/">← ホーム</Link>
+        <Link to="/" className="back-home">← ホーム</Link>
         <strong>マイページ</strong>
         <span style={{ width: 48 }} />
       </ScreenHeader>

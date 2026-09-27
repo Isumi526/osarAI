@@ -124,7 +124,7 @@ export function Tasks() {
   return (
     <main className="screen screen--wide">
       <ScreenHeader>
-        <Link to="/">← ホーム</Link>
+        <Link to="/" className="back-home">← ホーム</Link>
         <strong>TODO</strong>
         <span style={{ width: 48 }} />
       </ScreenHeader>

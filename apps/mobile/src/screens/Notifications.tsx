@@ -71,6 +71,7 @@ export function Notifications() {
       <ScreenHeader>
         <button
           type="button"
+          className="back-home"
           onClick={() => navigate('/')}
           style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}
         >

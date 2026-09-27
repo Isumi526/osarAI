@@ -89,7 +89,7 @@ export function Tutorial() {
   return (
     <main className="screen">
       <ScreenHeader>
-        <Link to="/">← ホーム</Link>
+        <Link to="/" className="back-home">← ホーム</Link>
         <strong>使い方</strong>
         <span style={{ width: 48 }} />
       </ScreenHeader>

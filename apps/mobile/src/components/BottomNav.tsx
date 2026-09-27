@@ -2,7 +2,7 @@
 // アクティブ判定は「現在地に最も近いタブ」（例: /customers/:id ではどのタブも非アクティブ、
 // /schedule 配下は予定タブ）。対話画面(Osarai/AiChat/SelfOsarai)は main の高さを
 // ナビ分減らしているため入力欄がナビと干渉しない。
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { HomeIcon, ScheduleIcon, TaskIcon, SettingsIcon, MeetingsIcon, PeopleIcon, BellNavIcon } from './NavIcons.js';
 import { useIsDesktop } from '../hooks/useIsDesktop.js';
@@ -11,6 +11,7 @@ import { useConfirm } from './ConfirmDialog.js';
 import { useMeetingSession, fmtSec } from './MeetingSession.js';
 import { isMeetingSetupDone } from '../lib/meetingSetup.js';
 import { getSavedMicId } from './MicPicker.js';
+import { countUnread } from '../lib/notifications.js';
 
 export const BOTTOM_NAV_HEIGHT = 56;
 /** 中央の録音ボタンがナビの上にはみ出す高さ。固定の入力欄などはこの分だけ上に置く */
@@ -53,6 +54,14 @@ export function BottomNav() {
   const { confirm, dialog: confirmDialog } = useConfirm();
   const ms = useMeetingSession();
   const isDesktop = useIsDesktop();
+  // PC のサイドバーの「通知」に未読数を出す（ホームのベルを PC では隠したため）。画面を移るたびに取り直す
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!isDesktop) return;
+    countUnread()
+      .then(setUnread)
+      .catch(() => undefined);
+  }, [isDesktop, pathname]);
   // サイドバーを出している間だけ本文を右に寄せる（styles.css の body.has-sidebar）
   useEffect(() => {
     document.body.classList.toggle('has-sidebar', isDesktop);
@@ -145,6 +154,26 @@ export function BottomNav() {
         >
           <Icon active={active} />
           {it.label}
+          {it.path === '/notifications' && unread > 0 && (
+            <span
+              style={{
+                marginLeft: 'auto',
+                minWidth: 20,
+                height: 20,
+                padding: '0 6px',
+                borderRadius: 999,
+                background: 'var(--color-danger)',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
         </a>
       );
     };

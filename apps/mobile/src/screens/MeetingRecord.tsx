@@ -572,7 +572,7 @@ export function MeetingRecord() {
   return (
     <main className="screen" style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
       <ScreenHeader>
-        <button type="button" onClick={onBackHome} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
+        <button type="button" className="back-home" onClick={onBackHome} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
           ← ホーム
         </button>
         <strong>会議を録音する</strong>
