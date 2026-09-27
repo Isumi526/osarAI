@@ -66,7 +66,7 @@ export function CustomerList() {
   }, []);
 
   return (
-    <main className="screen">
+    <main className="screen screen--wide">
       <ScreenHeader>
         <Link to="/settings">← マイページ</Link>
         <strong>つながり一覧</strong>

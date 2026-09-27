@@ -13,7 +13,8 @@ import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
-import { BOTTOM_NAV_HEIGHT, NAV_OVERHANG } from '../components/BottomNav.js';
+import { BOTTOM_NAV_HEIGHT, NAV_OVERHANG, SIDEBAR_WIDTH } from '../components/BottomNav.js';
+import { useIsDesktop } from '../hooks/useIsDesktop.js';
 import { ReviewCard } from '../components/ReviewCard.js';
 import { ASSISTANT_OPENING, ASSISTANT_HINTS } from '@osarai/shared';
 
@@ -22,6 +23,7 @@ type Phase = 'chatting' | 'reviewing' | 'committed';
 
 export function AssistantChat() {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   // 相手のカード・会議の画面から開いた時の話題の相手。サーバーがその人の議事録を読んで答える。
   const [params] = useSearchParams();
   const focusCustomerId = params.get('customerId');
@@ -379,13 +381,17 @@ export function AssistantChat() {
           ref={formRef}
           style={{
             position: 'fixed',
-            left: 0,
+            // PC ではサイドバーの右から、画面の一番下に置く（下部ナビが無いため）
+            left: isDesktop ? SIDEBAR_WIDTH : 0,
             right: 0,
-            bottom: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
+            bottom: isDesktop ? 0 : `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
             background: 'var(--color-bg)',
             borderTop: '1px solid var(--color-border)',
-            // 下側は中央の録音ボタンがはみ出す分だけ余白を取り、入力欄が隠れないようにする
-            padding: `10px 16px ${10 + NAV_OVERHANG}px`,
+            // スマホは中央の録音ボタンがはみ出す分だけ下に余白を取り、入力欄が隠れないようにする
+            // PC では本文（640px）と同じ幅に入力欄を揃える（padding の % は画面幅基準になるので vw で計算）
+            padding: isDesktop
+              ? `12px max(16px, calc((100vw - ${SIDEBAR_WIDTH}px - 640px) / 2))`
+              : `10px 16px ${10 + NAV_OVERHANG}px`,
             display: 'grid',
             gap: 8,
             zIndex: 80,

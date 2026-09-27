@@ -40,7 +40,7 @@ export function MeetingList() {
   const nameOf = (id: string | null) => (id ? (customers.find((c) => c.id === id)?.name ?? null) : null);
 
   return (
-    <main className="screen">
+    <main className="screen screen--wide">
       <ScreenHeader>
         <Link to="/">← ホーム</Link>
         <strong>会議の記録</strong>

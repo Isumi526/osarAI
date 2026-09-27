@@ -67,7 +67,7 @@ export function Notifications() {
   const unreadInTab = items.filter((i) => !i.read_at).length;
 
   return (
-    <main className="screen" style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
+    <main className="screen screen--wide" style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
       <ScreenHeader>
         <button
           type="button"

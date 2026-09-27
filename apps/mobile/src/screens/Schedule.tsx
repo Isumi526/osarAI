@@ -318,7 +318,7 @@ export function SchedulePage() {
   // タブ/前後移動バーは常に画面内に留まり、カレンダー本体(月表示のmonthScrollRef/
   // 週日表示のTimeGrid)だけが内部スクロールするようにする。
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
+    <main className="screen screen--wide" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
       {/* カレンダーの表示範囲を広げるため、月/3日/日の切替はタブ行を独立させず
           ヘッダー内に同居させて縦スペースを節約する(議事録要望)。 */}
       <ScreenHeader>

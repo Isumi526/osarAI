@@ -122,7 +122,7 @@ export function Tasks() {
   ];
 
   return (
-    <main className="screen">
+    <main className="screen screen--wide">
       <ScreenHeader>
         <Link to="/">← ホーム</Link>
         <strong>TODO</strong>

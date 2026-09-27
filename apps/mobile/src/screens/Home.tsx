@@ -112,7 +112,7 @@ export function Home() {
   }, []);
 
   return (
-    <main className="screen" style={{ paddingBottom: 'calc(56px + env(safe-area-inset-bottom) + 40px)' }}>
+    <main className="screen screen--wide" style={{ paddingBottom: 'calc(56px + env(safe-area-inset-bottom) + 40px)' }}>
       <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
         <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -165,8 +165,8 @@ export function Home() {
           </button>
         </section>
       ) : (
-        <>
-          <HomeSection title="次に会う人" moreTo="/schedule" moreLabel="予定を見る">
+        <div className="home-grid">
+          <HomeSection className="ga-up" title="次に会う人" moreTo="/schedule" moreLabel="予定を見る">
             {upcoming.length === 0 ? (
               <Empty>1週間以内の予定はありません</Empty>
             ) : (
@@ -193,7 +193,7 @@ export function Home() {
             )}
           </HomeSection>
 
-          <HomeSection title="TODO" moreTo="/tasks" moreLabel="すべて見る">
+          <HomeSection className="ga-todo" title="TODO" moreTo="/tasks" moreLabel="すべて見る">
             {myTodos.length === 0 && waitingTodos.length === 0 ? (
               <Empty>未完了のTODOはありません</Empty>
             ) : (
@@ -217,7 +217,7 @@ export function Home() {
             )}
           </HomeSection>
 
-          <HomeSection title="最近の会議" moreTo="/meetings" moreLabel="会議の記録">
+          <HomeSection className="ga-mt" title="最近の会議" moreTo="/meetings" moreLabel="会議の記録">
             {meetings.length === 0 ? (
               <Empty>まだ会議の記録はありません</Empty>
             ) : (
@@ -234,34 +234,12 @@ export function Home() {
               ))
             )}
           </HomeSection>
-        </>
+          <AiEntry className="ga-ai" onClick={() => navigate('/chat')} disabled={!subActive} />
+        </div>
       )}
 
-      {/* AIと話す（相談・メモ）はサブの入口。相談は相手のカードや会議の画面からも入れる */}
-      <button
-        type="button"
-        onClick={() => navigate('/chat')}
-        disabled={!subActive}
-        style={{
-          width: '100%',
-          marginTop: 16,
-          padding: '14px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: '#fff',
-          border: '1px solid var(--color-border)',
-          color: 'var(--color-text)',
-          borderRadius: 12,
-          fontSize: 15,
-        }}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ChatBubbleIcon size={20} color="var(--color-primary)" />
-          AIに相談する・メモを話す
-        </span>
-        <span style={{ color: 'var(--color-text-muted)' }}>›</span>
-      </button>
+      {/* 空の時も AI への入口は出す（PC の2列はデータがある時だけ） */}
+      {loaded && isEmpty && <AiEntry onClick={() => navigate('/chat')} disabled={!subActive} />}
     </main>
   );
 }
@@ -275,9 +253,21 @@ const cardStyle: React.CSSProperties = {
 };
 const rowStyle: React.CSSProperties = { padding: '10px 0', borderTop: '1px solid var(--color-border)', fontSize: 14 };
 
-function HomeSection({ title, moreTo, moreLabel, children }: { title: string; moreTo: string; moreLabel: string; children: React.ReactNode }) {
+function HomeSection({
+  title,
+  moreTo,
+  moreLabel,
+  children,
+  className,
+}: {
+  title: string;
+  moreTo: string;
+  moreLabel: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <section style={{ ...cardStyle, paddingBottom: 6 }}>
+    <section className={className} style={{ ...cardStyle, paddingBottom: 6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <h2 style={{ fontSize: 15, margin: 0 }}>{title}</h2>
         <Link to={moreTo} style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
@@ -316,4 +306,35 @@ function isOverdue(iso: string | null): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(iso) < today;
+}
+
+/** AIへの相談・メモの入口（控えめな1行）。PC では2列の右下に入る */
+function AiEntry({ onClick, disabled, className }: { onClick: () => void; disabled: boolean; className?: string }) {
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        marginTop: 12,
+        padding: '14px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: '#fff',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-text)',
+        borderRadius: 12,
+        fontSize: 15,
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <ChatBubbleIcon size={20} color="var(--color-primary)" />
+        AIに相談する・メモを話す
+      </span>
+      <span style={{ color: 'var(--color-text-muted)' }}>›</span>
+    </button>
+  );
 }

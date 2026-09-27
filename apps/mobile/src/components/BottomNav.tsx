@@ -2,8 +2,10 @@
 // アクティブ判定は「現在地に最も近いタブ」（例: /customers/:id ではどのタブも非アクティブ、
 // /schedule 配下は予定タブ）。対話画面(Osarai/AiChat/SelfOsarai)は main の高さを
 // ナビ分減らしているため入力欄がナビと干渉しない。
+import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { HomeIcon, ScheduleIcon, TaskIcon, SettingsIcon } from './NavIcons.js';
+import { HomeIcon, ScheduleIcon, TaskIcon, SettingsIcon, MeetingsIcon, PeopleIcon, BellNavIcon } from './NavIcons.js';
+import { useIsDesktop } from '../hooks/useIsDesktop.js';
 import { useNavGuardDirty } from './NavGuard.js';
 import { useConfirm } from './ConfirmDialog.js';
 import { useMeetingSession, fmtSec } from './MeetingSession.js';
@@ -13,6 +15,21 @@ import { getSavedMicId } from './MicPicker.js';
 export const BOTTOM_NAV_HEIGHT = 56;
 /** 中央の録音ボタンがナビの上にはみ出す高さ。固定の入力欄などはこの分だけ上に置く */
 export const NAV_OVERHANG = 30;
+/** PC のサイドバーの幅（styles.css の --sidebar-width と揃える） */
+export const SIDEBAR_WIDTH = 232;
+
+// PC のサイドバーに並べる項目。場所に余裕があるので「会議の記録」「つながり」も直接置く
+const SIDE_ITEMS = [
+  { path: '/', label: 'ホーム', Icon: HomeIcon },
+  { path: '/schedule', label: '予定', Icon: ScheduleIcon },
+  { path: '/tasks', label: 'TODO', Icon: TaskIcon },
+  { path: '/meetings', label: '会議の記録', Icon: MeetingsIcon },
+  { path: '/customers', label: 'つながり', Icon: PeopleIcon },
+];
+const SIDE_BOTTOM_ITEMS = [
+  { path: '/notifications', label: '通知', Icon: BellNavIcon },
+  { path: '/settings', label: 'マイページ', Icon: SettingsIcon },
+];
 
 // 2026-09-27: 会議録音が主導線になったので、中央に大きな録音ボタンを置く（人判断）。
 // 左右に2タブずつ。AIと話すはタブにせず、ホームや相手のカードなど文脈のある場所から入る。
@@ -35,6 +52,12 @@ export function BottomNav() {
   const isDirty = useNavGuardDirty();
   const { confirm, dialog: confirmDialog } = useConfirm();
   const ms = useMeetingSession();
+  const isDesktop = useIsDesktop();
+  // サイドバーを出している間だけ本文を右に寄せる（styles.css の body.has-sidebar）
+  useEffect(() => {
+    document.body.classList.toggle('has-sidebar', isDesktop);
+    return () => document.body.classList.remove('has-sidebar');
+  }, [isDesktop]);
 
   // 編集中(チャット系画面の未送信入力/未保存セッション)にタブ移動しようとした場合、
   // 確認ダイアログを挟んでから遷移する(議事録要望「下部ナビタップ時なども同様」)。
@@ -93,6 +116,90 @@ export function BottomNav() {
         <Icon active={active} />
         {tab.label}
       </a>
+    );
+  }
+
+  if (isDesktop) {
+    // 現在地に近い項目を選択表示（/customers/:id はつながり、/meetings/:id は会議の記録）
+    const isActive = (path: string) => (path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`));
+    const item = (it: (typeof SIDE_ITEMS)[number]) => {
+      const active = isActive(it.path);
+      const { Icon } = it;
+      return (
+        <a
+          key={it.path}
+          href={it.path}
+          onClick={(e) => onTabClick(e, it.path)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '10px 12px',
+            borderRadius: 10,
+            textDecoration: 'none',
+            fontSize: 15,
+            fontWeight: active ? 700 : 400,
+            color: active ? 'var(--color-primary)' : 'var(--color-text)',
+            background: active ? 'var(--color-primary-light)' : 'transparent',
+          }}
+        >
+          <Icon active={active} />
+          {it.label}
+        </a>
+      );
+    };
+    return (
+      <>
+        <aside
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: SIDEBAR_WIDTH,
+            background: 'var(--color-surface)',
+            borderRight: '1px solid var(--color-border)',
+            padding: '20px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            zIndex: 100,
+          }}
+        >
+          <div style={{ fontSize: 22, fontWeight: 700, padding: '0 8px 16px' }}>osarAI</div>
+          {/* 録音ボタン。録音中は赤くなって経過時間を出し、押すと録音画面へ戻る */}
+          <button
+            type="button"
+            onClick={(e) => void onRecordClick(e)}
+            style={{
+              minHeight: 52,
+              marginBottom: 14,
+              fontSize: 16,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              background: ms.recording ? (ms.paused ? '#6b6358' : '#c0392b') : 'var(--color-primary)',
+            }}
+          >
+            {ms.recording ? (
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {ms.paused ? '一時停止中' : '● 録音中'} {fmtSec(ms.elapsed)}
+              </span>
+            ) : (
+              <>
+                <MicGlyph />
+                会議を録音する
+              </>
+            )}
+          </button>
+          {SIDE_ITEMS.map(item)}
+          <div style={{ flex: 1 }} />
+          {SIDE_BOTTOM_ITEMS.map(item)}
+        </aside>
+        {confirmDialog}
+      </>
     );
   }
 

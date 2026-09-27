@@ -23,14 +23,16 @@ import { MeetingDetail } from './screens/MeetingDetail.js';
 import { BottomNav, BOTTOM_NAV_HEIGHT, NAV_OVERHANG, useBottomNavVisible } from './components/BottomNav.js';
 import { NavGuardProvider } from './components/NavGuard.js';
 import { MeetingSessionProvider } from './components/MeetingSession.js';
+import { useIsDesktop } from './hooks/useIsDesktop.js';
 
 function AppRoutes() {
   const navVisible = useBottomNavVisible();
+  const isDesktop = useIsDesktop();
   return (
     <NavGuardProvider>
       {/* 会議録音のレコーダーはアプリ全体で常駐（画面を移動しても録音が続く・T7c） */}
       <MeetingSessionProvider>
-      <div style={{ paddingBottom: navVisible ? BOTTOM_NAV_HEIGHT + NAV_OVERHANG : 0 }}>
+      <div style={{ paddingBottom: navVisible && !isDesktop ? BOTTOM_NAV_HEIGHT + NAV_OVERHANG : 0 }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/osarai" element={<Osarai />} />
