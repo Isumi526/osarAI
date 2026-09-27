@@ -7,6 +7,7 @@ import { listSavedMeetings, type SavedMeeting } from '../lib/meeting.js';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { fmtSec } from '../components/MeetingSession.js';
+import { PendingRecordingsBanner } from '../components/PendingRecordingsBanner.js';
 
 /** 議事録の冒頭から、一覧に出す1行の要約を作る（見出し行と空行は飛ばす）。 */
 function firstLine(minutes: string | null): string {
@@ -46,6 +47,7 @@ export function MeetingList() {
         <span style={{ width: 48 }} />
       </ScreenHeader>
 
+      <PendingRecordingsBanner />
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
       {loading ? (
         <p style={{ color: 'var(--color-text-muted)' }}>読み込み中…</p>

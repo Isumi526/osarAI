@@ -6,7 +6,8 @@
 //   IndexedDB に逐次保存。他画面へ移動しても録音は続き、タブを閉じても「ここまで」は残る。
 //   次回 /meeting を開いた時に未処理の録音（録音中に離脱／未アップロード／解析済み未保存）を検出して続きから再開する。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { isMeetingSetupDone, markMeetingSetupDone } from '../lib/meetingSetup.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
 import { ReviewCard, MinutesBlock, MinutesView } from '../components/ReviewCard.js';
@@ -87,6 +88,8 @@ export function MeetingRecord() {
   const waitingTasks = proposals.tasks.filter((t) => t.assignee === 'other');
   // 「自分の声を録るマイク」の選択（PC録音のみ・localStorage に保存）
   const [micId, setMicId] = useState<string | null>(() => getSavedMicId());
+  // 初回だけ準備画面（使い方＋マイク設定）を出す。2回目以降は「録音を開始」だけを大きく見せる
+  const [setupDone] = useState(() => isMeetingSetupDone());
   // 録音中に画面が消えていた合計秒（スマホ）。その間は録れていないので知らせる
   const [gapNotice, setGapNotice] = useState<number | null>(null);
   const minutesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -224,7 +227,39 @@ export function MeetingRecord() {
     setPhase('idle');
     const r = await ms.start({ micDeviceId: micId });
     if (!r.ok) setError(r.error);
+    // 一度録音を始められたら、次からは中央の録音ボタンで即開始できるようにする
+    else markMeetingSetupDone();
   }
+
+  // ホーム等から「保存されていない録音 → 保存する」で開かれた時は、その録音の続きを処理する
+  const [params] = useSearchParams();
+  const recoverParam = params.get('recover');
+  const unsavedParam = params.get('unsaved');
+  const autoRunRef = useRef(false);
+  useEffect(() => {
+    if (autoRunRef.current || gate !== 'ok') return;
+    if (recoverParam) {
+      const target = recoverable.find((x) => x.id === recoverParam);
+      if (target) {
+        autoRunRef.current = true;
+        void onRecover(target);
+      }
+    } else if (unsavedParam) {
+      const row = reviewingRows.find((x) => x.id === unsavedParam);
+      if (row) {
+        autoRunRef.current = true;
+        void saveFromRow(row, null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gate, recoverable, reviewingRows, recoverParam, unsavedParam]);
+
+  // 中央の録音ボタン（即開始）で失敗した時は、その理由をこの画面で見せる
+  const location = useLocation();
+  useEffect(() => {
+    const startError = (location.state as { startError?: string } | null)?.startError;
+    if (startError) setError(startError);
+  }, [location.state]);
 
   const applyIngest = useCallback((res: IngestResponse, sid: string | null) => {
     setMeetingId(res.meetingId);
@@ -444,12 +479,6 @@ export function MeetingRecord() {
     }
   }
 
-  async function onDiscard(s: RecordingSession) {
-    const ok = await confirm(`この録音（${fmtSec(s.durationSec ?? Math.round((s.updatedAt - s.startedAt) / 1000))}）を破棄しますか？`);
-    if (!ok) return;
-    await deleteSession(s.id).catch(() => {});
-    await loadRecoverables();
-  }
 
   /** 話者に入れた実名を候補（つながり）へ反映。既存のつながりなら customer_id 付きに。 */
   function syncSpeakerToPeople(name: string) {
@@ -564,41 +593,9 @@ export function MeetingRecord() {
           </Card>
         )}
 
-        {/* 復旧: 未処理の録音（端末に残っている）／未保存の解析結果（サーバー） */}
-        {showIdle && gate === 'ok' && (recoverable.length > 0 || reviewingRows.length > 0) && (
-          <section style={{ padding: 16, background: '#fff7f0', border: '1px solid var(--color-primary)', borderRadius: 12, display: 'grid', gap: 10 }}>
-            <strong>前回の続きがあります</strong>
-            {recoverable.map((s) => (
-              <div key={s.id} style={{ display: 'grid', gap: 6, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
-                <span style={{ fontSize: 13 }}>
-                  {new Date(s.startedAt).toLocaleString('ja-JP')} の録音（{fmtSec(s.durationSec ?? Math.round((s.updatedAt - s.startedAt) / 1000))}・
-                  {s.status === 'recording' ? '録音中に閉じられました' : s.status === 'stopped' ? '未アップロード' : s.status === 'uploaded' ? '解析前' : '解析済み・未保存'}）
-                </span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" onClick={() => void onRecover(s)} style={{ flex: 1, minHeight: 40 }}>
-                    {s.status === 'ingested' ? '保存する' : '解析する'}
-                  </button>
-                  <button type="button" onClick={() => void onDiscard(s)} style={{ minHeight: 40, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
-                    破棄
-                  </button>
-                </div>
-              </div>
-            ))}
-            {reviewingRows
-              .filter((r) => !recoverable.some((s) => s.meetingId === r.id))
-              .map((r) => (
-                <div key={r.id} style={{ display: 'grid', gap: 6, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
-                  <span style={{ fontSize: 13 }}>
-                    {new Date(r.created_at).toLocaleString('ja-JP')} の会議（{r.duration_sec ? fmtSec(r.duration_sec) : '長さ不明'}・未保存）
-                  </span>
-                  <button type="button" onClick={() => void saveFromRow(r, null)} disabled={saving} style={{ minHeight: 40 }}>
-                    {saving ? '保存中…' : '保存する'}
-                  </button>
-                </div>
-              ))}
-          </section>
-        )}
-
+        {/* 「前回の続き」（未保存の録音）はここから外し、ホームと「会議の記録」に出す（2026-09-27・人判断）。
+            録音ページは急いで押す場所なので、録音に関係ないものは置かない。
+            ホーム等から ?recover=<端末の録音ID> / ?unsaved=<サーバーの録音ID> で開かれた時だけ、ここで続きを処理する。 */}
         {showIdle && gate === 'ok' && mode === 'none' && (
           <Card title="この端末では会議録音を使えません">
             <p style={{ fontSize: 14, color: 'var(--color-text-muted)', marginTop: 8 }}>マイクの使えるブラウザ（パソコンの Chrome / Edge、またはスマホ）でお試しください。</p>
@@ -606,31 +603,34 @@ export function MeetingRecord() {
         )}
 
         {showIdle && gate === 'ok' && mode === 'pc' && (
-          <>
-            <Card title={`使い方（${OS_LABEL[platform.os]} の ${BROWSER_LABEL[platform.browser]}・Zoomアプリ）`}>
-              <ol style={listStyle}>
-                <li>Zoom を開いたまま「録音を開始」を押す</li>
-                <li>
-                  共有ダイアログで<b>「画面全体」</b>を選び、
-                  {platform.os === 'windows' ? <b>「システム音声も共有する」にチェック</b> : <b>「システム音声を共有」が ON</b>}
-                  になっていることを確認して「共有」
-                  <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    （OFF のままだと相手の声が録れません。その場合は開始できずにお知らせします。Zoom をブラウザで開いている場合は、そのタブを選び「タブの音声も共有」をON）
-                  </span>
-                </li>
-                <li>会議が終わったら「収録を終了」。Zoom を先に閉じても自動で解析に進みます</li>
-              </ol>
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                相手にはボットも通知も一切表示されません（録音するときは、相手に一言伝えておくのがおすすめです）。録音中は他の画面に移動しても録音は続き、タブを閉じてもそこまでの録音は端末に残ります。
-                {platform.os === 'mac' && ' システム音声の共有は Chrome 141 以降・macOS 14.2 以降。初回は macOS の「画面収録」の許可が必要です。'}
-              </p>
-            </Card>
-            <MicPicker onChange={setMicId} />
-            {nameHint && <NameHint />}
-            <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
-              録音を開始
-            </button>
-          </>
+          <SetupOrQuickStart
+            setupDone={setupDone}
+            onStart={onStart}
+            nameHint={nameHint}
+            guide={
+              <>
+                <Card title={`使い方（${OS_LABEL[platform.os]} の ${BROWSER_LABEL[platform.browser]}・Zoomアプリ）`}>
+                  <ol style={listStyle}>
+                    <li>Zoom を開いたまま「録音を開始」を押す</li>
+                    <li>
+                      共有ダイアログで<b>「画面全体」</b>を選び、
+                      {platform.os === 'windows' ? <b>「システム音声も共有する」にチェック</b> : <b>「システム音声を共有」が ON</b>}
+                      になっていることを確認して「共有」
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        （OFF のままだと相手の声が録れません。その場合は開始できずにお知らせします。Zoom をブラウザで開いている場合は、そのタブを選び「タブの音声も共有」をON）
+                      </span>
+                    </li>
+                    <li>会議が終わったら「収録を終了」。Zoom を先に閉じても自動で解析に進みます</li>
+                  </ol>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
+                    相手にはボットも通知も一切表示されません（録音するときは、相手に一言伝えておくのがおすすめです）。録音中は他の画面に移動しても録音は続き、タブを閉じてもそこまでの録音は端末に残ります。
+                    {platform.os === 'mac' && ' システム音声の共有は Chrome 141 以降・macOS 14.2 以降。初回は macOS の「画面収録」の許可が必要です。'}
+                  </p>
+                </Card>
+                <MicPicker onChange={setMicId} />
+              </>
+            }
+          />
         )}
 
         {showIdle && gate === 'ok' && mode === 'mic' && !platform.mobile && (
@@ -657,29 +657,30 @@ export function MeetingRecord() {
         )}
 
         {showIdle && gate === 'ok' && mode === 'mic' && platform.mobile && (
-          <>
-            <Card title={`対面の商談を録音する（${OS_LABEL[platform.os]}）`}>
-              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。録音するときは、相手に一言伝えておくのがおすすめです。
-              </p>
-              <ol style={listStyle}>
-                <li>スマホを机の上など、<b>二人の声が届く場所</b>に置く</li>
-                <li>「録音を開始」を押す（マイクの許可を求められたら許可）</li>
-                <li>
-                  <b>この画面を開いたまま</b>話す
-                  <span style={{ display: 'block', fontSize: 12 }}>（画面は自動では消えません。電源ボタンで画面を消したり、他のアプリに切り替えると、その間は録音されません）</span>
-                </li>
-                <li>終わったら「収録を終了」</li>
-              </ol>
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
-                Zoom などのオンライン会議は<b>パソコンの Chrome</b> で録音してください。スマホでは Zoom の相手の声を取り込めません。
-              </p>
-            </Card>
-            {nameHint && <NameHint />}
-            <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
-              録音を開始
-            </button>
-          </>
+          <SetupOrQuickStart
+            setupDone={setupDone}
+            onStart={onStart}
+            nameHint={nameHint}
+            guide={
+                <Card title={`対面の商談を録音する（${OS_LABEL[platform.os]}）`}>
+                  <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
+                    スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。録音するときは、相手に一言伝えておくのがおすすめです。
+                  </p>
+                  <ol style={listStyle}>
+                    <li>スマホを机の上など、<b>二人の声が届く場所</b>に置く</li>
+                    <li>「録音を開始」を押す（マイクの許可を求められたら許可）</li>
+                    <li>
+                      <b>この画面を開いたまま</b>話す
+                      <span style={{ display: 'block', fontSize: 12 }}>（画面は自動では消えません。電源ボタンで画面を消したり、他のアプリに切り替えると、その間は録音されません）</span>
+                    </li>
+                    <li>終わったら「収録を終了」</li>
+                  </ol>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
+                    Zoom などのオンライン会議は<b>パソコンの Chrome</b> で録音してください。スマホでは Zoom の相手の声を取り込めません。
+                  </p>
+                </Card>
+            }
+          />
         )}
 
         {ms.starting && (
@@ -1065,5 +1066,47 @@ function LevelBar({ label, value }: { label: string; value: number }) {
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * 初回は「使い方＋マイク設定＋録音を開始」をそのまま見せ、2回目以降は「録音を開始」だけを大きく出して
+ * 使い方とマイク設定は折りたたむ（2026-09-27・録音ページは急いで押す場所なので余計なものを見せない）。
+ */
+function SetupOrQuickStart({
+  setupDone,
+  onStart,
+  nameHint,
+  guide,
+}: {
+  setupDone: boolean;
+  onStart: () => void;
+  nameHint: boolean;
+  guide: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!setupDone) {
+    return (
+      <>
+        {guide}
+        {nameHint && <NameHint />}
+        <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
+          録音を開始
+        </button>
+      </>
+    );
+  }
+  return (
+    <>
+      <button type="button" onClick={onStart} style={{ minHeight: 64, fontSize: 18, fontWeight: 700 }}>
+        録音を開始
+      </button>
+      {nameHint && <NameHint />}
+      {/* 開いた時だけ中身を描画する（マイク一覧の取得でマイクを一瞬掴むのを、普段は避ける） */}
+      <details onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--color-text-muted)' }}>使い方・マイクの設定</summary>
+        {open && <div style={{ display: 'grid', gap: 12, marginTop: 10 }}>{guide}</div>}
+      </details>
+    </>
   );
 }

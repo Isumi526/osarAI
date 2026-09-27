@@ -7,6 +7,7 @@ import { getMyProfile, updateMyUserProfile, updateMyDisplayName, listAgencyProdu
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
+import { MicPicker } from '../components/MicPicker.js';
 
 // 目標・扱っている商品は複数登録できるよう別UI(goals/products)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
@@ -37,6 +38,8 @@ export function Settings() {
   // プロフィール項目(userProfile/goals)を未保存で編集中かどうか。BottomNav離脱時の確認ダイアログに使う。
   const [profileDirty, setProfileDirty] = useState(false);
 
+  // マイクの設定は開いた時だけ読み込む（一覧の取得でマイクの許可を求めるため）
+  const [micOpen, setMicOpen] = useState(false);
   // お名前（本名）。会議の文字起こしで「自分」を見分けるのに使う
   const [displayName, setDisplayName] = useState('');
   const [nameMsg, setNameMsg] = useState<string | null>(null);
@@ -510,6 +513,25 @@ export function Settings() {
       >
         ログアウト
       </button>
+      {/* 録音に使うマイク（録音ページの初回準備画面と同じ設定）。2回目以降は録音ページに出さないのでここでも変えられる */}
+      <details
+        onToggle={(e) => setMicOpen((e.currentTarget as HTMLDetailsElement).open)}
+        style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16, marginTop: 16 }}
+      >
+        <summary style={{ cursor: 'pointer', fontSize: 16, fontWeight: 700 }}>マイクの設定</summary>
+        {micOpen && (
+          <div style={{ marginTop: 12 }}>
+            <MicPicker />
+          </div>
+        )}
+      </details>
+
+      {/* 使い方はヘッダーから外し、忘れた時の逃げ道としてここに小さく残す（2026-09-27） */}
+      <p style={{ textAlign: 'center', margin: '24px 0 8px' }}>
+        <Link to="/tutorial" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+          使い方をもう一度見る
+        </Link>
+      </p>
     </main>
   );
 }

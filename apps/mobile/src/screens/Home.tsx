@@ -14,6 +14,7 @@ import { ChatBubbleIcon } from '../components/NavIcons.js';
 import { BellIcon } from '../components/BellIcon.js';
 import { countUnread } from '../lib/notifications.js';
 import { AddToHomeScreenBanner } from '../components/AddToHomeScreenBanner.js';
+import { PendingRecordingsBanner } from '../components/PendingRecordingsBanner.js';
 
 const SELF_INTRO_PROMPTED_KEY = 'osarai_self_intro_prompted';
 
@@ -115,10 +116,7 @@ export function Home() {
       <ScreenHeader>
         <h1 style={{ margin: 0, fontSize: 22 }}>osarAI</h1>
         <span style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* 使い方はいつでも見返せるよう右上に常設する（ITに不慣れなユーザー向け） */}
-          <Link to="/tutorial" style={{ fontSize: 13, color: 'var(--color-primary)', textDecoration: 'none' }}>
-            使い方
-          </Link>
+          {/* 使い方はヘッダーから外した（2026-09-27・機能が絞られ初回案内で足りるため）。マイページの下に残す */}
           {/* 通知ベル。未読があれば赤いバッジで気づけるようにする */}
           <Link
             to="/notifications"
@@ -148,6 +146,8 @@ export function Home() {
 
       {/* ホーム画面への追加(PWA)案内。ブラウザ利用者向け。ネイティブ/追加済み/
           「今後表示しない」を押した場合は何も描画しない(空の余白も出ない)。 */}
+      {/* 保存されていない録音（途中で止まった等）。ある時だけ一番上に出す */}
+      <PendingRecordingsBanner />
       <AddToHomeScreenBanner style={{ margin: '12px 0' }} />
 
       {/* 2026-09-27 ホームを「次の行動」中心に作り替え（人判断）。会議録音が主導線になり、

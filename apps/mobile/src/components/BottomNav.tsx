@@ -7,6 +7,8 @@ import { HomeIcon, ScheduleIcon, TaskIcon, SettingsIcon } from './NavIcons.js';
 import { useNavGuardDirty } from './NavGuard.js';
 import { useConfirm } from './ConfirmDialog.js';
 import { useMeetingSession, fmtSec } from './MeetingSession.js';
+import { isMeetingSetupDone } from '../lib/meetingSetup.js';
+import { getSavedMicId } from './MicPicker.js';
 
 export const BOTTOM_NAV_HEIGHT = 56;
 /** 中央の録音ボタンがナビの上にはみ出す高さ。固定の入力欄などはこの分だけ上に置く */
@@ -44,6 +46,26 @@ export function BottomNav() {
       if (!ok) return;
     }
     navigate(path);
+  }
+
+  /**
+   * 中央の録音ボタン。2回目以降（準備済みの端末）は押した時点でそのまま録音を始める（2026-09-27）。
+   * 画面共有・マイクの許可はユーザー操作の直後でないと出せないので、画面遷移を待たずにここで開始する。
+   */
+  async function onRecordClick(e: React.MouseEvent) {
+    e.preventDefault();
+    if (ms.recording || ms.starting || !isMeetingSetupDone() || ms.mode === 'none') {
+      await onTabClick(e, '/meeting');
+      return;
+    }
+    if (isDirty) {
+      const ok = await confirm('ここまでの内容はまだ保存されていません。このまま録音を始めますか？（内容は失われます）');
+      if (!ok) return;
+    }
+    const started = ms.start({ micDeviceId: getSavedMicId() });
+    navigate('/meeting');
+    const r = await started;
+    if (!r.ok) navigate('/meeting', { replace: true, state: { startError: r.error } });
   }
 
   function renderTab(tab: (typeof LEFT_TABS)[number]) {
@@ -94,7 +116,7 @@ export function BottomNav() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 0', minHeight: BOTTOM_NAV_HEIGHT }}>
           <button
             type="button"
-            onClick={(e) => onTabClick(e, '/meeting')}
+            onClick={(e) => void onRecordClick(e)}
             aria-label={ms.recording ? `録音中 ${fmtSec(ms.elapsed)}・録音画面へ` : '会議を録音する'}
             style={{
               width: RECORD_SIZE,
