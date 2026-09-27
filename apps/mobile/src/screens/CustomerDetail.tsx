@@ -170,11 +170,13 @@ export function CustomerDetail() {
         >
           ＋ この人をおさらい
         </button>
+        {/* 相手を指定した相談は /chat/legacy（/api/advice）で行う。こちらは相手の履歴と議事録を
+            読み込んで答える。/chat（統合チャット）は customerId を受け取らず、履歴を参照しない。 */}
         <button
-          onClick={() => navigate(`/chat?customerId=${customer.id}`)}
+          onClick={() => navigate(`/chat/legacy?customerId=${customer.id}`)}
           style={{ padding: 10 }}
         >
-          相談
+          この人について相談
         </button>
       </div>
       {SHOW_RECORDING_IMPORT && (

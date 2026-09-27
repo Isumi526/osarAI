@@ -121,7 +121,7 @@ export function CustomerList() {
         <p>読み込み中…</p>
       ) : customers.length === 0 ? (
         <p style={{ color: '#6b6358', marginTop: 16 }}>
-          まだつながりがいません。ホームの「AIと話す」から、会った人のことを話すと登録できます。
+          まだつながりがいません。会議を録音すると、会った人が自動で登録されます。
         </p>
       ) : filtered.length === 0 ? (
         <p style={{ color: '#6b6358' }}>「{searchQuery}」に一致するつながりが見つかりません。</p>

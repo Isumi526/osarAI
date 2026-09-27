@@ -79,7 +79,7 @@ const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX
   },
   {
     titleLines: ['会う前に、', 'ボタンを1つ押すだけ'],
-    body: 'Zoomの前や、対面で会う前に「会議を録音する」を押すだけ。相手の画面には何も表示されません（会議にボットは入りません）。',
+    body: 'Zoomの前や、対面で会う前に、画面下の真ん中の録音ボタンを押すだけ。相手の画面には何も表示されません（会議にボットは入りません）。',
     Illustration: MicIllustration,
   },
   {
@@ -89,12 +89,12 @@ const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX
   },
   {
     titleLines: ['次に会う前に、', '前回の話を思い出せる'],
-    body: '会った人のカードを開けば、これまでの議事録がすぐ読めます。久しぶりに会う人でも、前に何を話したかで慌てません。',
+    body: 'ホームには次に会う人と、その人との前回の話が並びます。久しぶりに会う人でも、前に何を話したかで慌てません。',
     Illustration: NotesIllustration,
   },
   {
     titleLines: ['次の一手は、', 'AIに相談できる'],
-    body: '過去の会議を踏まえて、「この人に次どう連絡する？」といった相談に具体的に答えます。会議以外のちょっとしたメモは「AIと話す」から声で残せます。',
+    body: '過去の会議を踏まえて、「この人に次どう連絡する？」といった相談に具体的に答えます。会議以外のちょっとしたメモも、声で話して残せます。',
     Illustration: LightbulbIllustration,
   },
 ];

@@ -70,9 +70,19 @@ export function MeetingDetail() {
               {row.duration_sec ? `・${fmtSec(row.duration_sec)}` : ''}
             </span>
             {customer ? (
-              <button type="button" onClick={() => navigate(`/customers/${customer.id}`)} style={{ minHeight: 44 }}>
-                {customer.name} のカードを見る
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => navigate(`/customers/${customer.id}`)} style={{ flex: 1, minHeight: 44 }}>
+                  {customer.name} のカードを見る
+                </button>
+                {/* 相手の履歴（この会議の議事録を含む）を読み込んだ相談画面へ */}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/chat/legacy?customerId=${customer.id}`)}
+                  style={{ minHeight: 44, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                >
+                  この会議を踏まえて相談
+                </button>
+              </div>
             ) : (
               <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>相手が未特定の会議です。</span>
             )}

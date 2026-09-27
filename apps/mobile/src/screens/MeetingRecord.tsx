@@ -997,6 +997,15 @@ export function MeetingRecord() {
                 相手のカードを見る
               </button>
             )}
+            {primaryCustomerId && (
+              <button
+                type="button"
+                onClick={() => navigate(`/chat/legacy?customerId=${primaryCustomerId}`)}
+                style={{ minHeight: 48, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              >
+                この会議を踏まえて相談
+              </button>
+            )}
             <button
               type="button"
               onClick={() => navigate('/meetings')}

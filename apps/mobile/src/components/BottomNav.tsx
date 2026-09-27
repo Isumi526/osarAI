@@ -10,14 +10,20 @@ import { useMeetingSession, fmtSec } from './MeetingSession.js';
 
 export const BOTTOM_NAV_HEIGHT = 56;
 
-// 入口をAIチャット1つに集約したため、「おさらい」「相談」タブは廃止し(ホームのAIボタンへ)、
-// 代わりに「タスク」を置く(2026-08-06 UI/UX刷新)。
-const TABS = [
+// 2026-09-27: 会議録音が主導線になったので、中央に大きな録音ボタンを置く（人判断）。
+// 左右に2タブずつ。AIと話すはタブにせず、ホームや相手のカードなど文脈のある場所から入る。
+const LEFT_TABS = [
   { path: '/', label: 'ホーム', Icon: HomeIcon },
   { path: '/schedule', label: '予定', Icon: ScheduleIcon },
+];
+const RIGHT_TABS = [
   { path: '/tasks', label: 'TODO', Icon: TaskIcon },
   { path: '/settings', label: 'マイページ', Icon: SettingsIcon },
 ];
+// 中央ボタンの直径。他タブのアイコン（約24px）と同じ高さだけ流れに残し、残りをバーの上へはみ出させる
+// （こうするとラベルの高さが他のタブと揃う）。
+const RECORD_SIZE = 56;
+const ICON_SLOT = 20;
 
 export function BottomNav() {
   const { pathname } = useLocation();
@@ -38,35 +44,36 @@ export function BottomNav() {
     navigate(path);
   }
 
+  function renderTab(tab: (typeof LEFT_TABS)[number]) {
+    const active = pathname === tab.path;
+    const { Icon } = tab;
+    return (
+      <a
+        key={tab.path}
+        href={tab.path}
+        onClick={(e) => onTabClick(e, tab.path)}
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 2,
+          padding: '8px 0',
+          minHeight: BOTTOM_NAV_HEIGHT,
+          color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
+          fontWeight: active ? 700 : 400,
+          fontSize: 12,
+          textDecoration: 'none',
+        }}
+      >
+        <Icon active={active} />
+        {tab.label}
+      </a>
+    );
+  }
+
   return (
     <>
-      {/* 録音中に他画面へ移動しても録音は続く。戻り口としてナビの上に帯を出す（T7c） */}
-      {ms.recording && pathname !== '/meeting' && (
-        <button
-          type="button"
-          onClick={() => navigate('/meeting')}
-          style={{
-            position: 'fixed',
-            bottom: BOTTOM_NAV_HEIGHT,
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            border: 'none',
-            borderRadius: 0,
-            background: ms.paused ? '#6b6358' : '#c0392b',
-            color: '#fff',
-            fontSize: 13,
-            padding: '8px 12px',
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 8,
-            marginBottom: 'env(safe-area-inset-bottom)',
-          }}
-        >
-          <span>{ms.paused ? '❚❚ 一時停止中' : '● 録音中'} {fmtSec(ms.elapsed)}</span>
-          <span style={{ opacity: 0.85 }}>録音画面へ戻る →</span>
-        </button>
-      )}
       <nav
         style={{
           position: 'fixed',
@@ -80,33 +87,47 @@ export function BottomNav() {
           zIndex: 100,
         }}
       >
-        {TABS.map((tab) => {
-          const active = pathname === tab.path;
-          const { Icon } = tab;
-          return (
-            <a
-              key={tab.path}
-              href={tab.path}
-              onClick={(e) => onTabClick(e, tab.path)}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                padding: '8px 0',
-                minHeight: BOTTOM_NAV_HEIGHT,
-                color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                fontWeight: active ? 700 : 400,
-                fontSize: 12,
-                textDecoration: 'none',
-              }}
-            >
-              <Icon active={active} />
-              {tab.label}
-            </a>
-          );
-        })}
+        {LEFT_TABS.map(renderTab)}
+        {/* 中央の録音ボタン。録音中は赤くなり経過時間を出す＝どの画面からでも録音画面へ戻れる */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '8px 0', minHeight: BOTTOM_NAV_HEIGHT }}>
+          <button
+            type="button"
+            onClick={(e) => onTabClick(e, '/meeting')}
+            aria-label={ms.recording ? `録音中 ${fmtSec(ms.elapsed)}・録音画面へ` : '会議を録音する'}
+            style={{
+              width: RECORD_SIZE,
+              height: RECORD_SIZE,
+              marginTop: -(RECORD_SIZE - ICON_SLOT),
+              flexShrink: 0,
+              borderRadius: '50%',
+              border: '4px solid var(--color-surface)',
+              background: ms.recording ? (ms.paused ? '#6b6358' : '#c0392b') : 'var(--color-primary)',
+              color: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+            }}
+          >
+            {ms.recording ? (
+              <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtSec(ms.elapsed)}</span>
+            ) : (
+              <MicGlyph />
+            )}
+          </button>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: pathname === '/meeting' ? 700 : 400,
+              color: ms.recording ? '#c0392b' : 'var(--color-primary)',
+            }}
+          >
+            {ms.recording ? (ms.paused ? '一時停止中' : '録音中') : '録音'}
+          </span>
+        </div>
+        {RIGHT_TABS.map(renderTab)}
       </nav>
       {confirmDialog}
     </>
@@ -121,4 +142,14 @@ export function useBottomNavVisible() {
   if (pathname === '/welcome') return false;
   if (pathname === '/self-osarai' && new URLSearchParams(search).get('from') === 'welcome') return false;
   return true;
+}
+
+/** 録音ボタンのマイク（ナビのアイコンと同じ線画スタイル） */
+function MicGlyph() {
+  return (
+    <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="9" y="2.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+    </svg>
+  );
 }
