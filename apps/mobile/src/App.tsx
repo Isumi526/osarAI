@@ -20,7 +20,7 @@ import { Welcome } from './screens/Welcome.js';
 import { MeetingRecord } from './screens/MeetingRecord.js';
 import { MeetingList } from './screens/MeetingList.js';
 import { MeetingDetail } from './screens/MeetingDetail.js';
-import { BottomNav, BOTTOM_NAV_HEIGHT, useBottomNavVisible } from './components/BottomNav.js';
+import { BottomNav, BOTTOM_NAV_HEIGHT, NAV_OVERHANG, useBottomNavVisible } from './components/BottomNav.js';
 import { NavGuardProvider } from './components/NavGuard.js';
 import { MeetingSessionProvider } from './components/MeetingSession.js';
 
@@ -30,7 +30,7 @@ function AppRoutes() {
     <NavGuardProvider>
       {/* 会議録音のレコーダーはアプリ全体で常駐（画面を移動しても録音が続く・T7c） */}
       <MeetingSessionProvider>
-      <div style={{ paddingBottom: navVisible ? BOTTOM_NAV_HEIGHT : 0 }}>
+      <div style={{ paddingBottom: navVisible ? BOTTOM_NAV_HEIGHT + NAV_OVERHANG : 0 }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/osarai" element={<Osarai />} />

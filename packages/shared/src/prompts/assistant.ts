@@ -70,6 +70,8 @@ export interface AssistantPromptContext {
   userContext: string;
   /** これまでの対話履歴（整形済み） */
   history: string;
+  /** 話題に出ている相手の記録（buildContext の出力）。相談の根拠にする */
+  relatedContext?: string;
 }
 
 export function buildAssistantPrompt(ctx: AssistantPromptContext): string {
@@ -79,22 +81,23 @@ export function buildAssistantPrompt(ctx: AssistantPromptContext): string {
     `顧客名簿(登録済みのつながり):\n${ctx.customerRoster || 'なし'}`,
     `商品名簿(固有名詞の名寄せ用):\n${ctx.productRoster || 'なし'}`,
     `ユーザー自身について:\n${ctx.userContext || 'なし'}`,
+    // 話題に出ている相手の記録（過去の会議の議事録を含む）。相談にはこれを踏まえて具体的に答える。
+    ...(ctx.relatedContext ? [`話題に出ている相手のこれまでの記録（相談にはこれを踏まえて具体的に答える。書かれていないことは推測しない）:\n${ctx.relatedContext}`] : []),
     `対話履歴:\n${ctx.history}`,
   ].join('\n\n');
 }
 
-/** 統合チャットの初回メッセージ。複数人・複数予定・複数タスクを一度に話せることを伝える。 */
-export const ASSISTANT_OPENING = `おつかれさまです。今日あったことを、思い出すままに話してください。
+/** 統合チャットの初回メッセージ。会議録音が主導線になった後の「相談」と「メモ」の入口（2026-09-27）。 */
+export const ASSISTANT_OPENING = `おつかれさまです。相談したいことや、録音できなかった会話のメモを話してください。
 
-例えばこんなふうに、まとめて話して大丈夫です。
+例えば:
+「来週△△さんと2回目に会います。前回の話を踏まえて、何を聞けばいいですか？」
+「今日、□□さんと立ち話をして、来週火曜の14時に会う約束をしました。」
 
-「今日は〇〇の交流会に参加しました。△△さんと話して、来週の火曜14時にカフェで会う約束になりました。それまでに資料を送ることになっています。□□さんとも名刺交換して、保険の見直しを考えているそうです。」
+登録済みの相手の名前を出すと、その人とのこれまでの会議を踏まえて答えます。`;
 
-相談したいことや、自分自身のことでも構いません。`;
-
-/** 開始時に提示する3つの入口（ヒントUI）。 */
+/** 開始時に提示する入口（ヒントUI）。「自分のことについて話す」は機能を絞る判断で外した（2026-09-27）。 */
 export const ASSISTANT_HINTS = [
-  { label: '今日の出来事を話す', message: '今日の出来事を話したいです。' },
-  { label: 'AIに相談する', message: '相談したいことがあります。' },
-  { label: '自分のことについて話す', message: '自分のことについて話したいです。' },
+  { label: '相談する', message: '相談したいことがあります。' },
+  { label: '会ったことをメモする', message: '今日会った人のことをメモしたいです。' },
 ] as const;

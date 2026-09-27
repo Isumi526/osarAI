@@ -1000,7 +1000,9 @@ export function MeetingRecord() {
             {primaryCustomerId && (
               <button
                 type="button"
-                onClick={() => navigate(`/chat/legacy?customerId=${primaryCustomerId}`)}
+                onClick={() =>
+                  navigate(`/chat?customerId=${primaryCustomerId}&name=${encodeURIComponent(saved?.customers.find((c) => c.id === primaryCustomerId)?.name ?? '')}`)
+                }
                 style={{ minHeight: 48, width: '100%', background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
               >
                 この会議を踏まえて相談
@@ -1042,7 +1044,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function NameHint() {
   return (
     <p style={{ margin: 0, padding: 12, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-border)', fontSize: 13 }}>
-      マイページの<b>表示名を本名（漢字）</b>にしておくと、会話の中の「自分」と「相手」の判定が安定し、議事録の精度が上がります。
+      マイページの「<b>あなたのお名前</b>」を本名（漢字）にしておくと、会話の中の「自分」と「相手」の判定が安定し、議事録の精度が上がります。
     </p>
   );
 }

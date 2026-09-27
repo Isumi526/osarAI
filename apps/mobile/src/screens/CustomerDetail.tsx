@@ -9,10 +9,9 @@ import {
   type Interaction,
 } from '../lib/db.js';
 import { importRecording } from '../lib/recordings.js';
-import { TempIcon, TEMP_JA } from '../components/TempIcon.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { MinutesView } from '../components/ReviewCard.js';
-import type { AiSummary, InteractionSource, Temperature } from '@osarai/shared';
+import type { AiSummary, InteractionSource } from '@osarai/shared';
 
 // 録音取り込み機能はphase2に見送り（議事録『review』・回答A）。UIを非表示にする。
 // 実装本体(importRecording/onPickRecording)は残し、フラグ切替でphase2に復帰できるようにする。
@@ -107,41 +106,31 @@ export function CustomerDetail() {
         style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16, marginTop: 12 }}
       >
         <h1 style={{ margin: '0 0 8px' }}>{customer.name}</h1>
-        <p style={{ margin: '4px 0' }}>
-          温度感: {customer.temperature ? (
-            <>
-              <TempIcon value={customer.temperature as Temperature} /> {TEMP_JA[customer.temperature as Temperature]}
-            </>
-          ) : '—'}
-        </p>
-        {customer.needs && <p style={{ margin: '4px 0' }}>ニーズ: {customer.needs}</p>}
+        {/* 2026-09-27 機能を絞る（人判断）: 温度感・年齢・性別・扱っている商品は CRM 時代の項目で、
+            この層には意味が伝わりにくいので画面から外した（DB のデータは残している）。
+            ニーズとつながりたい人は「この人のメモ」1つにまとめて見せる。 */}
         {(() => {
-          // おさらい対話のAI抽出で custom_fields に入る想定の商品/年齢/性別（0007の
-          // userProfile.products/age/genderと同じパターン）。値があるものだけ表示。
           const cf = (customer.custom_fields ?? {}) as Record<string, unknown>;
-          const age = typeof cf.age === 'string' ? cf.age : undefined;
-          const gender = typeof cf.gender === 'string' ? cf.gender : undefined;
-          const products = Array.isArray(cf.products)
-            ? cf.products.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-            : typeof cf.products === 'string' && cf.products.trim()
-              ? [cf.products]
-              : [];
           const wantsToMeet = Array.isArray(cf.wants_to_meet)
             ? cf.wants_to_meet.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
             : [];
-          if (!age && !gender && products.length === 0 && wantsToMeet.length === 0) return null;
+          const memo = [
+            ...(customer.needs ?? '')
+              .split(/\s*\/\s*|\n/)
+              .map((x) => x.trim())
+              .filter(Boolean),
+            ...wantsToMeet.map((w) => `つながりたい人: ${w}`),
+          ];
+          if (memo.length === 0) return null;
           return (
-            <>
-              {(age || gender || products.length > 0) && (
-                <p style={{ margin: '4px 0' }}>
-                  {age && <>年齢: {age}　</>}
-                  {gender && <>性別: {gender}　</>}
-                  {products.length > 0 && <>扱っている商品: {products.join('、')}</>}
-                </p>
-              )}
-              {/* 相手が「どんな人とつながりたいか」（会議録音の抽出・T7）。紹介の起点になる */}
-              {wantsToMeet.length > 0 && <p style={{ margin: '4px 0' }}>つながりたい人: {wantsToMeet.join('、')}</p>}
-            </>
+            <div style={{ margin: '4px 0' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>この人のメモ</div>
+              <ul style={{ margin: '2px 0 0', paddingLeft: 18, fontSize: 14, lineHeight: 1.7 }}>
+                {memo.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
           );
         })()}
         {customer.last_met_at && (
@@ -151,7 +140,7 @@ export function CustomerDetail() {
         )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={() => navigate(`/customers/${customer.id}/edit`)} style={{ flex: 1, padding: 10 }}>
-            編集
+            名前・メモを編集
           </button>
           <button
             onClick={onDelete}
@@ -162,19 +151,12 @@ export function CustomerDetail() {
         </div>
       </section>
 
-      {/* 導線: おさらい / 録音取り込み（F-03サブ経路） */}
+      {/* 導線: この人について相談（旧「＋ この人をおさらい」は会議録音とメモに役割を譲ったので外した・2026-09-27）。
+          相談は統合チャット1系統。customerId を渡すと、サーバーがこの人の履歴と議事録を読んで答える */}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button
-          onClick={() => navigate(`/osarai?customerId=${customer.id}`)}
+          onClick={() => navigate(`/chat?customerId=${customer.id}&name=${encodeURIComponent(customer.name)}`)}
           style={{ flex: 1, padding: 10 }}
-        >
-          ＋ この人をおさらい
-        </button>
-        {/* 相手を指定した相談は /chat/legacy（/api/advice）で行う。こちらは相手の履歴と議事録を
-            読み込んで答える。/chat（統合チャット）は customerId を受け取らず、履歴を参照しない。 */}
-        <button
-          onClick={() => navigate(`/chat/legacy?customerId=${customer.id}`)}
-          style={{ padding: 10 }}
         >
           この人について相談
         </button>

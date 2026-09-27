@@ -13,7 +13,7 @@ import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
-import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
+import { BOTTOM_NAV_HEIGHT, NAV_OVERHANG } from '../components/BottomNav.js';
 import type { OsaraiExtracted } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -385,7 +385,7 @@ export function Osarai() {
         minHeight: 'calc(100dvh - 56px)',
         // 送信フォームがposition:fixedで画面下部に重なるため、ページ末尾のコンテンツが
         // 隠れないよう実測したフォーム高さ分の余白を追加する(.screenの既定paddingBottomを上書き)。
-        ...(done ? {} : { paddingBottom: 24 + BOTTOM_NAV_HEIGHT + formHeight }),
+        ...(done ? {} : { paddingBottom: 24 + BOTTOM_NAV_HEIGHT + NAV_OVERHANG + formHeight }),
       }}
     >
       <ScreenHeader>
@@ -678,7 +678,7 @@ export function Osarai() {
               left: 0,
               right: 0,
               // BottomNav(position:fixed・bottom:0・zIndex:100)と重ならないよう、その上に乗せる。
-              bottom: BOTTOM_NAV_HEIGHT,
+              bottom: BOTTOM_NAV_HEIGHT + NAV_OVERHANG,
               maxWidth: 640,
               margin: '0 auto',
               background: 'var(--color-bg)',

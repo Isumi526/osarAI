@@ -61,7 +61,14 @@ export interface AssistantCommitResponse {
 }
 
 export async function assistantTurn(
-  input: { message: string; sessionId?: string; forceEnd?: boolean; confirmedCustomerId?: string | null },
+  input: {
+    message: string;
+    sessionId?: string;
+    forceEnd?: boolean;
+    confirmedCustomerId?: string | null;
+    /** 相手のカード等から開いた時の話題の相手（その人の議事録を読んで相談に答える） */
+    focusCustomerId?: string | null;
+  },
   signal?: AbortSignal,
 ): Promise<AssistantTurnResponse> {
   return apiPost<AssistantTurnResponse>('/api/assistant/turn', input, signal);

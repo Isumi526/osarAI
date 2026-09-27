@@ -77,7 +77,7 @@ export function MeetingDetail() {
                 {/* 相手の履歴（この会議の議事録を含む）を読み込んだ相談画面へ */}
                 <button
                   type="button"
-                  onClick={() => navigate(`/chat/legacy?customerId=${customer.id}`)}
+                  onClick={() => navigate(`/chat?customerId=${customer.id}&name=${encodeURIComponent(customer.name)}`)}
                   style={{ minHeight: 44, background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
                 >
                   この会議を踏まえて相談

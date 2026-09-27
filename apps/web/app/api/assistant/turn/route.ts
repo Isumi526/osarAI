@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server';
 import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
-import { formatUserProfile } from '@/lib/customer-context';
+import { formatUserProfile, buildContext, isNameMentioned } from '@/lib/customer-context';
 import { geminiJson, GEMINI_MODEL_DIALOGUE } from '@/lib/gemini';
 import {
   TURN_SCHEMA,
@@ -37,6 +37,8 @@ export async function POST(req: Request) {
     message?: string;
     forceEnd?: boolean;
     confirmedCustomerId?: string | null;
+    /** 相手のカードや会議の画面から開いた時の、話題の相手（その人の議事録を読んで相談に答える） */
+    focusCustomerId?: string | null;
   };
   const forceEnd = body.forceEnd === true;
   const message = (body.message ?? '').trim();
@@ -122,8 +124,21 @@ export async function POST(req: Request) {
     minute: '2-digit',
   });
 
+  // 相談を1系統にまとめる（2026-09-27）: 話題の相手（画面から渡された相手＋直近の発話に名前が出た相手）の
+  // 履歴と議事録を読み込み、「前回の会議を踏まえた」答えを返せるようにする。以前は相手を指定した相談だけが
+  // 別画面（/api/advice）で、こちらのチャットは履歴を参照していなかった。
+  const recentUserText = messages
+    .filter((m) => m.role === 'user')
+    .slice(-3)
+    .map((m) => m.content)
+    .join('\n');
+  const focusId = typeof body.focusCustomerId === 'string' && customers.some((c) => c.id === body.focusCustomerId) ? body.focusCustomerId : null;
+  const mentionedIds = customers.filter((c) => isNameMentioned(recentUserText, c.name)).map((c) => c.id);
+  const relatedIds = [...new Set([focusId, ...mentionedIds].filter((x): x is string => !!x))].slice(0, 2);
+  const relatedContext = (await Promise.all(relatedIds.map((id) => buildContext(supabase, 'customer', id)))).join('\n---\n');
+
   const history = messages.map((m) => `${m.role === 'user' ? 'ユーザー' : 'AI'}: ${m.content}`).join('\n');
-  const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history });
+  const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history, relatedContext });
 
   let result: TurnResult;
   try {
@@ -190,3 +205,4 @@ export async function POST(req: Request) {
 function json(payload: unknown, status: number) {
   return NextResponse.json(payload, { status, headers: CORS_HEADERS });
 }
+

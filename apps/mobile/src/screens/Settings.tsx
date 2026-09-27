@@ -3,11 +3,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { enablePush, isPushSupported } from '../lib/push.js';
-import { getMyProfile, updateMyUserProfile, listAgencyProducts, type AgencyProduct } from '../lib/db.js';
+import { getMyProfile, updateMyUserProfile, updateMyDisplayName, listAgencyProducts, type AgencyProduct } from '../lib/db.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
-import { PersonalStatsGrid } from '../components/PersonalStatsGrid.js';
 
 // 目標・扱っている商品は複数登録できるよう別UI(goals/products)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
@@ -38,6 +37,10 @@ export function Settings() {
   // プロフィール項目(userProfile/goals)を未保存で編集中かどうか。BottomNav離脱時の確認ダイアログに使う。
   const [profileDirty, setProfileDirty] = useState(false);
 
+  // お名前（本名）。会議の文字起こしで「自分」を見分けるのに使う
+  const [displayName, setDisplayName] = useState('');
+  const [nameMsg, setNameMsg] = useState<string | null>(null);
+
   // 紹介コード（自分のprofiles.idから決定的に導出。別テーブル管理なし）
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
@@ -45,6 +48,7 @@ export function Settings() {
   useEffect(() => {
     getMyProfile()
       .then((p) => {
+        setDisplayName(p?.display_name ?? '');
         const raw = (p?.user_profile as Record<string, unknown> | null) ?? {};
         // goals/products(構造化)以外の自由記述フィールドだけを文字列マップとして取り出す。
         const { goals: rawGoals, goal: legacyGoal, products: rawProducts, ...rest } = raw as {
@@ -175,8 +179,8 @@ export function Settings() {
         <span style={{ color: 'var(--color-text-muted)' }}>›</span>
       </Link>
 
-      {/* 数字の集計はホームから移設（ホームは「次の行動」を並べる画面にしたため） */}
-      <PersonalStatsGrid />
+      {/* 数字の集計（PersonalStatsGrid）は画面から外した（2026-09-27・機能を絞る人判断）。
+          リーダー向けの集約は Web のダッシュボードで扱う。部品は残してある。 */}
 
       {referralCode && (
         <section
@@ -222,11 +226,42 @@ export function Settings() {
           marginTop: 16,
         }}
       >
-        <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>あなたのプロフィール</h2>
-        <p style={{ margin: '0 0 12px', color: '#6b6358', fontSize: 14 }}>
-          AI戦略相談があなたの状況を踏まえて提案できるよう、自由に登録してください（任意）。
+        <h2 style={{ fontSize: 16, margin: '0 0 8px' }}>あなたのお名前</h2>
+        <p style={{ margin: '0 0 8px', color: '#6b6358', fontSize: 13 }}>
+          会議の録音で「あなた」と「相手」を見分けるのに使います。本名（漢字）で入れてください。
         </p>
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={displayName}
+            onChange={(e) => {
+              setDisplayName(e.target.value);
+              setNameMsg(null);
+            }}
+            placeholder="例: 山田 太郎"
+            style={{ flex: 1, padding: 10, fontSize: 15 }}
+          />
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await updateMyDisplayName(displayName);
+                setNameMsg('保存しました');
+              } catch (e) {
+                setNameMsg(e instanceof Error ? e.message : String(e));
+              }
+            }}
+            style={{ padding: '0 16px' }}
+          >
+            保存
+          </button>
+        </div>
+        {nameMsg && <p style={{ margin: '6px 0 0', fontSize: 13 }}>{nameMsg}</p>}
+
+        {/* 2026-09-27 機能を絞る（人判断）: 仕事・年齢・性別・経歴・目標・商品はマッチング前提の名残。
+            AIへの相談の質は少し上がるので消さずに、既定で閉じた「任意」の欄にした（データは残る）。 */}
+        <details style={{ marginTop: 16 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 14 }}>くわしい自己紹介（任意・AIへの相談で使います）</summary>
+        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
           {PROFILE_FIELDS.map((f) => (
             <label key={f.key} style={{ display: 'block', fontSize: 13 }}>
               {f.label}
@@ -433,6 +468,7 @@ export function Settings() {
           {profileSaving ? '保存中…' : '保存'}
         </button>
         {profileMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{profileMsg}</p>}
+        </details>
       </section>
 
       <section

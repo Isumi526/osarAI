@@ -2,7 +2,7 @@
 // 「おさらい」「相談」「自分をおさらい」を1画面に統合し、AIが発言から意図を判断する。
 // 話した内容から スケジュール / つながり / タスク を抽出し、保存前に確認・修正できる。
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { assistantTurn, assistantCommit, type Proposals } from '../lib/assistant.js';
 import { transcribeAudio } from '../lib/osarai.js';
 import { useRecorder } from '../hooks/useRecorder.js';
@@ -13,7 +13,7 @@ import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
-import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
+import { BOTTOM_NAV_HEIGHT, NAV_OVERHANG } from '../components/BottomNav.js';
 import { ReviewCard } from '../components/ReviewCard.js';
 import { ASSISTANT_OPENING, ASSISTANT_HINTS } from '@osarai/shared';
 
@@ -22,7 +22,18 @@ type Phase = 'chatting' | 'reviewing' | 'committed';
 
 export function AssistantChat() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Msg[]>([{ role: 'assistant', content: ASSISTANT_OPENING }]);
+  // 相手のカード・会議の画面から開いた時の話題の相手。サーバーがその人の議事録を読んで答える。
+  const [params] = useSearchParams();
+  const focusCustomerId = params.get('customerId');
+  const focusName = params.get('name');
+  const [messages, setMessages] = useState<Msg[]>([
+    {
+      role: 'assistant',
+      content: focusName
+        ? `${focusName}さんについて、何でも聞いてください。これまでの会議の議事録を踏まえて答えます。\n（例: 次に会う時に何を話せばいい？／前回の約束で残っていることは？）`
+        : ASSISTANT_OPENING,
+    },
+  ]);
   const [input, setInput] = useState('');
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [sending, setSending] = useState(false);
@@ -76,7 +87,7 @@ export function AssistantChat() {
     const controller = new AbortController();
     abortRef.current = controller;
     setSending(true);
-    assistantTurn({ message: text, sessionId }, controller.signal)
+    assistantTurn({ message: text, sessionId, focusCustomerId }, controller.signal)
       .then((res) => {
         setSessionId(res.sessionId);
         if (res.reply) setMessages((m) => [...m, { role: 'assistant', content: res.reply! }]);
@@ -117,7 +128,7 @@ export function AssistantChat() {
     setEnding(true);
     setError(null);
     try {
-      const res = await assistantTurn({ message: '', sessionId, forceEnd: true });
+      const res = await assistantTurn({ message: '', sessionId, forceEnd: true, focusCustomerId });
       if (res.proposals) {
         setProposals(res.proposals);
         setPhase('reviewing');
@@ -373,7 +384,8 @@ export function AssistantChat() {
             bottom: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
             background: 'var(--color-bg)',
             borderTop: '1px solid var(--color-border)',
-            padding: '10px 16px',
+            // 下側は中央の録音ボタンがはみ出す分だけ余白を取り、入力欄が隠れないようにする
+            padding: `10px 16px ${10 + NAV_OVERHANG}px`,
             display: 'grid',
             gap: 8,
             zIndex: 80,

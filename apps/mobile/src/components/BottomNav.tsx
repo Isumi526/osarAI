@@ -9,6 +9,8 @@ import { useConfirm } from './ConfirmDialog.js';
 import { useMeetingSession, fmtSec } from './MeetingSession.js';
 
 export const BOTTOM_NAV_HEIGHT = 56;
+/** 中央の録音ボタンがナビの上にはみ出す高さ。固定の入力欄などはこの分だけ上に置く */
+export const NAV_OVERHANG = 30;
 
 // 2026-09-27: 会議録音が主導線になったので、中央に大きな録音ボタンを置く（人判断）。
 // 左右に2タブずつ。AIと話すはタブにせず、ホームや相手のカードなど文脈のある場所から入る。

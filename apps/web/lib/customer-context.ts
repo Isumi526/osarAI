@@ -138,3 +138,18 @@ export function formatUserProfile(userProfile: Record<string, unknown> | null): 
 
   return lines.length > 0 ? lines.join('\n') : undefined;
 }
+
+/**
+ * 発話に登録済みの相手の名前が出ているか。「村田涼太」を「村田さん」と呼ぶことが多いので、
+ * フルネーム一致に加えて姓（空白の前、無ければ先頭2文字）＋敬称でも拾う。
+ */
+export function isNameMentioned(text: string, name: string | null | undefined): boolean {
+  const n = (name ?? '').trim();
+  if (!n || !text) return false;
+  const compactText = text.replace(/[\s　]/g, '');
+  const full = n.replace(/[\s　]/g, '');
+  if (full.length >= 2 && compactText.includes(full)) return true;
+  const family = /[\s　]/.test(n) ? n.split(/[\s　]/)[0]! : n.slice(0, 2);
+  if (family.length < 2) return false;
+  return new RegExp(`${family.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(さん|様|さま|氏|くん|ちゃん)`).test(compactText);
+}

@@ -2,19 +2,11 @@
 // ホームはダッシュボード＋AIチャット入口に専念し、一覧はマイページ配下から辿る。
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listCustomers, mergeCustomers, findDuplicateGroups, RELATION_TYPES, type Customer } from '../lib/db.js';
+import { listCustomers, mergeCustomers, findDuplicateGroups, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
-import { TempIcon } from '../components/TempIcon.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
-import type { Temperature } from '@osarai/shared';
 
-// つながりの区分バッジの色。温度感の危険色(--color-danger)とは重ならない淡い配色にする。
-const RELATION_BADGE_STYLE: Record<(typeof RELATION_TYPES)[number], { background: string; color: string }> = {
-  つながり: { background: '#f1efe9', color: 'var(--color-text-muted)' },
-  顧客: { background: 'var(--color-primary-light)', color: 'var(--color-primary-dark)' },
-  パートナー: { background: '#e6f2ea', color: 'var(--color-success)' },
-};
 
 export function CustomerList() {
   const navigate = useNavigate();
@@ -142,22 +134,10 @@ export function CustomerList() {
                   color: 'inherit',
                 }}
               >
+                {/* 温度感アイコンと区分バッジは外した（2026-09-27・CRM 時代の項目を画面から絞る人判断） */}
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null}
                   {c.name}
                   <span style={{ fontSize: 12 }}>さん</span>
-                  {c.relation_type && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        padding: '2px 6px',
-                        borderRadius: 6,
-                        ...RELATION_BADGE_STYLE[c.relation_type as (typeof RELATION_TYPES)[number]],
-                      }}
-                    >
-                      {c.relation_type}
-                    </span>
-                  )}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '50%' }}>
                   {c.needs && (
