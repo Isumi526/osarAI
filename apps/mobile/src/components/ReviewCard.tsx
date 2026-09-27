@@ -1,0 +1,566 @@
+// 保存前の確認カード（共有）。AIの抽出をそのまま保存せず、必ずユーザーが目で見て直せるようにする。
+// 統合AIチャット(AssistantChat) と 会議録音(Meeting) の両方で使う（2026-08-25 会議録音T1で切り出し）。
+import { useState } from 'react';
+import { type Proposals } from '../lib/assistant.js';
+import { AutoResizeTextarea } from './AutoResizeTextarea.js';
+
+const toLines = (v: string[]) => v.join('\n');
+/** 人物の各欄（要点/ニーズ/次アクション/つながりたい人）を1つのメモ行リストに畳む（表示・編集用）。 */
+function personMemoLines(p: { points: string[]; needs: string[]; next_actions: string[]; custom_fields?: Record<string, unknown> }): string[] {
+  const wants = wantsToMeet(p.custom_fields);
+  const out: string[] = [...p.points];
+  for (const n of p.needs) if (!out.includes(n)) out.push(n);
+  for (const a of p.next_actions) if (!out.includes(a)) out.push(a);
+  for (const w of wants) {
+    const line = `つながりたい人: ${w}`;
+    if (!out.includes(line)) out.push(line);
+  }
+  return out;
+}
+/** メモ行を人物に書き戻す。「つながりたい人: 〜」の行だけは custom_fields.wants_to_meet（将来のマッチング用）にも残す。 */
+function applyPersonMemo<T extends { points: string[]; needs: string[]; next_actions: string[]; custom_fields?: Record<string, unknown> }>(p: T, lines: string[]): T {
+  const wants: string[] = [];
+  const points: string[] = [];
+  for (const l of lines) {
+    const m = /^つながりたい人[:：]\s*(.+)$/.exec(l);
+    if (m) wants.push(m[1]!.trim());
+    else points.push(l);
+  }
+  return { ...p, points, needs: [], next_actions: [], custom_fields: { ...(p.custom_fields ?? {}), wants_to_meet: wants } };
+}
+const wantsToMeet = (cf?: Record<string, unknown>): string[] => {
+  const v = cf?.wants_to_meet;
+  return Array.isArray(v) ? v.map((x) => String(x)) : [];
+};
+const fromLines = (v: string) => v.split('\n').map((s) => s.trim()).filter(Boolean);
+// datetime-local / date 入力とISO文字列の相互変換
+const toLocalInput = (iso: string, withTime: boolean) => {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return withTime ? `${date}T${p(d.getHours())}:${p(d.getMinutes())}` : date;
+};
+const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
+
+export function ReviewCard({
+  proposals,
+  setProposals,
+  committing,
+  onCommit,
+  onBackToChat,
+  backLabel = 'まだ話す',
+  minutes,
+  onMinutesChange,
+  allowAddPerson = false,
+}: {
+  proposals: Proposals;
+  setProposals: (p: Proposals) => void;
+  committing: boolean;
+  onCommit: () => void;
+  onBackToChat: () => void;
+  /** 戻るボタンの文言（既定「まだ話す」）。会議録音では「録り直す」等に差し替える。 */
+  backLabel?: string;
+  /** 議事録（あれば冒頭に表示・T3）。 */
+  minutes?: string | null;
+  /** 議事録を編集可能にする（会議録音・T7）。渡さなければ読み取り専用。 */
+  onMinutesChange?: (v: string) => void;
+  /** 「つながりを追加」ボタンを出す（AIが相手を取りこぼした時に手で足せる・T7）。 */
+  allowAddPerson?: boolean;
+}) {
+  const empty =
+    proposals.people.length === 0 &&
+    proposals.schedules.length === 0 &&
+    proposals.tasks.length === 0 &&
+    proposals.self_notes.length === 0 &&
+    !minutes;
+
+  // 人物を外したら、予定/タスクの相手インデックスもずらす（外した人を指していたものは「なし」に戻す）。
+  const removePerson = (i: number) => {
+    const remap = (idx: number | null) => (idx === null ? null : idx === i ? null : idx > i ? idx - 1 : idx);
+    setProposals({
+      ...proposals,
+      people: proposals.people.filter((_, j) => j !== i),
+      schedules: proposals.schedules.map((s) => ({ ...s, person_index: remap(s.person_index) })),
+      tasks: proposals.tasks.map((t) => ({ ...t, person_index: remap(t.person_index) })),
+    });
+  };
+  const addPerson = () =>
+    setProposals({
+      ...proposals,
+      people: [...proposals.people, { customer_id: null, name: '', points: [], needs: [], next_actions: [], custom_fields: {} }],
+    });
+
+  return (
+    <section
+      style={{
+        marginTop: 16,
+        padding: 16,
+        background: '#fff',
+        border: '1px solid var(--color-border)',
+        borderRadius: 12,
+        display: 'grid',
+        gap: 16,
+      }}
+    >
+      {minutes != null && (minutes || onMinutesChange) && (
+        <MinutesBlock minutes={minutes} onChange={onMinutesChange} />
+      )}
+
+      <div>
+        <strong>この内容で登録します</strong>
+        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+          間違いがあればここで直してください。保存するまで登録されません。
+        </p>
+      </div>
+
+      {empty && <p style={{ color: 'var(--color-text-muted)' }}>登録する内容は見つかりませんでした。</p>}
+      {allowAddPerson && proposals.people.length === 0 && (
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
+          話した相手が見つかりませんでした。「つながりを追加」で相手のお名前を入れてください（議事録はその方の履歴に残ります）。
+        </p>
+      )}
+
+      {proposals.people.map((p, i) => (
+        <div key={i} style={{ display: 'grid', gap: 6, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              つながり{p.customer_id ? '（登録済み）' : '（新規）'}
+            </span>
+            <button
+              type="button"
+              onClick={() => removePerson(i)}
+              style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', padding: 4 }}
+              aria-label="このつながりを登録しない"
+            >
+              ×
+            </button>
+          </div>
+          <input
+            value={p.name}
+            onChange={(e) =>
+              setProposals({
+                ...proposals,
+                people: proposals.people.map((x, j) =>
+                  // 名前を手で直したら、サーバーが古い名前で出した類似候補は当てにならないので消す
+                  j === i ? { ...x, name: e.target.value, similar: undefined } : x,
+                ),
+              })
+            }
+            placeholder="お名前"
+            style={{ padding: 10, fontSize: 15 }}
+          />
+          {/* 表記揺れ（音声入力の「渡辺/渡邊」「タナカ/田中」等）で同じ人を二重登録しないための確認。
+              勝手に寄せず、ユーザーに選ばせる。 */}
+          {!p.customer_id && (p.similar?.length ?? 0) > 0 && (
+            <div
+              style={{
+                padding: 10,
+                borderRadius: 8,
+                background: 'var(--color-surface-subtle, #fff7f0)',
+                border: '1px solid var(--color-primary)',
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 13 }}>
+                似たお名前の方が登録済みです。同じ方なら選んでください（新しく作らずに追記します）。
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {p.similar!.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() =>
+                      setProposals({
+                        ...proposals,
+                        people: proposals.people.map((x, j) =>
+                          // 既存に寄せる時は表記も既存側に合わせる（同じ人が2つの表記で残らないように）
+                          j === i ? { ...x, customer_id: c.id, name: c.name, similar: undefined } : x,
+                        ),
+                      })
+                    }
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      background: '#fff',
+                      color: 'var(--color-primary)',
+                      border: '1px solid var(--color-primary)',
+                    }}
+                  >
+                    {c.name}さんと同じ
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setProposals({
+                      ...proposals,
+                      people: proposals.people.map((x, j) => (j === i ? { ...x, similar: undefined } : x)),
+                    })
+                  }
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    borderRadius: 999,
+                    background: 'none',
+                    color: 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                >
+                  別の人として登録
+                </button>
+              </div>
+            </div>
+          )}
+          {/* その人についてのメモ（要点/ニーズ/次アクション/つながりたい人を1本に統合）。会議録音では
+              議事録が主役なので既定は畳み、必要な時だけ開く（2026-09-21 レビュー）。保存先は従来どおり points(行) */}
+          <details open={personMemoLines(p).length > 0 && !minutes}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--color-text-muted)' }}>
+              この人についてのメモ{personMemoLines(p).length > 0 ? `（${personMemoLines(p).length}件）` : '（任意）'}
+            </summary>
+            <LinesField
+              label=""
+              value={personMemoLines(p)}
+              onChange={(v) =>
+                setProposals({
+                  ...proposals,
+                  people: proposals.people.map((x, j) => (j === i ? applyPersonMemo(x, v) : x)),
+                })
+              }
+              placeholder="話した内容・相手の状況・約束したことなど（1行に1つ）"
+            />
+          </details>
+        </div>
+      ))}
+      {allowAddPerson && (
+        <button
+          type="button"
+          onClick={addPerson}
+          style={{
+            justifySelf: 'start',
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 700,
+            borderRadius: 999,
+            background: '#fff',
+            color: 'var(--color-primary)',
+            border: '1px solid var(--color-primary)',
+          }}
+        >
+          ＋ つながりを追加
+        </button>
+      )}
+
+      {proposals.schedules.map((s, i) => (
+        <div key={i} style={{ display: 'grid', gap: 6, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>予定</span>
+            <button
+              type="button"
+              onClick={() => setProposals({ ...proposals, schedules: proposals.schedules.filter((_, j) => j !== i) })}
+              style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', padding: 4 }}
+              aria-label="この予定を登録しない"
+            >
+              ×
+            </button>
+          </div>
+          <input
+            value={s.title}
+            onChange={(e) =>
+              setProposals({
+                ...proposals,
+                schedules: proposals.schedules.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)),
+              })
+            }
+            placeholder="予定のタイトル"
+            style={{ padding: 10, fontSize: 15 }}
+          />
+          <PersonSelect
+            people={proposals.people}
+            value={s.person_index}
+            onChange={(v) =>
+              setProposals({
+                ...proposals,
+                schedules: proposals.schedules.map((x, j) => (j === i ? { ...x, person_index: v } : x)),
+              })
+            }
+          />
+          <input
+            type="datetime-local"
+            value={toLocalInput(s.start_at, true)}
+            onChange={(e) => {
+              const start = fromLocalInput(e.target.value);
+              if (!start) return;
+              setProposals({
+                ...proposals,
+                schedules: proposals.schedules.map((x, j) =>
+                  j === i ? { ...x, start_at: start, end_at: new Date(Date.parse(start) + 3600_000).toISOString() } : x,
+                ),
+              });
+            }}
+            style={{ padding: 10, fontSize: 14 }}
+          />
+        </div>
+      ))}
+
+      {proposals.tasks.map((t, i) => (
+        <div key={i} style={{ display: 'grid', gap: 6, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{t.assignee === 'other' ? '相手待ち（相手がやること）' : 'TODO'}</span>
+            <button
+              type="button"
+              onClick={() => setProposals({ ...proposals, tasks: proposals.tasks.filter((_, j) => j !== i) })}
+              style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', padding: 4 }}
+              aria-label="このTODOを登録しない"
+            >
+              ×
+            </button>
+          </div>
+          <input
+            value={t.title}
+            onChange={(e) =>
+              setProposals({
+                ...proposals,
+                tasks: proposals.tasks.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)),
+              })
+            }
+            placeholder="やること"
+            style={{ padding: 10, fontSize: 15 }}
+          />
+          <PersonSelect
+            people={proposals.people}
+            value={t.person_index}
+            onChange={(v) =>
+              setProposals({
+                ...proposals,
+                tasks: proposals.tasks.map((x, j) => (j === i ? { ...x, person_index: v } : x)),
+              })
+            }
+          />
+          <input
+            type="date"
+            value={t.due_at ? toLocalInput(t.due_at, false) : ''}
+            onChange={(e) =>
+              setProposals({
+                ...proposals,
+                tasks: proposals.tasks.map((x, j) =>
+                  j === i ? { ...x, due_at: e.target.value ? new Date(`${e.target.value}T23:59:00`).toISOString() : null } : x,
+                ),
+              })
+            }
+            style={{ padding: 10, fontSize: 14 }}
+          />
+        </div>
+      ))}
+
+      {proposals.self_notes.length > 0 && (
+        <div style={{ paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+          <LinesField
+            label="自分についての気づき"
+            value={proposals.self_notes}
+            onChange={(v) => setProposals({ ...proposals, self_notes: v })}
+          />
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        <button type="button" onClick={onCommit} disabled={committing || empty}>
+          {committing ? '保存中…' : 'この内容で保存'}
+        </button>
+        <button
+          type="button"
+          onClick={onBackToChat}
+          style={{ background: '#fff', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+        >
+          {backLabel}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// 予定・タスクの「相手」。人物名はタイトルに埋めずリレーションで持つ（2026-08-06 指摘）。
+function PersonSelect({
+  people,
+  value,
+  onChange,
+}: {
+  people: { name: string }[];
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  if (people.length === 0) return null;
+  return (
+    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+      相手
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+        style={{ padding: 10, fontSize: 14 }}
+      >
+        <option value="">なし</option>
+        {people.map((p, i) => (
+          <option key={i} value={i}>
+            {p.name}さん
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LinesField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+      {label}
+      <AutoResizeTextarea
+        value={toLines(value)}
+        onChange={(e) => onChange(fromLines(e.target.value))}
+        placeholder={placeholder}
+        rows={1}
+        style={{ padding: 10, fontSize: 14, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8, resize: 'none' }}
+      />
+    </label>
+  );
+}
+
+/**
+ * 議事録。既定は「一目で全部読める」読み取り表示（見出し行を太字・箇条書きをそのまま）。
+ * 直したい時だけ「編集」でテキストエリアに切り替える（テキストエリアは内側スクロールで
+ * 全体が見渡せず、議事録の用途に合わないため・T7b）。
+ */
+export function MinutesBlock({ minutes, onChange }: { minutes: string; onChange?: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--color-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <strong style={{ fontSize: 13 }}>議事録</strong>
+        {onChange && (
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 999, padding: '4px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}
+          >
+            {editing ? '完了' : '編集'}
+          </button>
+        )}
+      </div>
+      {editing && onChange ? <MinutesEditor text={minutes} onChange={onChange} /> : <MinutesView text={minutes} />}
+    </div>
+  );
+}
+
+// 議事録のプレーンテキスト（【見出し】＋「- 」箇条書き）と、編集用の構造の相互変換。
+// 記法をユーザーに触らせず、見た目のまま行単位で直せるようにする（2026-09-21 レビュー）。
+interface MinutesSection {
+  title: string;
+  lines: string[];
+}
+function parseMinutes(text: string): MinutesSection[] {
+  const sections: MinutesSection[] = [];
+  let cur: MinutesSection | null = null;
+  for (const raw of text.split('\n')) {
+    const t = raw.trim();
+    if (!t) continue;
+    const h = /^【(.+)】$/.exec(t);
+    if (h) {
+      cur = { title: h[1]!, lines: [] };
+      sections.push(cur);
+      continue;
+    }
+    if (!cur) {
+      cur = { title: '', lines: [] };
+      sections.push(cur);
+    }
+    cur.lines.push(t.replace(/^[-・•]\s*/, ''));
+  }
+  return sections;
+}
+function serializeMinutes(sections: MinutesSection[]): string {
+  return sections
+    .map((sec) => [sec.title ? `【${sec.title}】` : '', ...sec.lines.filter((l) => l.trim()).map((l) => `- ${l.trim()}`)].filter(Boolean).join('\n'))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function MinutesEditor({ text, onChange }: { text: string; onChange: (v: string) => void }) {
+  const sections = parseMinutes(text);
+  const update = (next: MinutesSection[]) => onChange(serializeMinutes(next));
+  const lineStyle = {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    padding: '6px 8px',
+    fontSize: 14,
+    lineHeight: 1.5,
+    fontFamily: 'inherit',
+    border: '1px solid var(--color-border)',
+    borderRadius: 6,
+    resize: 'none' as const,
+    background: '#fff',
+  };
+  return (
+    <div style={{ marginTop: 6, display: 'grid', gap: 10 }}>
+      {sections.map((sec, si) => (
+        <div key={si} style={{ display: 'grid', gap: 4 }}>
+          {sec.title && <div style={{ fontWeight: 700, fontSize: 14 }}>{sec.title}</div>}
+          {sec.lines.map((line, li) => (
+            <div key={li} style={{ display: 'grid', gridTemplateColumns: '14px 1fr 24px', alignItems: 'start', gap: 4 }}>
+              <span style={{ fontSize: 14, lineHeight: '30px' }}>・</span>
+              <AutoResizeTextarea
+                value={line}
+                rows={1}
+                style={lineStyle}
+                onChange={(e) =>
+                  update(sections.map((x, i) => (i === si ? { ...x, lines: x.lines.map((l, j) => (j === li ? e.target.value : l)) } : x)))
+                }
+              />
+              <button
+                type="button"
+                aria-label="この行を削除"
+                onClick={() => update(sections.map((x, i) => (i === si ? { ...x, lines: x.lines.filter((_, j) => j !== li) } : x)))}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', padding: 4 }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => update(sections.map((x, i) => (i === si ? { ...x, lines: [...x.lines.filter((l) => l !== '特になし'), ''] } : x)))}
+            style={{ justifySelf: 'start', background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 13, padding: '2px 0' }}
+          >
+            ＋ 行を追加
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 「【見出し】」行を太字、「- 」行を箇条書きとして描画する軽量ビュー（markdown は使わない）。 */
+export function MinutesView({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.6, color: 'var(--color-text)' }}>
+      {lines.map((line, i) => {
+        const t = line.trim();
+        if (!t) return <div key={i} style={{ height: 6 }} />;
+        if (/^【.+】$/.test(t)) return <div key={i} style={{ fontWeight: 700, marginTop: i === 0 ? 0 : 10 }}>{t.replace(/^【|】$/g, '')}</div>;
+        if (/^[-・•]\s*/.test(t)) return <div key={i} style={{ paddingLeft: 14, textIndent: -14 }}>・{t.replace(/^[-・•]\s*/, '')}</div>;
+        return <div key={i}>{t}</div>;
+      })}
+    </div>
+  );
+}

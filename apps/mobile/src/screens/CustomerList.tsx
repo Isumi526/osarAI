@@ -2,19 +2,11 @@
 // ホームはダッシュボード＋AIチャット入口に専念し、一覧はマイページ配下から辿る。
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listCustomers, mergeCustomers, findDuplicateGroups, RELATION_TYPES, type Customer } from '../lib/db.js';
+import { listCustomers, mergeCustomers, findDuplicateGroups, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
-import { TempIcon } from '../components/TempIcon.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
-import type { Temperature } from '@osarai/shared';
 
-// つながりの区分バッジの色。温度感の危険色(--color-danger)とは重ならない淡い配色にする。
-const RELATION_BADGE_STYLE: Record<(typeof RELATION_TYPES)[number], { background: string; color: string }> = {
-  つながり: { background: '#f1efe9', color: 'var(--color-text-muted)' },
-  顧客: { background: 'var(--color-primary-light)', color: 'var(--color-primary-dark)' },
-  パートナー: { background: '#e6f2ea', color: 'var(--color-success)' },
-};
 
 export function CustomerList() {
   const navigate = useNavigate();
@@ -53,7 +45,7 @@ export function CustomerList() {
     if (!target) return;
     const ok = await confirm(
       `「${target.name}」さんが${group.length}件に分かれて登録されています。1つにまとめますか？\n` +
-        '会話履歴・予定・タスクはすべて残ります。',
+        '会話履歴・予定・TODOはすべて残ります。',
     );
     if (!ok) return;
     setMerging(true);
@@ -74,12 +66,8 @@ export function CustomerList() {
   }, []);
 
   return (
-    <main className="screen">
-      <ScreenHeader>
-        <Link to="/settings">← マイページ</Link>
-        <strong>つながり一覧</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+    <main className="screen screen--wide">
+      <ScreenHeader title="つながり" back={{ to: '/settings', label: 'マイページへ戻る', home: true }} />
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
@@ -121,7 +109,7 @@ export function CustomerList() {
         <p>読み込み中…</p>
       ) : customers.length === 0 ? (
         <p style={{ color: '#6b6358', marginTop: 16 }}>
-          まだつながりがいません。ホームの「AIと話す」から、会った人のことを話すと登録できます。
+          まだつながりがいません。会議を録音すると、会った人が自動で登録されます。
         </p>
       ) : filtered.length === 0 ? (
         <p style={{ color: '#6b6358' }}>「{searchQuery}」に一致するつながりが見つかりません。</p>
@@ -142,22 +130,10 @@ export function CustomerList() {
                   color: 'inherit',
                 }}
               >
+                {/* 温度感アイコンと区分バッジは外した（2026-09-27・CRM 時代の項目を画面から絞る人判断） */}
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {c.temperature ? <TempIcon value={c.temperature as Temperature} /> : null}
                   {c.name}
                   <span style={{ fontSize: 12 }}>さん</span>
-                  {c.relation_type && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        padding: '2px 6px',
-                        borderRadius: 6,
-                        ...RELATION_BADGE_STYLE[c.relation_type as (typeof RELATION_TYPES)[number]],
-                      }}
-                    >
-                      {c.relation_type}
-                    </span>
-                  )}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '50%' }}>
                   {c.needs && (

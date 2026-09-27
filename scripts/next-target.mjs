@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
+import { rankOfPriority } from './priority-rank.mjs'   // 優先順位の順位マップ＋空欄=最後(9) の唯一の正本（第19条）
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -69,7 +70,8 @@ const PRIORITY_PROP = '優先順位'
 const TITLE_PROP    = 'タスク名'
 const PROJECT_PROP  = '案件名'   // relation（説明=「案件管理マスタと紐付け」）。"案件名 1" ではない方
 const TARGET_STATUS = '要件定義済み'
-const PRIORITY_RANK = { '緊急': 0, '高': 1, '中': 2, '低': 3 }
+// ★ 順位マップは priority-rank.mjs に一本化（第19条・計画⑧）。ここに local const を持たない
+//   （持つと next-ball.mjs と二重定義になり、緊急の欠落や空欄挙動がズレる）。
 // --board: 自案件の「全ステータス」を取得（/run ステートマシン用の盤面スナップショット）。
 // 既定（/next 用・引数なし）: ステータス＝要件定義済み のみ（従来どおり・後方互換）。
 // 【仕様】案件名が未設定（空）のタスクは relation 一致しないため、どのプロジェクトでも拾わない（＝自然に除外）。
@@ -128,7 +130,7 @@ function printBoard(results) {
     if (!groups.has(s)) groups.set(s, [])
     groups.get(s).push(p)
   }
-  const rank = (p) => PRIORITY_RANK[priority(p)] ?? 9
+  const rank = (p) => rankOfPriority(priority(p))
   for (const arr of groups.values()) {
     arr.sort((a, b) => (rank(a) - rank(b)) || (a.created_time || '').localeCompare(b.created_time || ''))
   }
@@ -163,9 +165,32 @@ async function main() {
   // --board: 全ステータスの盤面を出して終了（/run ステートマシン用）
   if (BOARD) { printBoard(out.results); return }
 
-  const rows = out.results.sort((a, b) => {
-    const ra = PRIORITY_RANK[priority(a)] ?? 9
-    const rb = PRIORITY_RANK[priority(b)] ?? 9
+  // ★T44 設計OK ゲート（2026-09-20）: 設計書 relation を持つ要件定義済みは、設計書のステータスが
+  //   設計OK／チケット化済 になるまで Ready から外す（先方の回答待ちのものを /run が拾って推測実装しない）。
+  //   設計書が読めない（未共有・失敗）時は fail-closed＝外す（理由を出す）。設計書なしは従来どおり。
+  const specStatus = new Map()
+  for (const p of out.results) for (const r of (p.properties?.['設計書']?.relation || [])) if (!specStatus.has(r.id)) {
+    try {
+      const res = await fetch(`https://api.notion.com/v1/pages/${r.id}`, { headers: { Authorization: `Bearer ${TOKEN}`, 'Notion-Version': '2022-06-28' } })
+      const j = res.ok ? await res.json() : null
+      specStatus.set(r.id, j?.properties?.['ステータス']?.select?.name ?? '(読めない)')
+    } catch { specStatus.set(r.id, '(読めない)') }
+  }
+  const specGate = (p) => {
+    const rel = p.properties?.['設計書']?.relation || []
+    if (rel.length === 0) return null
+    const bad = rel.map((r) => specStatus.get(r.id)).filter((st) => !['設計OK', 'チケット化済'].includes(st))
+    return bad.length ? `設計OK待ち（設計書: ${bad.join('/')}）` : null
+  }
+  const held = out.results.filter((p) => specGate(p))
+  if (held.length) {
+    console.log(`■ 設計OK待ちで保留中（Ready から除外）: ${held.length}件`)
+    for (const p of held) console.log(`  - ${title(p)} — ${specGate(p)}`)
+  }
+
+  const rows = out.results.filter((p) => !specGate(p)).sort((a, b) => {
+    const ra = rankOfPriority(priority(a))
+    const rb = rankOfPriority(priority(b))
     if (ra !== rb) return ra - rb
     return (a.created_time || '').localeCompare(b.created_time || '')   // 同率は作成日古い順
   })

@@ -105,7 +105,9 @@ export function Tasks() {
     }
   }
 
-  const open = tasks.filter((t) => t.status === 'open');
+  // 相手が引き受けたこと（相手待ち）は自分のやることと混ぜず、別枠で並べる
+  const open = tasks.filter((t) => t.status === 'open' && t.assignee !== 'other');
+  const waiting = tasks.filter((t) => t.status === 'open' && t.assignee === 'other');
   const done = tasks.filter((t) => t.status === 'done');
   const today = startOfToday();
   const tomorrow = new Date(+today + 86400000);
@@ -120,12 +122,8 @@ export function Tasks() {
   ];
 
   return (
-    <main className="screen">
-      <ScreenHeader>
-        <Link to="/">← ホーム</Link>
-        <strong>タスク</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+    <main className="screen screen--wide">
+      <ScreenHeader title="TODO" />
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 
@@ -171,7 +169,7 @@ export function Tasks() {
         <p>読み込み中…</p>
       ) : open.length === 0 ? (
         <p style={{ color: '#6b6358' }}>
-          未完了のタスクはありません。ホームの「AIと話す」で今日の出来事を話すと、やることも一緒に登録できます。
+          未完了のTODOはありません。会議を録音すると、自分が約束したことが自動で入ります。
         </p>
       ) : (
         groups
@@ -198,6 +196,24 @@ export function Tasks() {
           ))
       )}
 
+      {/* 相手待ち: 会議で相手が「確認してご連絡します」等と引き受けたこと。
+          返事が来たらチェックで完了。期限を過ぎても自分の遅れではないので赤くしない。 */}
+      {!loading && waiting.length > 0 && (
+        <section style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 13, margin: '0 0 2px', color: 'var(--color-text-muted)' }}>相手待ち（{waiting.length}）</h2>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 6px' }}>
+            相手が引き受けたこと。返事や資料が届いたらチェックしてください。
+          </p>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+            {waiting.map((t) => (
+              <li key={t.id}>
+                <TaskRow task={t} name={customerName(t.customer_id)} onToggle={onToggle} onDelete={onDelete} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {done.length > 0 && (
         <section style={{ marginTop: 8 }}>
           <button
@@ -205,7 +221,7 @@ export function Tasks() {
             onClick={() => setShowDone((v) => !v)}
             style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text-muted)', fontSize: 13 }}
           >
-            {showDone ? '完了したタスクを隠す' : `完了したタスク（${done.length}）を表示`}
+            {showDone ? '完了したTODOを隠す' : `完了したTODO（${done.length}）を表示`}
           </button>
           {showDone && (
             <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'grid', gap: 8 }}>
@@ -235,7 +251,9 @@ function TaskRow({
   onDelete: (t: Task) => void;
 }) {
   const done = task.status === 'done';
-  const overdue = !done && task.due_at && new Date(task.due_at) < startOfToday();
+  const waiting = task.assignee === 'other';
+  // 相手待ちの期限切れは自分の遅れではないので赤くしない（催促のきっかけとして日付だけ出す）
+  const overdue = !done && !waiting && task.due_at && new Date(task.due_at) < startOfToday();
   return (
     <div
       style={{
@@ -252,7 +270,7 @@ function TaskRow({
         type="checkbox"
         checked={done}
         onChange={() => onToggle(task)}
-        aria-label={done ? '未完了に戻す' : '完了にする'}
+        aria-label={done ? '未完了に戻す' : waiting ? '届いた' : '完了にする'}
         style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -261,7 +279,7 @@ function TaskRow({
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
           {task.due_at && <span style={{ color: overdue ? 'var(--color-danger)' : undefined }}>{fmtDue(task.due_at)}</span>}
-          {name && <span>{name}さん</span>}
+          {name && <span>{waiting ? `${name}さんから` : `${name}さん`}</span>}
         </div>
       </div>
       <button

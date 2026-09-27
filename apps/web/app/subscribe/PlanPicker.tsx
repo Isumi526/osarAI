@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { PLANS, type PlanId } from '@osarai/shared';
 import { Spinner } from '@/components/Spinner';
 
-// phase1はStandard単一プランのみ表示(Light/Proはphase2以降)。
+// phase1はLight単一プランのみ表示(Standard/Proはphase2以降)。
 // PLANS定義・Stripe Price・checkout APIは変更せず、UIの選択肢のみ絞る。
-const ORDER: PlanId[] = ['standard'];
+const ORDER: PlanId[] = ['light'];
 
 export function PlanPicker({ code, amountOff }: { code: string | null; amountOff: number | null }) {
   const [loading, setLoading] = useState<PlanId | null>(null);
@@ -66,7 +66,7 @@ export function PlanPicker({ code, amountOff }: { code: string | null; amountOff
               </p>
             )}
             <ul style={{ paddingLeft: 18, fontSize: 14, color: '#6b6358', margin: '0 0 16px' }}>
-              <li>AI対話でのおさらい・顧客管理</li>
+              <li>会議の録音・議事録・予定とTODOの自動保存</li>
               <li>AI相談: {p.aiAdviceLimit === null ? '無制限' : `月${p.aiAdviceLimit}回`}</li>
             </ul>
             <button

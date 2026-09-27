@@ -60,4 +60,6 @@ export interface AiSummary {
   points: string[];
   needs: string[];
   next_actions: string[];
+  /** 会議録音由来の議事録（T3）。主たる相手の履歴にだけ付く。 */
+  minutes?: string;
 }

@@ -6,7 +6,6 @@ import {
   updateCustomer,
   getCustomer,
   getMyProfile,
-  RELATION_TYPES,
   DEFAULT_RELATION_TYPE,
   type CustomerInput,
 } from '../lib/db.js';
@@ -108,34 +107,10 @@ export function CustomerForm() {
     <main className="screen">
       <h1>{isRegisterFlow ? 'つながりを追加' : isEdit ? 'つながりを編集' : '新しいつながり'}</h1>
 
-      {!isEdit && (
-        <section
-          style={{
-            background: '#fff',
-            border: '1px solid var(--color-border)',
-            borderRadius: 12,
-            padding: 14,
-            marginBottom: 16,
-          }}
-        >
-          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 14 }}>登録方法を選べます</p>
-          {/* つながりAI登録: まだ関係が浅い相手はテキスト、関係がある相手はAI対話がおすすめ。
-              AI対話登録は既存の顧客おさらい(顧客未指定→完了時に新規カード生成)フローを流用する。 */}
-          <button
-            type="button"
-            onClick={() => navigate('/osarai?mode=register')}
-            style={{ width: '100%', padding: 12, fontSize: 14, marginTop: 4 }}
-          >
-            AIと対話して登録する（つながりAI登録）
-          </button>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
-            すでに関係性がある人・何度か話したことがある人におすすめ。AIがどんな人かを深掘って聞いてくれます。
-          </p>
-        </section>
-      )}
-
+      {/* 「AIと対話して登録する（つながりAI登録）」は旧おさらい対話への入口だったので外した（2026-09-27・
+          機能を絞る人判断）。つながりは会議録音から自動で登録されるのが基本。 */}
       {showAnalyze && (
-        <section
+        <details
           style={{
             background: 'var(--color-primary-light)',
             border: '1px solid var(--color-primary-border)',
@@ -144,10 +119,9 @@ export function CustomerForm() {
             marginBottom: 16,
           }}
         >
-          <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 14 }}>
-            テキスト・画像から登録（つながりテキスト登録・任意）
-          </p>
-          <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          {/* 任意の補助機能なので既定は閉じておく（まず名前とメモだけで登録できるように） */}
+          <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>紹介文や自己紹介シートから入力する（任意）</summary>
+          <p style={{ margin: '8px 0 8px', fontSize: 12, color: 'var(--color-text-muted)' }}>
             まだ話したことがない・知り合ったばかりの相手におすすめ。
           </p>
           <AutoResizeTextarea
@@ -186,7 +160,7 @@ export function CustomerForm() {
           <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
             解析結果は下のフォームに反映されます。内容を確認・修正のうえ保存してください。
           </p>
-        </section>
+        </details>
       )}
 
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 14 }}>
@@ -200,23 +174,9 @@ export function CustomerForm() {
           />
         </label>
 
+        {/* 区分（relation_type）は画面から外した。既定値のまま保存される（DB の値は残る） */}
         <label>
-          区分
-          <select
-            value={relationType}
-            onChange={(e) => setRelationType(e.target.value)}
-            style={{ width: '100%', padding: 10, fontSize: 16, marginTop: 4 }}
-          >
-            {RELATION_TYPES.map((rt) => (
-              <option key={rt} value={rt}>
-                {rt}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          ニーズ・メモ
+          この人のメモ
           <AutoResizeTextarea
             value={needs}
             onChange={(e) => setNeeds(e.target.value)}

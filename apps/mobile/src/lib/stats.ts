@@ -4,6 +4,9 @@
 import { supabase } from './supabase.js';
 import { jstMonthStartUtc } from '@osarai/shared';
 
+// 「おさらい」として数える interactions.source（AI対話＋会議録音）
+const OSARAI_SOURCES = ['ai_dialogue', 'zoom_rec', 'in_person_rec'];
+
 export interface PersonalStats {
   monthAppointments: number;
   monthOsarai: number;
@@ -39,10 +42,11 @@ export async function getPersonalStats(): Promise<PersonalStats> {
     supabase
       .from('interactions')
       .select('id', { count: 'exact', head: true })
-      .eq('source', 'ai_dialogue')
+      // 会議録音からの自動おさらい（zoom_rec / in_person_rec）も「おさらい」に数える（T7）
+      .in('source', OSARAI_SOURCES)
       .gte('met_at', monthStart),
     supabase.from('schedules').select('id', { count: 'exact', head: true }).or(excludePrivate),
-    supabase.from('interactions').select('id', { count: 'exact', head: true }).eq('source', 'ai_dialogue'),
+    supabase.from('interactions').select('id', { count: 'exact', head: true }).in('source', OSARAI_SOURCES),
     supabase.from('schedules').select('id', { count: 'exact', head: true }).gte('start_at', now).or(excludePrivate),
     supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', monthStart),
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('status', 'active'),

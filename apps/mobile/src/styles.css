@@ -101,3 +101,90 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(253,120,15,0.12);
 }
+
+/* ===== PC 向けレイアウト（2026-09-27・画面幅 960px 以上） =====
+   用途が変わって PC で使う場面が増えたため、広い画面では
+   - 下部ナビの代わりに左のサイドバー（BottomNav がサイドバーを描画し、body に .has-sidebar を付ける）
+   - 一覧系の画面（.screen--wide）は本文の幅を広げる。読み物・入力系は今の幅（640px）のまま中央に置く
+   閾値は hooks/useIsDesktop.ts の DESKTOP_MIN_WIDTH と揃える。 */
+:root {
+  --sidebar-width: 232px;
+}
+body.has-sidebar {
+  padding-left: var(--sidebar-width);
+}
+body.has-sidebar .screen-header {
+  left: var(--sidebar-width);
+}
+@media (min-width: 960px) {
+  .screen--wide,
+  .screen--wide .screen-header {
+    max-width: 960px;
+  }
+  /* ホームは2列（左: 次に会う人・最近の会議 / 右: TODO・AIに相談） */
+  .home-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    grid-template-areas:
+      'up todo'
+      'mt ai';
+    column-gap: 16px;
+    align-items: start;
+  }
+  .home-grid > .ga-up { grid-area: up; }
+  .home-grid > .ga-todo { grid-area: todo; }
+  .home-grid > .ga-mt { grid-area: mt; }
+  .home-grid > .ga-ai { grid-area: ai; }
+}
+
+/* PC ではヘッダーの「← ホーム」・ホームのロゴと通知ベルはサイドバーと重複するので隠す（2026-09-27）。
+   画面の名前と右側の操作（予定の月/週/日など）は残す。
+   「← ホーム」は visibility で隠し、中央の画面名の位置がずれないようにする。 */
+.show-on-desktop { display: none; }
+body.has-sidebar .back-home { visibility: hidden; }
+body.has-sidebar .hide-on-desktop { display: none !important; }
+body.has-sidebar .show-on-desktop { display: inline; }
+
+/* ===== 画面ヘッダーの統一（2026-09-27）: 左寄せのタイトル＋右に操作 ===== */
+.screen-header { gap: 12px; }
+.screen-header__main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.screen-header__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.screen-header__back {
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 30px;
+  line-height: 1;
+  min-height: 36px;
+  width: 32px;
+  padding: 0 0 4px;
+  margin-left: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.screen-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+/* PC ではサイドバーにホームがあるので、ホームへ戻る「‹」は出さない */
+body.has-sidebar .screen-header__back.is-home { display: none; }
+/* 右側の操作やベルの有無でヘッダーの高さが画面ごとに揺れないよう、行の高さをそろえる */
+.screen-header__main,
+.screen-header__actions {
+  min-height: 40px;
+}

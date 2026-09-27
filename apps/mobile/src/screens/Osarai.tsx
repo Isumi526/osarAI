@@ -13,7 +13,7 @@ import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
-import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
+import { BOTTOM_NAV_HEIGHT, NAV_OVERHANG } from '../components/BottomNav.js';
 import type { OsaraiExtracted } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -385,28 +385,24 @@ export function Osarai() {
         minHeight: 'calc(100dvh - 56px)',
         // 送信フォームがposition:fixedで画面下部に重なるため、ページ末尾のコンテンツが
         // 隠れないよう実測したフォーム高さ分の余白を追加する(.screenの既定paddingBottomを上書き)。
-        ...(done ? {} : { paddingBottom: 24 + BOTTOM_NAV_HEIGHT + formHeight }),
+        ...(done ? {} : { paddingBottom: 24 + BOTTOM_NAV_HEIGHT + NAV_OVERHANG + formHeight }),
       }}
     >
-      <ScreenHeader>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
-        <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
-        {remainingSec !== null && !done ? (
-          remainingSec === 0 ? (
-            <button
-              type="button"
-              onClick={() => setRemainingSec(300)}
-              style={{ padding: '4px 8px', fontSize: 13, whiteSpace: 'nowrap' }}
-            >
-              +5分延長
-            </button>
-          ) : (
-            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{formatMMSS(remainingSec)}</span>
-          )
-        ) : (
-          <span style={{ width: 48 }} />
-        )}
-      </ScreenHeader>
+      <ScreenHeader
+        title={isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}
+        back={{ onClick: onBack, label: '戻る' }}
+        actions={
+          remainingSec !== null && !done ? (
+            remainingSec === 0 ? (
+              <button type="button" onClick={() => setRemainingSec(300)} style={{ padding: '4px 8px', fontSize: 13, whiteSpace: 'nowrap' }}>
+                +5分延長
+              </button>
+            ) : (
+              <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{formatMMSS(remainingSec)}</span>
+            )
+          ) : undefined
+        }
+      />
 
       {/* 対話。ScreenHeaderがposition:fixedのためheaderは通常フローから外れる。
           .screenのpadding-topが--header-height(ScreenHeaderが実測してCSS変数に反映)に
@@ -678,7 +674,7 @@ export function Osarai() {
               left: 0,
               right: 0,
               // BottomNav(position:fixed・bottom:0・zIndex:100)と重ならないよう、その上に乗せる。
-              bottom: BOTTOM_NAV_HEIGHT,
+              bottom: BOTTOM_NAV_HEIGHT + NAV_OVERHANG,
               maxWidth: 640,
               margin: '0 auto',
               background: 'var(--color-bg)',

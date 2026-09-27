@@ -1,5 +1,6 @@
 // スケジュール管理（月/週/日 グリッドカレンダー・顧客紐付け任意）。§14フェーズ後追加。
 // Google/Appleカレンダー品質のグリッドUIに刷新（旧: アジェンダ形式のリスト表示）。
+import { useIsDesktop } from '../hooks/useIsDesktop.js';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { listCustomers, getMyProfile, createCustomer, type Customer, type Profile } from '../lib/db.js';
 import {
@@ -78,20 +79,27 @@ function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 // 「週」タブは横幅が足りないモバイル画面向けに3日表示にする(議事録『review(2回目)』要望)。
-const MULTI_DAY_COUNT = 3;
+// PC 幅（2026-09-27・人判断）では本来の1週間（日曜始まり）を表示する。
+const MOBILE_MULTI_DAY_COUNT = 3;
+const DESKTOP_MULTI_DAY_COUNT = 7;
 
-function rangeFor(view: ViewMode, anchor: Date): { from: Date; to: Date } {
+/** 複数日表示の先頭日。PC の1週間は日曜始まり、スマホの3日は選んだ日から */
+function multiDayStart(anchor: Date, count: number): Date {
+  return count === DESKTOP_MULTI_DAY_COUNT ? startOfWeek(anchor) : startOfDay(anchor);
+}
+
+function rangeFor(view: ViewMode, anchor: Date, count: number): { from: Date; to: Date } {
   if (view === 'day') return { from: startOfDay(anchor), to: addDays(startOfDay(anchor), 1) };
-  if (view === 'week') return { from: startOfDay(anchor), to: addDays(startOfDay(anchor), MULTI_DAY_COUNT) };
+  if (view === 'week') return { from: multiDayStart(anchor, count), to: addDays(multiDayStart(anchor, count), count) };
   // 月ビューは表示するグリッド(前後月の余白週含む)を丸ごと取得する
   const gridStart = startOfWeek(startOfMonth(anchor));
   return { from: gridStart, to: addDays(gridStart, 42) };
 }
-function fmtRangeLabel(view: ViewMode, anchor: Date): string {
+function fmtRangeLabel(view: ViewMode, anchor: Date, count: number): string {
   if (view === 'day') return anchor.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
   if (view === 'week') {
-    const s = startOfDay(anchor);
-    const e = addDays(s, MULTI_DAY_COUNT - 1);
+    const s = multiDayStart(anchor, count);
+    const e = addDays(s, count - 1);
     return `${s.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })} 〜 ${e.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}`;
   }
   return anchor.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
@@ -132,6 +140,8 @@ function loadInitialView(): ViewMode {
 }
 
 export function SchedulePage() {
+  const isDesktop = useIsDesktop();
+  const multiDayCount = isDesktop ? DESKTOP_MULTI_DAY_COUNT : MOBILE_MULTI_DAY_COUNT;
   const [view, setViewRaw] = useState<ViewMode>(loadInitialView);
   const setView = (v: ViewMode) => {
     setViewRaw(v);
@@ -271,7 +281,7 @@ export function SchedulePage() {
       from = startOfWeek(startOfMonth(monthList[0]!));
       to = addDays(startOfWeek(startOfMonth(monthList[monthList.length - 1]!)), 42);
     } else {
-      ({ from, to } = rangeFor(view, anchor));
+      ({ from, to } = rangeFor(view, anchor, multiDayCount));
     }
     setLoading(true);
     listSchedules({ from: from.toISOString(), to: to.toISOString() })
@@ -284,11 +294,12 @@ export function SchedulePage() {
   }
 
   // 月表示は monthList、それ以外は view/anchor でリロード。
-  useEffect(reload, [view, anchor, monthList]);
+  // PC とスマホの幅を行き来すると表示日数（7日/3日）が変わるので、その時も読み直す
+  useEffect(reload, [view, anchor, monthList, multiDayCount]);
 
   function shift(n: number) {
     if (view === 'day') setAnchor((a) => addDays(a, n));
-    else if (view === 'week') setAnchor((a) => addDays(a, n * MULTI_DAY_COUNT));
+    else if (view === 'week') setAnchor((a) => addDays(a, n * multiDayCount));
     else setAnchor((a) => new Date(a.getFullYear(), a.getMonth() + n, 1));
   }
 
@@ -311,36 +322,37 @@ export function SchedulePage() {
   }
 
   const weekDays =
-    view === 'week' ? Array.from({ length: MULTI_DAY_COUNT }, (_, i) => addDays(startOfDay(anchor), i)) : [startOfDay(anchor)];
+    view === 'week'
+      ? Array.from({ length: multiDayCount }, (_, i) => addDays(multiDayStart(anchor, multiDayCount), i))
+      : [startOfDay(anchor)];
 
   // 年月バーが下部ボタンと重なるバグ・月表示で画面全体がスクロールしてしまうバグの修正
   // (議事録要望): main自体を画面高に固定しoverflow:hiddenにすることで、上部の
   // タブ/前後移動バーは常に画面内に留まり、カレンダー本体(月表示のmonthScrollRef/
   // 週日表示のTimeGrid)だけが内部スクロールするようにする。
   return (
-    <main className="screen" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
+    <main className="screen screen--wide" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
       {/* カレンダーの表示範囲を広げるため、月/3日/日の切替はタブ行を独立させず
           ヘッダー内に同居させて縦スペースを節約する(議事録要望)。 */}
-      <ScreenHeader>
-        <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              style={{
-                padding: '6px 12px',
-                fontSize: 13,
-                background: view === v ? 'var(--color-primary)' : '#fff',
-                color: view === v ? '#fff' : 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              {v === 'month' ? '月' : v === 'week' ? '3日' : '日'}
-            </button>
-          ))}
-        </div>
-      </ScreenHeader>
+      <ScreenHeader
+        title="予定"
+        actions={(['month', 'week', 'day'] as ViewMode[]).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            style={{
+              padding: '6px 12px',
+              fontSize: 13,
+              minHeight: 36,
+              background: view === v ? 'var(--color-primary)' : '#fff',
+              color: view === v ? '#fff' : 'var(--color-text)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            {v === 'month' ? '月' : v === 'week' ? (isDesktop ? '週' : '3日') : '日'}
+          </button>
+        ))}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 8 }}>
         <button onClick={() => shift(-1)} style={{ padding: '0 14px' }}>
@@ -352,7 +364,7 @@ export function SchedulePage() {
         >
           今日
         </button>
-        <strong style={{ flex: 1, textAlign: 'center', fontSize: 15 }}>{fmtRangeLabel(view, anchor)}</strong>
+        <strong style={{ flex: 1, textAlign: 'center', fontSize: 15 }}>{fmtRangeLabel(view, anchor, multiDayCount)}</strong>
         <button onClick={() => shift(1)} style={{ padding: '0 14px' }}>
           →
         </button>

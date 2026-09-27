@@ -11,113 +11,83 @@ const LOCAL_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 const LOCAL_SERVICE_ROLE_KEY = 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz';
 const CRON_SECRET = process.env.E2E_CRON_SECRET;
 
+type Auth = Record<string, string>;
+async function newActiveUser(request: import('@playwright/test').APIRequestContext, prefix: string) {
+  const r = await request.post(`${LOCAL_SUPABASE_URL}/auth/v1/signup`, {
+    headers: { apikey: LOCAL_ANON_KEY, 'content-type': 'application/json' },
+    data: { email: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`, password: 'testpassword123' },
+  });
+  expect(r.ok()).toBeTruthy();
+  const { user, access_token } = (await r.json()) as { user: { id: string }; access_token: string };
+  const auth: Auth = { apikey: LOCAL_ANON_KEY, Authorization: `Bearer ${access_token}`, 'content-type': 'application/json' };
+  await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/subscriptions`, {
+    headers: { ...auth, Prefer: 'resolution=merge-duplicates' },
+    data: { user_id: user.id, plan: 'standard', status: 'active' },
+  });
+  const [p] = (await (await request.get(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=org_id`, { headers: auth })).json()) as { org_id: string }[];
+  return { id: user.id, orgId: p!.org_id, auth };
+}
+async function restInsert(request: import('@playwright/test').APIRequestContext, auth: Auth, table: string, data: Record<string, unknown>) {
+  const r = await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/${table}`, { headers: { ...auth, Prefer: 'return=representation' }, data });
+  expect(r.ok(), `${table}: ${await r.text()}`).toBeTruthy();
+  return ((await r.json()) as { id: string }[])[0]!;
+}
+async function myNotifications(request: import('@playwright/test').APIRequestContext, auth: Auth) {
+  const r = await request.get(`${LOCAL_SUPABASE_URL}/rest/v1/notifications?select=title,body,link_path`, { headers: auth });
+  return (await r.json()) as { title: string; body: string | null; link_path: string | null }[];
+}
+
 async function clearTodaysCronRun(request: import('@playwright/test').APIRequestContext) {
   await request.delete(`${LOCAL_SUPABASE_URL}/rest/v1/cron_runs?job=eq.action_suggest`, {
     headers: { apikey: LOCAL_SERVICE_ROLE_KEY, Authorization: `Bearer ${LOCAL_SERVICE_ROLE_KEY}` },
   });
 }
 
-test.describe('cron/action-suggest: 行動提案プッシュ通知', () => {
+test.describe('cron/action-suggest: 週1の返事待ち通知', () => {
   test('CRON_SECRETが無い/違うと拒否される', async ({ request }) => {
     test.skip(!CRON_SECRET, 'E2E_CRON_SECRET 未設定のためスキップ');
     const noAuth = await request.get('/api/cron/action-suggest');
     expect(noAuth.status()).toBe(401);
   });
 
-  test('7日以上おさらいしていない顧客がいるユーザーだけが対象になり、同日2回目はスキップされる', async ({
+  test('相手待ちが期限切れ／期限なしで1週間たった人にだけ「返事待ち」が届き、ベルにも残る。同日2回目はスキップ', async ({
     request,
   }) => {
     test.skip(!CRON_SECRET, 'E2E_CRON_SECRET 未設定のためスキップ');
     await clearTodaysCronRun(request);
 
-    // 対象になるべきユーザー: 契約中 + 8日前接触の顧客1件 + push_token
-    const emailStale = `e2e-action-stale-${Date.now()}@example.com`;
-    const signupStale = await request.post(`${LOCAL_SUPABASE_URL}/auth/v1/signup`, {
-      headers: { apikey: LOCAL_ANON_KEY, 'content-type': 'application/json' },
-      data: { email: emailStale, password: 'testpassword123' },
+    const a = await newActiveUser(request, 'e2e-waiting-a');
+    const b = await newActiveUser(request, 'e2e-waiting-b');
+    const cust = await restInsert(request, a.auth, 'customers', { org_id: a.orgId, owner_id: a.id, name: '返事待ち花子', status: 'active' });
+    // A: 期限を過ぎた相手待ち
+    await restInsert(request, a.auth, 'tasks', {
+      org_id: a.orgId,
+      owner_id: a.id,
+      customer_id: cust.id,
+      title: '見積もりを送る',
+      due_at: new Date(Date.now() - 2 * 86400_000).toISOString(),
+      assignee: 'other',
     });
-    expect(signupStale.ok()).toBeTruthy();
-    const { user: staleUser, access_token: staleToken } = (await signupStale.json()) as {
-      user: { id: string };
-      access_token: string;
-    };
-    const staleAuth = { apikey: LOCAL_ANON_KEY, Authorization: `Bearer ${staleToken}`, 'content-type': 'application/json' };
-
-    await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/subscriptions`, {
-      headers: { ...staleAuth, Prefer: 'resolution=merge-duplicates' },
-      data: { user_id: staleUser.id, plan: 'standard', status: 'active' },
-    });
-
-    const profileRes = await request.get(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${staleUser.id}&select=org_id`, {
-      headers: staleAuth,
-    });
-    const [profile] = (await profileRes.json()) as { org_id: string }[];
-
-    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-    await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/customers`, {
-      headers: { ...staleAuth, Prefer: 'return=representation' },
-      data: {
-        org_id: profile!.org_id,
-        owner_id: staleUser.id,
-        name: '放置顧客',
-        status: 'active',
-        last_met_at: eightDaysAgo,
-      },
+    // B: 自分のTODOだけ（相手待ちではないので対象外）
+    await restInsert(request, b.auth, 'tasks', {
+      org_id: b.orgId,
+      owner_id: b.id,
+      title: '資料を送る',
+      due_at: new Date(Date.now() - 2 * 86400_000).toISOString(),
+      assignee: 'self',
     });
 
-    await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/push_tokens`, {
-      headers: staleAuth,
-      data: { user_id: staleUser.id, token: `fcm-test-stale-${Date.now()}`, platform: 'android' },
-    });
-
-    // 対象にならないユーザー: 契約中だが今日接触した顧客のみ(直近7日以内)
-    const emailFresh = `e2e-action-fresh-${Date.now()}@example.com`;
-    const signupFresh = await request.post(`${LOCAL_SUPABASE_URL}/auth/v1/signup`, {
-      headers: { apikey: LOCAL_ANON_KEY, 'content-type': 'application/json' },
-      data: { email: emailFresh, password: 'testpassword123' },
-    });
-    const { user: freshUser, access_token: freshToken } = (await signupFresh.json()) as {
-      user: { id: string };
-      access_token: string;
-    };
-    const freshAuth = { apikey: LOCAL_ANON_KEY, Authorization: `Bearer ${freshToken}`, 'content-type': 'application/json' };
-    await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/subscriptions`, {
-      headers: { ...freshAuth, Prefer: 'resolution=merge-duplicates' },
-      data: { user_id: freshUser.id, plan: 'standard', status: 'active' },
-    });
-    const freshProfileRes = await request.get(`${LOCAL_SUPABASE_URL}/rest/v1/profiles?id=eq.${freshUser.id}&select=org_id`, {
-      headers: freshAuth,
-    });
-    const [freshProfile] = (await freshProfileRes.json()) as { org_id: string }[];
-    await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/customers`, {
-      headers: freshAuth,
-      data: {
-        org_id: freshProfile!.org_id,
-        owner_id: freshUser.id,
-        name: '最近会った顧客',
-        status: 'active',
-        last_met_at: new Date().toISOString(),
-      },
-    });
-    await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/push_tokens`, {
-      headers: freshAuth,
-      data: { user_id: freshUser.id, token: `fcm-test-fresh-${Date.now()}`, platform: 'android' },
-    });
-
-    const res = await request.get('/api/cron/action-suggest', {
-      headers: { authorization: `Bearer ${CRON_SECRET}` },
-    });
+    const res = await request.get('/api/cron/action-suggest', { headers: { authorization: `Bearer ${CRON_SECRET}` } });
     expect(res.ok()).toBeTruthy();
-    const body = (await res.json()) as { targeted: number; configured: boolean; sent: number; failed: number };
-    // 放置顧客を持つユーザーだけが対象(他テストの残骸があっても>=1)。
-    // fresh側は今日接触済みのため targeted に混ざらない設計を確認する意図(直接比較は残骸の関係で厳密化しない)。
+    const body = (await res.json()) as { targeted: number; configured: boolean };
     expect(body.targeted).toBeGreaterThanOrEqual(1);
     expect(body.configured).toBe(false); // ローカルE2EインスタンスにFCM_SERVICE_ACCOUNT未設定
 
-    const res2 = await request.get('/api/cron/action-suggest', {
-      headers: { authorization: `Bearer ${CRON_SECRET}` },
-    });
-    const body2 = (await res2.json()) as { skipped?: boolean };
-    expect(body2.skipped).toBe(true);
+    const notesA = await myNotifications(request, a.auth);
+    expect(notesA.some((n) => n.title === '返事待ちが1件あります' && (n.body ?? '').includes('「見積もりを送る」（返事待ち花子さん）'))).toBe(true);
+    expect(await myNotifications(request, b.auth)).toHaveLength(0);
+
+    const res2 = await request.get('/api/cron/action-suggest', { headers: { authorization: `Bearer ${CRON_SECRET}` } });
+    expect(((await res2.json()) as { skipped?: boolean }).skipped).toBe(true);
   });
 });

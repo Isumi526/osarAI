@@ -8,6 +8,7 @@ import { Osarai } from './screens/Osarai.js';
 import { AssistantChat } from './screens/AssistantChat.js';
 import { Tutorial } from './screens/Tutorial.js';
 import { Tasks } from './screens/Tasks.js';
+import { Notifications } from './screens/Notifications.js';
 import { CustomerList } from './screens/CustomerList.js';
 import { CustomerDetail } from './screens/CustomerDetail.js';
 import { CustomerForm } from './screens/CustomerForm.js';
@@ -16,14 +17,22 @@ import { Settings } from './screens/Settings.js';
 import { SchedulePage } from './screens/Schedule.js';
 import { SelfOsarai } from './screens/SelfOsarai.js';
 import { Welcome } from './screens/Welcome.js';
-import { BottomNav, BOTTOM_NAV_HEIGHT, useBottomNavVisible } from './components/BottomNav.js';
+import { MeetingRecord } from './screens/MeetingRecord.js';
+import { MeetingList } from './screens/MeetingList.js';
+import { MeetingDetail } from './screens/MeetingDetail.js';
+import { BottomNav, BOTTOM_NAV_HEIGHT, NAV_OVERHANG, useBottomNavVisible } from './components/BottomNav.js';
 import { NavGuardProvider } from './components/NavGuard.js';
+import { MeetingSessionProvider } from './components/MeetingSession.js';
+import { useIsDesktop } from './hooks/useIsDesktop.js';
 
 function AppRoutes() {
   const navVisible = useBottomNavVisible();
+  const isDesktop = useIsDesktop();
   return (
     <NavGuardProvider>
-      <div style={{ paddingBottom: navVisible ? BOTTOM_NAV_HEIGHT : 0 }}>
+      {/* 会議録音のレコーダーはアプリ全体で常駐（画面を移動しても録音が続く・T7c） */}
+      <MeetingSessionProvider>
+      <div style={{ paddingBottom: navVisible && !isDesktop ? BOTTOM_NAV_HEIGHT + NAV_OVERHANG : 0 }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/osarai" element={<Osarai />} />
@@ -32,9 +41,13 @@ function AppRoutes() {
           <Route path="/customers/:id/edit" element={<CustomerForm />} />
           <Route path="/customers/:id" element={<CustomerDetail />} />
           <Route path="/chat" element={<AssistantChat />} />
+          <Route path="/meeting" element={<MeetingRecord />} />
+          <Route path="/meetings" element={<MeetingList />} />
+          <Route path="/meetings/:id" element={<MeetingDetail />} />
           <Route path="/chat/legacy" element={<AiChat />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/tutorial" element={<Tutorial />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/self-osarai" element={<SelfOsarai />} />
@@ -43,6 +56,7 @@ function AppRoutes() {
         </Routes>
       </div>
       {navVisible && <BottomNav />}
+      </MeetingSessionProvider>
     </NavGuardProvider>
   );
 }

@@ -1,0 +1,430 @@
+// 会議録音の取り込み（T0・録音ソース非依存の共通バックエンド）。
+// クライアントが Storage(recordings) にアップロード済みの音声パスを受け取り、
+//   長尺文字起こし(Files API) → 全文から people/schedules/tasks を1ショット抽出 →
+//   meeting_recordings に状態保存 → 承認用の proposals を返す。
+// 承認後の登録は /api/meeting/commit（既存 commitProposals を再利用）。
+// 抽出スキーマ/整形は lib/proposal-extraction を共有（統合AIチャットと同一ロジック）。
+import { NextResponse } from 'next/server';
+import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT, buildMeetingMinutesPrompt, pruneEmptyMinutesSections } from '@osarai/shared';
+import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
+import { getEntitlement } from '@/lib/entitlement';
+import { formatUserProfile } from '@/lib/customer-context';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
+import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
+import { TURN_SCHEMA, toProposals, type Extracted, type TurnResult } from '@/lib/proposal-extraction';
+import {
+  parseSpeakers,
+  normalizeImportedTranscript,
+  relabelSpeakers,
+  dropSelfLabels,
+  parseTimedTranscript,
+  mergeTimedTranscripts,
+  dropLeakedSelfLines,
+} from '@/lib/meeting-speakers';
+import { commitProposals } from '@/lib/assistant-persist';
+
+export const runtime = 'nodejs';
+// 長尺文字起こし(アップロード＋processing待ち＋生成)＋抽出を同期で行う。Vercel上限に合わせる。
+// 1時間級の会議は本番実測のうえ段階実行に移す（T8）。それまでの暫定として、
+// クライアント側の再試行（同一 recordingPath の再送＝べき等）と stale 回収で取りこぼしを防ぐ（T7）。
+export const maxDuration = 300;
+/** status='processing' のままこの時間を超えた行は、関数が打ち切られた残骸とみなして再処理する。 */
+const STALE_PROCESSING_MS = 15 * 60 * 1000;
+
+const CAPTURES = ['pc_local', 'mobile_speaker', 'bot', 'text_import'] as const;
+/**
+ * 自動提案する「つながり」候補の上限（MVP は1対1が主・多人数の会議は主要な相手だけ）。
+ * 役員会議級（16話者）で候補が15人出て承認画面が埋まったため（2026-09-21 実データ評価）。
+ * 超えた分は候補から外し warnings で知らせる（文字起こし・議事録は人数に関係なく生成する）。
+ */
+const MAX_PEOPLE = 3;
+/** 貼り付け取り込みの上限（1時間の会議でも 3〜5 万字程度） */
+const MAX_IMPORT_CHARS = 200_000;
+type Capture = (typeof CAPTURES)[number];
+
+export function OPTIONS() {
+  return corsPreflight();
+}
+
+export async function POST(req: Request) {
+  const ctx = await authedFromRequest(req);
+  if (!ctx) return json({ error: 'unauthenticated' }, 401);
+  const { supabase, user } = ctx;
+
+  const body = (await req.json().catch(() => ({}))) as {
+    recordingPath?: string;
+    selfRecordingPath?: string;
+    mimeType?: string;
+    capture?: Capture;
+    durationSec?: number;
+    consentAck?: boolean;
+    /** 他ツールの文字起こしを貼り付けて取り込む（T7b）。recordingPath の代わりに渡す */
+    transcriptText?: string;
+    /** 会議の実施日時（ISO）。過去の録音/文字起こしを取り込む時に、相対日付の解決と met_at の基準にする */
+    recordedAt?: string;
+    /** 録音者本人が話していた区間（秒）。PC録音のマイクゲートが記録する（T7c・話者の取り違え防止） */
+    selfSegments?: [number, number][];
+  };
+  const selfSegments = Array.isArray(body.selfSegments)
+    ? body.selfSegments.filter((x): x is [number, number] => Array.isArray(x) && x.length === 2 && x.every((n) => typeof n === 'number')).slice(0, 400)
+    : undefined;
+  const recordedAt = body.recordedAt && !Number.isNaN(Date.parse(body.recordedAt)) ? new Date(body.recordedAt) : null;
+  const importedText = typeof body.transcriptText === 'string' ? body.transcriptText.trim() : '';
+  const recordingPath = (body.recordingPath ?? '').trim();
+  // 自分（マイク）だけを録った別ファイル。相手トラックと別々に文字起こしして時刻で合成する。
+  const selfRecordingPath = (body.selfRecordingPath ?? '').trim();
+  const mimeType = body.mimeType ?? 'audio/webm';
+  const capture: Capture = importedText
+    ? 'text_import'
+    : CAPTURES.includes(body.capture as Capture)
+      ? (body.capture as Capture)
+      : 'pc_local';
+  if (!recordingPath && !importedText) return json({ error: 'recordingPath required' }, 400);
+  if (importedText.length > MAX_IMPORT_CHARS) return json({ error: 'transcript too long', message: '文字起こしが長すぎます（20万字まで）。' }, 413);
+  // 所有者チェック（他人のパスを読ませない）。パスは必ず user.id 配下。
+  if (recordingPath && !recordingPath.startsWith(`${user.id}/`)) return json({ error: 'forbidden path' }, 403);
+  if (selfRecordingPath && !selfRecordingPath.startsWith(`${user.id}/`)) return json({ error: 'forbidden path' }, 403);
+
+  const [ent, profileRes] = await Promise.all([
+    getEntitlement(supabase, user.id),
+    supabase.from('profiles').select('org_id, user_profile, display_name').eq('id', user.id).maybeSingle(),
+  ]);
+  if (!ent.active) return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
+  // plan が未知（PLANS に無い文字列）ならフェイルクローズ（T7）
+  if (!ent.def || !ent.def.recordingImport) {
+    return json({ error: 'plan_upgrade_required', message: 'このプランでは会議録音をご利用いただけません。' }, 403);
+  }
+  const profile = profileRes.data;
+  if (!profile) return json({ error: 'profile not found' }, 400);
+  const orgId = profile.org_id;
+
+  // べき等ガード：同じ録音パスの再送で二重に文字起こし/抽出しない（コスト暴走・重複防止）。
+  // 完全な排他には (user_id,audio_url) のユニーク制約が要る（同時実行の競合は残る・📋参照）が、
+  // 通常のクライアント再送はこのクエリで吸収する。
+  // - reviewing/done: 保存済みの結果をそのまま返す（reused）
+  // - processing で新しい: まだ前回の処理が走っている可能性があるので待ってもらう（409）
+  // - processing で古い(15分超): Vercel の打ち切り等で残った残骸とみなし、同じ行を再処理する
+  // - failed: 再処理（新しい行は作らず同じ行を使う）
+  const { data: existingRec } = recordingPath
+    ? await supabase
+        .from('meeting_recordings')
+        .select('id, transcript, minutes, proposals, status, updated_at, error')
+        .eq('user_id', user.id)
+        .eq('audio_url', recordingPath)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+  let meetingId: string;
+  if (existingRec && (existingRec.status === 'reviewing' || existingRec.status === 'done')) {
+    return json(
+      {
+        meetingId: existingRec.id,
+        transcript: existingRec.transcript ?? '',
+        minutes: existingRec.minutes ?? null,
+        proposals: existingRec.proposals ?? null,
+        speakers: parseSpeakers(existingRec.transcript ?? ''),
+        warnings: existingRec.error ? [existingRec.error] : [],
+        reused: true,
+      },
+      200,
+    );
+  }
+  if (existingRec && existingRec.status === 'processing') {
+    const age = Date.now() - Date.parse(existingRec.updated_at);
+    if (age < STALE_PROCESSING_MS) {
+      return json(
+        { error: 'still_processing', meetingId: existingRec.id, message: 'この録音は解析中です。しばらく待ってから「再解析」を押してください。' },
+        409,
+      );
+    }
+  }
+  if (existingRec) {
+    // failed / stale processing → 同じ行を再利用して再処理
+    meetingId = existingRec.id;
+    await supabase
+      .from('meeting_recordings')
+      .update({ status: 'processing', error: null, updated_at: new Date().toISOString() })
+      .eq('id', meetingId);
+  } else {
+    const { data: rec, error: recErr } = await supabase
+      .from('meeting_recordings')
+      .insert({
+        org_id: orgId,
+        user_id: user.id,
+        capture,
+        audio_url: recordingPath || null,
+        mime_type: importedText ? 'text/plain' : mimeType,
+        duration_sec: typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null,
+        consent_ack: body.consentAck === true,
+        status: 'processing',
+        // 過去の会議を取り込む時は作成時刻を会議日時にする（commit の met_at = created_at − duration の基準）
+        ...(recordedAt ? { created_at: recordedAt.toISOString() } : {}),
+      })
+      .select('id')
+      .single();
+    if (recErr || !rec) return json({ error: 'meeting create failed', detail: recErr?.message }, 500);
+    meetingId = rec.id;
+  }
+
+  const fail = async (detail: string, status: number) => {
+    await supabase.from('meeting_recordings').update({ status: 'failed', error: detail, updated_at: new Date().toISOString() }).eq('id', meetingId);
+    return json({ error: 'ingest_failed', meetingId, detail }, status);
+  };
+
+  const durationSecBody = typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null;
+  // マイクゲートを通った合計が3秒未満なら、本人は実質無音とみなす。スピーカーの回り込みが
+  // 一瞬だけゲートを通ると、それを根拠に1行だけ「自分:」が付いてしまうため（人レビュー 2026-09-22）。
+  const SELF_SPEECH_MIN_SEC = 3;
+  const selfTotalSec = (selfSegments ?? []).reduce((sum, [a, b]) => sum + Math.max(0, b - a), 0);
+  const selfSilent = capture === 'pc_local' && selfSegments !== undefined && selfTotalSec < SELF_SPEECH_MIN_SEC;
+  const effectiveSelfSegments = selfSilent ? [] : selfSegments;
+  let transcript: string;
+  if (importedText) {
+    // --- 貼り付け取り込み: 文字起こしは済んでいるので形式だけ揃える（話者: 発言） ---
+    transcript = normalizeImportedTranscript(importedText);
+  } else {
+    // --- Storage から音声を取得（service_role・非公開バケット） ---
+    const admin = createServiceRoleClient();
+    const { data: blob, error: dlErr } = await admin.storage.from(RECORDINGS_BUCKET).download(recordingPath);
+    if (dlErr || !blob) return fail(`音声の取得に失敗しました: ${dlErr?.message ?? 'not found'}`, 404);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    if (selfRecordingPath) {
+      // --- 2トラック録音（2026-09-22）---
+      // 相手（システム音声）と自分（マイク）を別ファイルで録り、別々に文字起こしして時刻で合成する。
+      // 1本にまとめると Gemini はチャンネルを見ず役割で話者を推測するため、本人が無言でも
+      // 相手の発言が「自分」になっていた。トラックを分ければ取り違えは原理的に起きない。
+      const { data: selfBlob } = await admin.storage.from(RECORDINGS_BUCKET).download(selfRecordingPath);
+      const selfBytes = selfBlob ? new Uint8Array(await selfBlob.arrayBuffer()) : null;
+      let otherText: string;
+      let selfText = '';
+      try {
+        [otherText, selfText] = await Promise.all([
+          geminiTranscribeLong(bytes, mimeType, { singleTrack: { speaker: 'other' }, durationSec: durationSecBody ?? undefined }),
+          selfBytes && !selfSilent
+            ? geminiTranscribeLong(selfBytes, mimeType, { singleTrack: { speaker: 'self' }, durationSec: durationSecBody ?? undefined })
+            : Promise.resolve(''),
+        ]);
+      } catch (e) {
+        return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+      }
+      const otherLines = parseTimedTranscript(otherText, '相手1');
+      // マイクに回り込んだ相手の声が「自分の発言」にならないよう、相手側と重複する発話は落とす
+      const selfLines = dropLeakedSelfLines(parseTimedTranscript(selfText, '自分'), otherLines);
+      transcript = mergeTimedTranscripts(otherLines, selfLines);
+    } else {
+      // --- 1トラック（スマホの室内録音・旧データの再解析） ---
+      try {
+        transcript = await geminiTranscribeLong(bytes, mimeType, {
+          channelSelfLeft: capture === 'pc_local',
+          selfName: (profile.display_name ?? '').trim() || undefined,
+          selfSegments: capture === 'pc_local' ? effectiveSelfSegments : undefined,
+          durationSec: durationSecBody ?? undefined,
+        });
+      } catch (e) {
+        return fail(`文字起こしに失敗しました: ${String(e)}`, 502);
+      }
+      // 本人が実質無音だったのに「自分:」が紛れ込んだら相手に寄せる（プロンプト任せにしない）
+      if (selfSilent && transcript) transcript = dropSelfLabels(transcript);
+    }
+  }
+  if (!transcript) return fail('文字起こし結果が空でした', 502);
+  const speakers = parseSpeakers(transcript);
+
+  // --- 全文から people/schedules/tasks を1ショット抽出 ---
+  const [customersRes, agencyRes] = await Promise.all([
+    supabase
+      .from('customers')
+      .select('id, name, relation_type, needs')
+      .eq('owner_id', user.id)
+      .eq('status', 'active')
+      // 直近に会った人から名簿に載せる（100件超のユーザーで名寄せ対象が不定にならないように）
+      .order('last_met_at', { ascending: false, nullsFirst: false })
+      .limit(100),
+    supabase.from('agency_products').select('name').limit(50),
+  ]);
+  const customers = customersRes.data ?? [];
+  const customerRoster = customers
+    .map((c) => `- id=${c.id} 名前=${c.name}${c.relation_type ? ` 区分=${c.relation_type}` : ''}${c.needs ? ` ニーズ=${c.needs}` : ''}`)
+    .join('\n');
+  const userProfile = (profile.user_profile as Record<string, unknown> | null) ?? {};
+  const ownProducts = Array.isArray(userProfile.products)
+    ? (userProfile.products as { name?: string }[]).map((p) => p?.name).filter(Boolean)
+    : [];
+  const productRoster = [...ownProducts, ...(agencyRes.data ?? []).map((p) => p.name)].map((n) => `- ${n}`).join('\n');
+  const notes = Array.isArray(userProfile.notes) ? (userProfile.notes as string[]).slice(-30) : [];
+  const userContext = [formatUserProfile(userProfile), notes.length ? `これまでの気づき:\n${notes.map((n) => `- ${n}`).join('\n')}` : '']
+    .filter(Boolean)
+    .join('\n');
+
+  // 相対日付（「来週火曜」）の基準。取り込みで会議日時が指定されていればそれを使う
+  const now = recordedAt ?? new Date();
+  const nowLabel = now.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit',
+  });
+  // --- 議事録（固定セクション型・T3/T7）。失敗しても致命ではない（候補は出す） ---
+  let minutes: string | null = null;
+  let minutesError: string | null = null;
+  const durationSec = typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null;
+  const meetingStart = recordedAt ?? (durationSec ? new Date(now.getTime() - durationSec * 1000) : now);
+  const meetingAtLabel = meetingStart.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit',
+  });
+  const selfName = (profile.display_name ?? '').trim();
+  try {
+    minutes = await geminiText(
+      buildMeetingMinutesPrompt({
+        meetingAt: meetingAtLabel,
+        duration: durationSec ? `${Math.max(1, Math.round(durationSec / 60))}分` : '',
+        transcript,
+        // 本人の名前を渡し、取り込んだ文字起こし（自分ラベルが無い）でも「自分」と「相手」を取り違えにくくする
+        userContext: [
+          selfName ? `ユーザー本人（議事録での「自分」）の名前: ${selfName}` : '',
+          // マイクが実質無音だった録音では、本人が話した前提の記述を書かせない
+          selfSilent ? `この録音でユーザー本人はほとんど発言していません。本人が話した・約束したという記述は書かないでください。` : '',
+          formatUserProfile(userProfile),
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      }),
+      // 1時間分の文字起こしが入力になるため、対話用の既定15秒では足りない
+      { model: GEMINI_MODEL_LITE, temperature: 0.2, timeoutMs: 90_000 },
+    );
+  } catch (e) {
+    // 致命ではない（議事録なしでも登録は進む）が、失敗は error 列とレスポンス warnings で観測可能にする。
+    minutesError = `議事録の生成に失敗しました: ${String(e)}`;
+    console.error('[meeting/ingest] minutes failed', e);
+  }
+
+  // 会議の全文文字起こしを「対話履歴」枠に流し込む。ユーザー本人が参加した会議として、
+  // 登場人物(相手)・発生した予定・タスクを抽出させる。返答(reply)は使わない。
+  const history =
+    `以下はユーザーが参加した会議の全文文字起こしです。ここから、実際に会話に参加した相手（ユーザー本人以外）と、` +
+    `会議で決まった予定・発生したタスクを抽出してください。` +
+    `ユーザー本人${selfName ? `（名前: ${selfName}。「自分:」の発言者）` : '（「自分:」の発言者）'}を people に含めないでください。` +
+    `話の中で名前だけ出た第三者（紹介したい知人など）は people に入れず、必要なら tasks の題名に含めてください。` +
+    `相手の名前が分からない場合は name を空文字にしてください（「相手1」のようなラベルを名前にしない）。` +
+    `people は、ユーザーが直接やり取りした主要な相手を最大 ${MAX_PEOPLE} 人まで（発言量の多い順）にしてください。` +
+    `tasks は、この会議で誰かが「〜します」「送ります」「確認してご連絡します」と明示的に引き受けた、対象と内容がはっきりした行動です。` +
+    `ユーザー本人が引き受けたものは assignee="self"、会話の相手が引き受けたもの（ユーザーは返事や資料を待つ側）は assignee="other" にしてください。` +
+    `assignee="other" の title は「相手が何をするか」を書く（例:「スキルテストの結果を連絡」「求人を数社マイページに掲載」）。` +
+    `次は入れないでください: 何をするか曖昧なもの（「検討します」「また連絡します」だけ）、` +
+    `まだ決めていない意向や過去の計画（「〜しようと思ってた」「〜できたらいいな」「先延ばしにしている」）、` +
+    `相手がユーザーに頼んだが本人が引き受けていないもの、会議の場でその場で済んだこと、一般的な話題。` +
+    `due_date は期限の発話があれば必ず日付に直してください（会議日を基準に: 「今日中」「このあと」「すぐ」→ 会議日、「明日」→ 翌日、` +
+    `「今週中」→ その週の金曜、「週明け」→ 翌週の月曜、「土日の間」「週末」→ 直後の日曜、「来週中」→ 翌週の金曜、「月末」→ その月の末日）。` +
+    `期限に当たる発話が無ければ null にしてください（推測で決めない）。` +
+    `schedules は、日付（少なくとも「来週水曜」のように日が特定できる表現）が実際に発話されたものだけにしてください` +
+    `（「また会いましょう」のような日付の無い約束は入れない）。` +
+    `self_notes は空配列にしてください。` +
+    `\n---\n${transcript}\n---`;
+  const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history });
+
+  let extracted: Extracted;
+  let extractError: string | null = null;
+  try {
+    const result = await geminiJson<TurnResult>(prompt, TURN_SCHEMA, {
+      model: GEMINI_MODEL_DIALOGUE,
+      system: ASSISTANT_SYSTEM_PROMPT,
+      timeoutMs: 120_000,
+    });
+    extracted = result.extracted ?? {};
+  } catch (e) {
+    // 文字起こし自体は有用（議事録/レビューに使える）ため残す。ただし抽出失敗を無音で
+    // reviewing にせず error 列に記録して観測可能にする（候補は空でレビューに回す）。
+    extracted = {};
+    extractError = `候補の抽出に失敗しました: ${String(e)}`;
+    console.error('[meeting/ingest] extract failed', e);
+  }
+  let peopleWarning: string | null = null;
+  if ((extracted.people?.length ?? 0) > MAX_PEOPLE) {
+    const dropped = extracted.people!.length - MAX_PEOPLE;
+    extracted = { ...extracted, people: extracted.people!.slice(0, MAX_PEOPLE) };
+    peopleWarning = `多人数の会議のため、つながり候補を主要な${MAX_PEOPLE}名に絞りました（${dropped}名は候補から外しました。必要なら「つながりを追加」で足せます）。`;
+  }
+  const proposals = toProposals(extracted, customers, now);
+
+  // --- 自動保存（承認ステップ廃止・2026-09-21 人判断）---
+  // 目的は「後で AI 相談が参照できる」「同じ人に会う前に読み返せる」こと。承認で止めず、
+  // 名前が分かった相手（既存一致 or 新規）に議事録＋全文を紐付け、予定/タスクも登録する。直したければ後から編集する。
+  // 名前が分からない相手（name 空）は customers を作らず、録音は「相手未設定」のまま残す（後で紐付け可）。
+  const namedPeople = proposals.people.filter((p) => p.customer_id || p.name.trim());
+  const speakersRoster = parseSpeakers(transcript);
+  // 相手が1人だけ特定できていれば、話者ラベル「相手1」をその名前に置き換えて保存する
+  const others = speakersRoster.filter((sp) => !sp.isSelf);
+  const speakerNames: Record<string, string> = {};
+  if (others.length === 1 && namedPeople.length === 1) {
+    const nm = namedPeople[0]!.name || customers.find((c) => c.id === namedPeople[0]!.customer_id)?.name || '';
+    if (nm) speakerNames[others[0]!.label] = nm;
+  }
+  const finalTranscript = relabelSpeakers(transcript, speakerNames);
+  // 議事録は人が読むものなので、名前が分からない相手は「相手1」ではなく「相手」と書く
+  const minutesNames = { ...speakerNames };
+  if (others.length === 1 && !minutesNames[others[0]!.label]) minutesNames[others[0]!.label] = '相手';
+  const finalMinutes = minutes ? pruneEmptyMinutesSections(relabelSpeakers(minutes, minutesNames, { inline: true })) : null;
+  const metAt = meetingStart.toISOString();
+
+  let committed: { customers: { id: string; name: string; isNew: boolean }[]; interactionIds: string[]; scheduleIds: string[]; taskIds: string[] } | null = null;
+  let commitError: string | null = null;
+  try {
+    committed = await commitProposals({
+      supabase,
+      orgId,
+      userId: user.id,
+      proposals: {
+        ...proposals,
+        // 1対1なら相手未指定の予定/タスクはその人に紐付ける
+        people: namedPeople,
+        schedules: proposals.schedules.map((x) => ({ ...x, person_index: x.person_index ?? (namedPeople.length === 1 ? 0 : null) })),
+        tasks: proposals.tasks.map((x) => ({ ...x, person_index: x.person_index ?? (namedPeople.length === 1 ? 0 : null) })),
+        self_notes: [],
+        self_fields: {},
+      },
+      transcript: finalTranscript,
+      minutes: finalMinutes,
+      minutesForAll: true,
+      source: capture === 'mobile_speaker' ? 'in_person_rec' : 'zoom_rec',
+      metAt,
+    });
+  } catch (e) {
+    commitError = `登録に失敗しました（議事録は残っています）: ${String(e)}`;
+    console.error('[meeting/ingest] commit failed', e);
+  }
+
+  await supabase
+    .from('meeting_recordings')
+    .update({
+      transcript: finalTranscript,
+      minutes: finalMinutes,
+      proposals: proposals as unknown as never,
+      status: committed ? 'done' : 'reviewing',
+      customer_id: committed?.customers[0]?.id ?? null,
+      committed_interaction_ids: (committed?.interactionIds ?? []) as unknown as never,
+      error: [extractError, minutesError, commitError].filter(Boolean).join(' / ') || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', meetingId);
+
+  const warnings = [extractError, minutesError, peopleWarning, commitError].filter((w): w is string => !!w);
+  return json(
+    {
+      meetingId,
+      transcript: finalTranscript,
+      minutes: finalMinutes,
+      proposals,
+      speakers: parseSpeakers(finalTranscript),
+      warnings,
+      committed,
+      metAt,
+    },
+    200,
+  );
+}
+
+function json(payload: unknown, status: number) {
+  return NextResponse.json(payload, { status, headers: CORS_HEADERS });
+}

@@ -5,7 +5,7 @@
 // interactions(source='ai_dialogue')作成）を踏襲し、Homeの個人集計との互換を保つ。
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@osarai/shared/database.types';
-import { computeAutoTemperature, type AiSummary } from '@osarai/shared';
+import { computeAutoTemperature, normalizeName, type AiSummary, type SimilarNameCandidate } from '@osarai/shared';
 
 type DB = SupabaseClient<Database>;
 
@@ -16,6 +16,11 @@ export interface PersonProposal {
   needs?: string[];
   next_actions?: string[];
   custom_fields?: Record<string, unknown>;
+  /**
+   * 同一人物かもしれない既存つながりの候補（新規登録になる場合だけ付く・確認カードで確認を出す）。
+   * サーバーは断定せず候補を出すだけで、寄せるかどうかはユーザーが決める。
+   */
+  similar?: SimilarNameCandidate[];
 }
 
 export interface ScheduleProposal {
@@ -32,6 +37,8 @@ export interface TaskProposal {
   title: string;
   due_at: string | null;
   person_index: number | null;
+  /** 誰が引き受けたか（省略時 self）。other は「相手待ち」として別枠に並ぶ */
+  assignee?: 'self' | 'other';
 }
 
 export interface Proposals {
@@ -50,13 +57,9 @@ export interface CommitResult {
 }
 
 /** 表記揺れの検知用。全角半角・敬称・空白を落とした比較キーにする。 */
-export function normalizeName(name: string): string {
-  return name
-    .normalize('NFKC')
-    .replace(/\s+/g, '')
-    .replace(/(さん|様|さま|氏|くん|ちゃん)$/u, '')
-    .toLowerCase();
-}
+// 名前の正規化規則は @osarai/shared に集約した（表記揺れ検知と同じ規則を使うため）。
+// 既存の import 元（proposal-extraction 等）を壊さないよう、ここから再exportする。
+export { normalizeName };
 
 export async function commitProposals(args: {
   supabase: DB;
@@ -64,9 +67,23 @@ export async function commitProposals(args: {
   userId: string;
   proposals: Proposals;
   transcript: string;
+  /** 会議の議事録（T3）。あれば主たる相手の履歴(interaction)に残してタイムラインで読めるようにする。 */
+  minutes?: string | null;
+  /**
+   * interactions.source（既定 'ai_dialogue'）。会議録音は録音経路に応じて 'zoom_rec' / 'in_person_rec' を
+   * 渡し、タイムラインで対話おさらいと区別できるようにする（T7）。
+   */
+  source?: 'ai_dialogue' | 'zoom_rec' | 'in_person_rec' | 'manual';
+  /** 実際に会った日時（ISO）。会議録音は録音開始時刻を渡す。省略時は保存時刻。 */
+  metAt?: string;
+  /** 議事録を全員の履歴に付ける（会議録音の自動保存・各相手のカードから同じ会議を読み返せる） */
+  minutesForAll?: boolean;
 }): Promise<CommitResult> {
-  const { supabase, orgId, userId, proposals, transcript } = args;
+  const { supabase, orgId, userId, proposals, transcript, minutes } = args;
+  const source = args.source ?? 'ai_dialogue';
   const now = new Date().toISOString();
+  const metAt = args.metAt ?? now;
+  let minutesAttached = false;
 
   // 既存つながりを一度だけ引き、新規作成時の重複（表記揺れ）を防ぐ照合に使う。
   const { data: existing } = await supabase
@@ -91,14 +108,27 @@ export async function commitProposals(args: {
     const isNew = !customerId;
 
     if (customerId) {
+      // 既存つながりの needs / 配列型 custom_fields（products・wants_to_meet）は上書きせず追記する。
+      // 1回の会議で相手の全ニーズが再抽出される保証はなく、前回までの蓄積を消さない（T7）。
+      const { data: cur } = await supabase
+        .from('customers')
+        .select('needs, custom_fields, last_met_at')
+        .eq('id', customerId)
+        .maybeSingle();
+      const mergedNeeds = mergeNeeds(cur?.needs ?? null, person.needs);
+      const mergedFields = mergeArrayFields(
+        (cur?.custom_fields as Record<string, unknown> | null) ?? {},
+        person.custom_fields ?? {},
+      );
       await Promise.all([
         supabase.rpc('merge_customer_custom_fields', {
           target_customer_id: customerId,
-          new_fields: (person.custom_fields ?? {}) as never,
+          new_fields: mergedFields as never,
         }),
         supabase
           .from('customers')
-          .update({ needs: joinList(person.needs), last_met_at: now, updated_at: now })
+          // 承認が翌日以降にずれても、会議より新しい接触日を過去に戻さない
+          .update({ needs: mergedNeeds, last_met_at: greaterIso(cur?.last_met_at ?? metAt, metAt), updated_at: now })
           .eq('id', customerId),
       ]);
     } else {
@@ -111,7 +141,7 @@ export async function commitProposals(args: {
           needs: joinList(person.needs),
           temperature: 'cold', // 新規は履歴が無いためcoldから開始し、直後に再計算する
           custom_fields: (person.custom_fields ?? {}) as never,
-          last_met_at: now,
+          last_met_at: metAt,
         })
         .select('id')
         .single();
@@ -128,19 +158,22 @@ export async function commitProposals(args: {
       needs: person.needs ?? [],
       next_actions: person.next_actions ?? [],
     };
+    // 議事録は主たる相手（最初の1人）の履歴にだけ残す（全員に重複させない）。
+    const summaryWithMinutes = minutes && (args.minutesForAll || !minutesAttached) ? { ...aiSummary, minutes } : aiSummary;
+    if (!minutesAttached && minutes) minutesAttached = true;
     const [, interaction] = await Promise.all([
-      recomputeTemperature(supabase, customerId, now),
+      recomputeTemperature(supabase, customerId, metAt),
       supabase
         .from('interactions')
         .insert({
           org_id: orgId,
           customer_id: customerId,
           author_id: userId,
-          source: 'ai_dialogue',
+          source,
           type: 'text',
           raw_text: transcript,
-          ai_summary: aiSummary as never,
-          met_at: now,
+          ai_summary: summaryWithMinutes as never,
+          met_at: metAt,
         })
         .select('id')
         .single(),
@@ -178,6 +211,7 @@ export async function commitProposals(args: {
         customer_id: t.person_index !== null ? (personIds[t.person_index] ?? null) : null,
         title: t.title,
         due_at: t.due_at,
+        assignee: t.assignee === 'other' ? 'other' : 'self',
         source: 'assistant',
       })
       .select('id')
@@ -198,6 +232,43 @@ export async function commitProposals(args: {
 function joinList(v?: string[]): string | null {
   if (!v || v.length === 0) return null;
   return v.join(' / ');
+}
+
+/** 既存の needs(' / ' 連結) に新しいニーズを重複除去して追記する。新規が無ければ既存のまま。 */
+export function mergeNeeds(current: string | null, incoming?: string[]): string | null {
+  const cur = (current ?? '').split(' / ').map((s) => s.trim()).filter(Boolean);
+  const seen = new Set(cur.map(normalizeName));
+  for (const n of incoming ?? []) {
+    const t = n.trim();
+    if (!t) continue;
+    const key = normalizeName(t);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cur.push(t);
+  }
+  return cur.length ? cur.join(' / ') : null;
+}
+
+/** custom_fields のうち配列項目（products / wants_to_meet 等）は既存と和集合にする。それ以外は新しい値で上書き。 */
+export function mergeArrayFields(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(incoming)) {
+    const prev = current[k];
+    if (Array.isArray(v) && Array.isArray(prev)) {
+      const seen = new Set(prev.map((x) => String(x).trim()));
+      out[k] = [...prev, ...v.filter((x) => !seen.has(String(x).trim()))];
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+function greaterIso(a: string, b: string): string {
+  return Date.parse(a) >= Date.parse(b) ? a : b;
 }
 
 function cleanFields(fields?: Record<string, string>): Record<string, string> | null {

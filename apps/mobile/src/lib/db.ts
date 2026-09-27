@@ -28,6 +28,19 @@ export async function getMyProfile(): Promise<Profile | null> {
   return (data as Profile | null) ?? null;
 }
 
+/**
+ * 自分の表示名（本名）を更新する。会議の文字起こしで「自分」と「相手」を見分けるのに使うので、
+ * 本名（漢字）を入れてもらう（2026-09-27・マイページに入力欄が無かったため追加）。
+ */
+export async function updateMyDisplayName(displayName: string): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { error } = await supabase.from('profiles').update({ display_name: displayName.trim() || null }).eq('id', user.id);
+  if (error) throw error;
+}
+
 // AI戦略相談のコンテキストに使う自由記述プロフィール（年齢/性別/経歴/仕事/扱い商品/目標）。
 // 目標(goals)は構造化配列を持つため値はstring以外(配列)も許容する。
 export async function updateMyUserProfile(userProfile: Record<string, unknown>): Promise<void> {

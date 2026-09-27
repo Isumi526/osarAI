@@ -372,6 +372,159 @@ export type Database = {
           },
         ]
       }
+      meeting_recordings: {
+        Row: {
+          audio_url: string | null
+          capture: string
+          committed_interaction_ids: Json
+          consent_ack: boolean
+          created_at: string
+          customer_id: string | null
+          duration_sec: number | null
+          error: string | null
+          id: string
+          mime_type: string | null
+          minutes: string | null
+          org_id: string
+          proposals: Json | null
+          status: string
+          transcript: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audio_url?: string | null
+          capture?: string
+          committed_interaction_ids?: Json
+          consent_ack?: boolean
+          created_at?: string
+          customer_id?: string | null
+          duration_sec?: number | null
+          error?: string | null
+          id?: string
+          mime_type?: string | null
+          minutes?: string | null
+          org_id: string
+          proposals?: Json | null
+          status?: string
+          transcript?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audio_url?: string | null
+          capture?: string
+          committed_interaction_ids?: Json
+          consent_ack?: boolean
+          created_at?: string
+          customer_id?: string | null
+          duration_sec?: number | null
+          error?: string | null
+          id?: string
+          mime_type?: string | null
+          minutes?: string | null
+          org_id?: string
+          proposals?: Json | null
+          status?: string
+          transcript?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_recordings_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_recordings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_recordings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          category: string
+          created_at: string
+          customer_id: string | null
+          id: string
+          link_path: string | null
+          org_id: string
+          read_at: string | null
+          task_id: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          category: string
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          link_path?: string | null
+          org_id: string
+          read_at?: string | null
+          task_id?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          category?: string
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          link_path?: string | null
+          org_id?: string
+          read_at?: string | null
+          task_id?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -720,6 +873,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          assignee: string
           completed_at: string | null
           created_at: string
           customer_id: string | null
@@ -734,6 +888,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assignee?: string
           completed_at?: string | null
           created_at?: string
           customer_id?: string | null
@@ -748,6 +903,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assignee?: string
           completed_at?: string | null
           created_at?: string
           customer_id?: string | null

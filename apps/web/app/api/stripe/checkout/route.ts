@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
   const stripe = getStripe();
   const body = (await req.json()) as { plan?: PlanId; promoCode?: string };
-  const plan = body.plan ?? 'standard';
+  const plan = body.plan ?? 'light';
   const priceId = priceIdForPlan(plan);
   if (!priceId) {
     return NextResponse.json({ error: 'price not configured' }, { status: 500 });
