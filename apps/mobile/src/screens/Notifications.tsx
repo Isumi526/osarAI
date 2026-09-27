@@ -68,18 +68,7 @@ export function Notifications() {
 
   return (
     <main className="screen screen--wide" style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
-      <ScreenHeader>
-        <button
-          type="button"
-          className="back-home"
-          onClick={() => navigate('/')}
-          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}
-        >
-          ← ホーム
-        </button>
-        <strong>通知</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="通知" back={{ to: '/', label: 'ホームへ戻る', home: true }} />
 
       <div style={{ display: 'flex', gap: 8, margin: '4px 0 12px' }}>
         {TABS.map((t) => (

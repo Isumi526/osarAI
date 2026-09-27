@@ -51,11 +51,7 @@ export function MeetingDetail() {
 
   return (
     <main className="screen">
-      <ScreenHeader>
-        <Link to="/meetings">← 会議の記録</Link>
-        <strong>会議</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="会議" back={{ to: '/meetings', label: '会議の記録へ戻る' }} />
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
       {loading ? (

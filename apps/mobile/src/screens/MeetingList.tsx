@@ -41,11 +41,7 @@ export function MeetingList() {
 
   return (
     <main className="screen screen--wide">
-      <ScreenHeader>
-        <Link to="/" className="back-home">← ホーム</Link>
-        <strong>会議の記録</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="会議の記録" back={{ to: '/', label: 'ホームへ戻る', home: true }} />
 
       <PendingRecordingsBanner />
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}

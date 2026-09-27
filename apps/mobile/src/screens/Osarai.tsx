@@ -388,25 +388,21 @@ export function Osarai() {
         ...(done ? {} : { paddingBottom: 24 + BOTTOM_NAV_HEIGHT + NAV_OVERHANG + formHeight }),
       }}
     >
-      <ScreenHeader>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)' }}>← 戻る</button>
-        <strong>{isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}</strong>
-        {remainingSec !== null && !done ? (
-          remainingSec === 0 ? (
-            <button
-              type="button"
-              onClick={() => setRemainingSec(300)}
-              style={{ padding: '4px 8px', fontSize: 13, whiteSpace: 'nowrap' }}
-            >
-              +5分延長
-            </button>
-          ) : (
-            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{formatMMSS(remainingSec)}</span>
-          )
-        ) : (
-          <span style={{ width: 48 }} />
-        )}
-      </ScreenHeader>
+      <ScreenHeader
+        title={isRegisterMode ? 'つながりを登録しましょう' : 'おさらい'}
+        back={{ onClick: onBack, label: '戻る' }}
+        actions={
+          remainingSec !== null && !done ? (
+            remainingSec === 0 ? (
+              <button type="button" onClick={() => setRemainingSec(300)} style={{ padding: '4px 8px', fontSize: 13, whiteSpace: 'nowrap' }}>
+                +5分延長
+              </button>
+            ) : (
+              <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{formatMMSS(remainingSec)}</span>
+            )
+          ) : undefined
+        }
+      />
 
       {/* 対話。ScreenHeaderがposition:fixedのためheaderは通常フローから外れる。
           .screenのpadding-topが--header-height(ScreenHeaderが実測してCSS変数に反映)に

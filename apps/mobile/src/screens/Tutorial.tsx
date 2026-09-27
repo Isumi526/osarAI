@@ -88,11 +88,7 @@ export function Tutorial() {
 
   return (
     <main className="screen">
-      <ScreenHeader>
-        <Link to="/" className="back-home">← ホーム</Link>
-        <strong>使い方</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="使い方" back={{ to: '/settings', label: 'マイページへ戻る' }} />
 
       {/* 進捗ドット。今どこにいるかが一目で分かるようにする */}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'center', margin: '16px 0' }}>

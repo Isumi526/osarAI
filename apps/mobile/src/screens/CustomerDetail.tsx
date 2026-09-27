@@ -9,6 +9,7 @@ import {
   type Interaction,
 } from '../lib/db.js';
 import { importRecording } from '../lib/recordings.js';
+import { ScreenHeader } from '../components/ScreenHeader.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { MinutesView } from '../components/ReviewCard.js';
 import type { AiSummary, InteractionSource } from '@osarai/shared';
@@ -99,7 +100,8 @@ export function CustomerDetail() {
 
   return (
     <main className="screen">
-      <Link to="/">← 一覧</Link>
+      {/* 他の画面と同じヘッダーにそろえる（旧: 「← 一覧」なのにホームへ戻るリンクだった） */}
+      <ScreenHeader title="つながり" back={{ to: '/customers', label: 'つながり一覧へ戻る', home: true }} />
 
       {/* 顧客カード */}
       <section

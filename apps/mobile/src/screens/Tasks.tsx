@@ -123,11 +123,7 @@ export function Tasks() {
 
   return (
     <main className="screen screen--wide">
-      <ScreenHeader>
-        <Link to="/" className="back-home">← ホーム</Link>
-        <strong>TODO</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="TODO" />
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 

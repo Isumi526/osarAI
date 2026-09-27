@@ -143,4 +143,48 @@ body.has-sidebar .screen-header {
 .show-on-desktop { display: none; }
 body.has-sidebar .back-home { visibility: hidden; }
 body.has-sidebar .hide-on-desktop { display: none !important; }
-body.has-sidebar .show-on-desktop { display: block; }
+body.has-sidebar .show-on-desktop { display: inline; }
+
+/* ===== 画面ヘッダーの統一（2026-09-27）: 左寄せのタイトル＋右に操作 ===== */
+.screen-header { gap: 12px; }
+.screen-header__main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.screen-header__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.screen-header__back {
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 30px;
+  line-height: 1;
+  min-height: 36px;
+  width: 32px;
+  padding: 0 0 4px;
+  margin-left: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.screen-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+/* PC ではサイドバーにホームがあるので、ホームへ戻る「‹」は出さない */
+body.has-sidebar .screen-header__back.is-home { display: none; }
+/* 右側の操作やベルの有無でヘッダーの高さが画面ごとに揺れないよう、行の高さをそろえる */
+.screen-header__main,
+.screen-header__actions {
+  min-height: 40px;
+}

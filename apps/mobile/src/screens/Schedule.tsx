@@ -334,26 +334,25 @@ export function SchedulePage() {
     <main className="screen screen--wide" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
       {/* カレンダーの表示範囲を広げるため、月/3日/日の切替はタブ行を独立させず
           ヘッダー内に同居させて縦スペースを節約する(議事録要望)。 */}
-      <ScreenHeader>
-        <h1 style={{ margin: 0, fontSize: 20 }}>スケジュール</h1>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {(['month', 'week', 'day'] as ViewMode[]).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              style={{
-                padding: '6px 12px',
-                fontSize: 13,
-                background: view === v ? 'var(--color-primary)' : '#fff',
-                color: view === v ? '#fff' : 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              {v === 'month' ? '月' : v === 'week' ? (isDesktop ? '週' : '3日') : '日'}
-            </button>
-          ))}
-        </div>
-      </ScreenHeader>
+      <ScreenHeader
+        title="予定"
+        actions={(['month', 'week', 'day'] as ViewMode[]).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            style={{
+              padding: '6px 12px',
+              fontSize: 13,
+              minHeight: 36,
+              background: view === v ? 'var(--color-primary)' : '#fff',
+              color: view === v ? '#fff' : 'var(--color-text)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            {v === 'month' ? '月' : v === 'week' ? (isDesktop ? '週' : '3日') : '日'}
+          </button>
+        ))}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 8 }}>
         <button onClick={() => shift(-1)} style={{ padding: '0 14px' }}>

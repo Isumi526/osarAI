@@ -237,13 +237,7 @@ export function AssistantChat() {
 
   return (
     <main className="screen" style={{ paddingBottom: phase === 'chatting' ? formHeight + 16 : 24 }}>
-      <ScreenHeader>
-        <button type="button" className="back-home" onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
-          ← ホーム
-        </button>
-        <strong>AIと話す</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="AIと話す" back={{ onClick: onBack, label: 'ホームへ戻る', home: true }} />
 
       <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
         {messages.map((m, i) => (

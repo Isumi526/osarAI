@@ -67,11 +67,7 @@ export function CustomerList() {
 
   return (
     <main className="screen screen--wide">
-      <ScreenHeader>
-        <Link to="/settings">← マイページ</Link>
-        <strong>つながり一覧</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="つながり" back={{ to: '/settings', label: 'マイページへ戻る', home: true }} />
 
       {error && <p style={{ color: '#c0392b' }}>{error}</p>}
 

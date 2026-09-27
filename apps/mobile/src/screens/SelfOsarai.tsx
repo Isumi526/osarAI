@@ -192,19 +192,17 @@ export function SelfOsarai() {
         overflow: 'hidden',
       }}
     >
-      <ScreenHeader>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
-          ← 戻る
-        </button>
-        <strong>自分をおさらい</strong>
-        {remainingSec !== null && !done ? (
-          <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
-            {formatMMSS(remainingSec)}
-          </span>
-        ) : (
-          <span style={{ width: 48 }} />
-        )}
-      </ScreenHeader>
+      <ScreenHeader
+        title="自分をおさらい"
+        back={{ onClick: onBack, label: '戻る' }}
+        actions={
+          remainingSec !== null && !done ? (
+            <span style={{ fontSize: 13, color: remainingSec === 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+              {formatMMSS(remainingSec)}
+            </span>
+          ) : undefined
+        }
+      />
 
       {remainingSec === 0 && !done && (
         <div

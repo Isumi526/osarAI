@@ -154,11 +154,7 @@ export function Settings() {
 
   return (
     <main className="screen">
-      <ScreenHeader>
-        <Link to="/" className="back-home">← ホーム</Link>
-        <strong>マイページ</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="マイページ" />
 
       {/* 「自分をおさらいする」の入口はAIチャットへ集約したため、ここからは削除
           （2026-08-06 UI/UX刷新。チャットの「自分のことについて話す」から入る）。

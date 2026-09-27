@@ -571,13 +571,7 @@ export function MeetingRecord() {
 
   return (
     <main className="screen" style={{ paddingBottom: BOTTOM_NAV_HEIGHT + 24 }}>
-      <ScreenHeader>
-        <button type="button" className="back-home" onClick={onBackHome} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)' }}>
-          ← ホーム
-        </button>
-        <strong>会議を録音する</strong>
-        <span style={{ width: 48 }} />
-      </ScreenHeader>
+      <ScreenHeader title="会議を録音する" />
       <div style={{ display: 'grid', gap: 16 }}>
         {error && <p style={{ color: 'var(--color-danger, #c0392b)', fontSize: 14, margin: 0, whiteSpace: 'pre-wrap' }}>{error}</p>}
 
