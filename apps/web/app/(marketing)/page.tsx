@@ -132,7 +132,7 @@ export default async function LandingPage({
             <div className={styles.step}>
               <div className={styles.stepN}>01</div>
               <h3>録る</h3>
-              <p>会う前に録音ボタンを押すだけ。会議にボットは入らないので、相手に気を遣わせません。</p>
+              <p>会う前に録音ボタンを押すだけ。会議にボットは入らないので、相手に気を遣わせません。録音するときは、相手に一言伝えておくのがおすすめです。</p>
             </div>
             <div className={styles.step}>
               <div className={styles.stepN}>02</div>

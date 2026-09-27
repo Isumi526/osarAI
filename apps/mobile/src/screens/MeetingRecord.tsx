@@ -621,7 +621,7 @@ export function MeetingRecord() {
                 <li>会議が終わったら「収録を終了」。Zoom を先に閉じても自動で解析に進みます</li>
               </ol>
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                相手にはボットも通知も一切表示されません。録音中は他の画面に移動しても録音は続き、タブを閉じてもそこまでの録音は端末に残ります。
+                相手にはボットも通知も一切表示されません（録音するときは、相手に一言伝えておくのがおすすめです）。録音中は他の画面に移動しても録音は続き、タブを閉じてもそこまでの録音は端末に残ります。
                 {platform.os === 'mac' && ' システム音声の共有は Chrome 141 以降・macOS 14.2 以降。初回は macOS の「画面収録」の許可が必要です。'}
               </p>
             </Card>
@@ -660,7 +660,7 @@ export function MeetingRecord() {
           <>
             <Card title={`対面の商談を録音する（${OS_LABEL[platform.os]}）`}>
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。
+                スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。録音するときは、相手に一言伝えておくのがおすすめです。
               </p>
               <ol style={listStyle}>
                 <li>スマホを机の上など、<b>二人の声が届く場所</b>に置く</li>
