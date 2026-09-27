@@ -1,11 +1,9 @@
 // 初回ログイン時のウェルカム/チュートリアル画面。§10の追加画面。
 // 2026-09-27: 会議録音（録音→議事録/予定/タスク/つながりを自動保存）が主導線になったので
 // 訴求の順番を入れ替えた（旧: 入口は「AIと話す」1つ・音声入力主体）。デザインは据え置き。
-// 最後は「ホームへ」で通常のホームに入る。
-// 最終ページではブラウザ利用者向けに「ホーム画面に追加」を案内する。
+// 最後は「ホームへ」で通常のホームに入る。「ホーム画面に追加」の案内はホームにだけ出す。
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { AddToHomeScreenBanner } from '../components/AddToHomeScreenBanner.js';
 
 // 各ステップのイラスト。外部素材はライセンス確認が困難なため、既存のConfettiBurst/
 // NavIconsと同様、ライセンス懸念のない自作の簡易SVGで代替(技術判断)。
@@ -121,10 +119,7 @@ export function Welcome() {
           ))}
         </h1>
         <p style={{ fontSize: 16, color: 'var(--color-text-muted)', lineHeight: 1.7 }}>{current.body}</p>
-
-        {/* 最終ページでは「ホーム画面に追加」を案内する（ブラウザ利用者向け・
-            ネイティブ/追加済み/非表示済みでは自動的に出ない） */}
-        {isLast && <AddToHomeScreenBanner style={{ width: '100%', marginTop: 24 }} />}
+        {/* 「ホーム画面に追加」の案内はホーム側で出す（2026-09-27 人判断・ここでは出さない） */}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '16px 0' }}>
