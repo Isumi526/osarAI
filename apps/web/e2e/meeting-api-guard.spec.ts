@@ -65,17 +65,25 @@ test('meeting/upload-url・ingest: 未認証401 / 未契約402 / Light は録音
   expect(foreign.status()).toBe(403);
 });
 
-test('meeting/commit: reviewing 以外の行は 409・done は already_committed・名前未入力は 400', async ({ request }) => {
+test('meeting/commit: 解析前は 409・紐付け済みの done は already_committed・未紐付けの done は後から紐付けられる・名前未入力は 400', async ({ request }) => {
   const ts = Date.now();
   const me = await signup(request, `e2e-meeting-commit-${ts}@example.com`);
   await activate(request, me.userId, 'light');
   const org = await orgOf(request, me.userId);
   const auth = { Authorization: `Bearer ${me.token}`, 'content-type': 'application/json' };
 
-  const mk = async (status: string) => {
+  const mk = async (status: string, linked: string[] = []) => {
     const res = await request.post(`${LOCAL_SUPABASE_URL}/rest/v1/meeting_recordings`, {
       headers: { ...svc, Prefer: 'return=representation' },
-      data: { org_id: org, user_id: me.userId, capture: 'pc_local', audio_url: `${me.userId}/meetings/${status}-${ts}.webm`, status, transcript: '自分: a' },
+      data: {
+        org_id: org,
+        user_id: me.userId,
+        capture: 'pc_local',
+        audio_url: `${me.userId}/meetings/${status}-${linked.length}-${ts}.webm`,
+        status,
+        transcript: '自分: a',
+        committed_interaction_ids: linked,
+      },
     });
     expect(res.ok()).toBeTruthy();
     return ((await res.json()) as { id: string }[])[0]!.id;
@@ -86,9 +94,17 @@ test('meeting/commit: reviewing 以外の行は 409・done は already_committed
   expect(processing.status()).toBe(409);
   expect(((await processing.json()) as { error: string }).error).toBe('not_reviewable');
 
-  const done = await request.post('/api/meeting/commit', { headers: auth, data: { meetingId: await mk('done'), proposals } });
+  // 自動保存で既に相手に紐付いた録音は、二重登録を防ぐため拒否する
+  const done = await request.post('/api/meeting/commit', {
+    headers: auth,
+    data: { meetingId: await mk('done', ['00000000-0000-4000-8000-000000000001']), proposals },
+  });
   expect(done.status()).toBe(409);
   expect(((await done.json()) as { error: string }).error).toBe('already_committed');
+
+  // 自動保存されたが相手が特定できなかった録音（紐付け0件）は、保存画面から後で相手を紐付けられる（T7c）
+  const late = await request.post('/api/meeting/commit', { headers: auth, data: { meetingId: await mk('done'), proposals } });
+  expect(late.status()).toBe(200);
 
   const unnamed = await request.post('/api/meeting/commit', {
     headers: auth,
