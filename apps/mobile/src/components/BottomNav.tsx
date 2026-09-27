@@ -15,7 +15,7 @@ export const BOTTOM_NAV_HEIGHT = 56;
 const TABS = [
   { path: '/', label: 'ホーム', Icon: HomeIcon },
   { path: '/schedule', label: '予定', Icon: ScheduleIcon },
-  { path: '/tasks', label: 'タスク', Icon: TaskIcon },
+  { path: '/tasks', label: 'TODO', Icon: TaskIcon },
   { path: '/settings', label: 'マイページ', Icon: SettingsIcon },
 ];
 

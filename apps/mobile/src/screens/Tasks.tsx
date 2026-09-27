@@ -125,7 +125,7 @@ export function Tasks() {
     <main className="screen">
       <ScreenHeader>
         <Link to="/">← ホーム</Link>
-        <strong>タスク</strong>
+        <strong>TODO</strong>
         <span style={{ width: 48 }} />
       </ScreenHeader>
 
@@ -173,7 +173,7 @@ export function Tasks() {
         <p>読み込み中…</p>
       ) : open.length === 0 ? (
         <p style={{ color: '#6b6358' }}>
-          未完了のタスクはありません。会議を録音すると、自分が約束したことが自動で入ります。
+          未完了のTODOはありません。会議を録音すると、自分が約束したことが自動で入ります。
         </p>
       ) : (
         groups
@@ -225,7 +225,7 @@ export function Tasks() {
             onClick={() => setShowDone((v) => !v)}
             style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-text-muted)', fontSize: 13 }}
           >
-            {showDone ? '完了したタスクを隠す' : `完了したタスク（${done.length}）を表示`}
+            {showDone ? '完了したTODOを隠す' : `完了したTODO（${done.length}）を表示`}
           </button>
           {showDone && (
             <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'grid', gap: 8 }}>

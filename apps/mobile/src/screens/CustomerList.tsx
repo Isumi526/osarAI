@@ -53,7 +53,7 @@ export function CustomerList() {
     if (!target) return;
     const ok = await confirm(
       `「${target.name}」さんが${group.length}件に分かれて登録されています。1つにまとめますか？\n` +
-        '会話履歴・予定・タスクはすべて残ります。',
+        '会話履歴・予定・TODOはすべて残ります。',
     );
     if (!ok) return;
     setMerging(true);

@@ -348,7 +348,7 @@ export function AssistantChat() {
           <ConfettiBurst />
           <p style={{ fontWeight: 700, margin: '8px 0' }}>整理しました</p>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 16px' }}>
-            つながり・予定・タスクに反映しました。
+            つながり・予定・TODOに反映しました。
           </p>
           <div style={{ display: 'grid', gap: 8 }}>
             <button type="button" onClick={startNew}>

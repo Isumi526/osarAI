@@ -84,7 +84,7 @@ const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX
   },
   {
     titleLines: ['終わったら、', 'AIが全部まとめて保存'],
-    body: '議事録・次の予定・自分のやること・会った人の情報を、AIがまとめて自動で保存します。カレンダーもタスクも、手で入れなくて大丈夫です。',
+    body: '議事録・次の予定・自分のやること・会った人の情報を、AIがまとめて自動で保存します。カレンダーもTODOも、手で入れなくて大丈夫です。',
     Illustration: SortIllustration,
   },
   {

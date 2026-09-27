@@ -922,7 +922,7 @@ export function MeetingRecord() {
                   予定 {saved.scheduleIds.length}件
                 </button>
                 <button type="button" onClick={() => navigate('/tasks')} style={{ background: 'none', border: 'none', padding: 0, color: myTasks.length ? 'var(--color-primary)' : 'inherit' }}>
-                  タスク {myTasks.length}件
+                  TODO {myTasks.length}件
                 </button>
                 <button type="button" onClick={() => navigate('/tasks')} style={{ background: 'none', border: 'none', padding: 0, color: waitingTasks.length ? 'var(--color-primary)' : 'inherit' }}>
                   相手待ち {waitingTasks.length}件
