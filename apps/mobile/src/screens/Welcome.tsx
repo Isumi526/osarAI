@@ -1,7 +1,7 @@
 // 初回ログイン時のウェルカム/チュートリアル画面。§10の追加画面。
-// 2026-08 UI/UX刷新（入口をAIチャット1つに統一・音声入力主体・発話から
-// 予定/タスク/つながりを自動抽出）に合わせて内容を刷新。ステップ式でアプリ紹介し、
-// 最後は「ホームへ」で通常のホームに入る（旧: 自分をおさらいするへ分岐）。
+// 2026-09-27: 会議録音（録音→議事録/予定/タスク/つながりを自動保存）が主導線になったので
+// 訴求の順番を入れ替えた（旧: 入口は「AIと話す」1つ・音声入力主体）。デザインは据え置き。
+// 最後は「ホームへ」で通常のホームに入る。
 // 最終ページではブラウザ利用者向けに「ホーム画面に追加」を案内する。
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
@@ -28,16 +28,17 @@ function HeartIllustration() {
     </svg>
   );
 }
-// 入口はAIチャット1つ＝大きな吹き出し1つで表現
-function SingleChatIllustration() {
+// 次に会う前に読み返す議事録＝ノート
+function NotesIllustration() {
   return (
     <svg {...svgProps}>
-      <path d="M4 4h16v12H9l-4 3.5V16H4z" />
-      <path d="M8.5 10h.01M12 10h.01M15.5 10h.01" />
+      <path d="M6 2.5h9l3.5 3.5v15.5H6z" />
+      <path d="M15 2.5V6h3.5" />
+      <path d="M9 10h6.5M9 13.5h6.5M9 17h4" />
     </svg>
   );
 }
-// 音声入力主体＝マイク
+// 会議の前に押す録音ボタン＝マイク
 function MicIllustration() {
   return (
     <svg {...svgProps}>
@@ -46,7 +47,7 @@ function MicIllustration() {
     </svg>
   );
 }
-// 予定・タスク・つながりへ自動仕分け＝カレンダー/チェック/人の3つ＋きらめき
+// 議事録・予定・タスク・つながりへ自動で保存＝カレンダー/チェック/人の3つ＋きらめき
 function SortIllustration() {
   return (
     <svg {...svgProps}>
@@ -60,7 +61,7 @@ function SortIllustration() {
     </svg>
   );
 }
-// 次の一手をAIが覚えていて教えてくれる＝電球
+// 過去の会議を踏まえてAIが相談に乗る＝電球
 function LightbulbIllustration() {
   return (
     <svg {...svgProps}>
@@ -75,27 +76,27 @@ function LightbulbIllustration() {
 const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX.Element }[] = [
   {
     titleLines: ['忙しくても、', '人を大切にできる自分に。'],
-    body: 'osarAIは、人と会ったあとの5分「おさらい」で、大切な人との関係を忘れずに育てるための相棒アプリです。',
+    body: 'osarAIは、人と会って話したことをAIが代わりに覚えておき、大切な人との関係を忘れずに育てるための相棒アプリです。',
     Illustration: HeartIllustration,
   },
   {
-    titleLines: ['入口はひとつ。', '「AIと話す」だけ'],
-    body: '人と会ったあとや1日の終わりに、ホームの大きなボタンを押すだけ。おさらいも相談も、すべてここから始まります。',
-    Illustration: SingleChatIllustration,
-  },
-  {
-    titleLines: ['声で、', '思い出すままに話すだけ'],
-    body: '音声入力が主役です。複数の人・予定・やることを、ひとまとめに話して大丈夫。精度も上がり、話した通りに聞き取ります。',
+    titleLines: ['会う前に、', 'ボタンを1つ押すだけ'],
+    body: 'Zoomの前や、対面で会う前に「会議を録音する」を押すだけ。相手の画面には何も表示されません（会議にボットは入りません）。',
     Illustration: MicIllustration,
   },
   {
-    titleLines: ['予定・タスク・つながりに', '自動で仕分け'],
-    body: '一度の会話から、AIが「予定」「タスク」「つながり」を抜き出します。保存する前に確認・修正できるので、安心してそれぞれの場所へ残せます。',
+    titleLines: ['終わったら、', 'AIが全部まとめて保存'],
+    body: '議事録・次の予定・自分のやること・会った人の情報を、AIがまとめて自動で保存します。カレンダーもタスクも、手で入れなくて大丈夫です。',
     Illustration: SortIllustration,
   },
   {
-    titleLines: ['次の一手は、', 'AIが覚えていて教えてくれる'],
-    body: 'カードを見返さなくても大丈夫。過去のやりとりをAIが覚えていて、「この人に次どう連絡する？」といった相談に、具体的に答えてくれます。',
+    titleLines: ['次に会う前に、', '前回の話を思い出せる'],
+    body: '会った人のカードを開けば、これまでの議事録がすぐ読めます。久しぶりに会う人でも、前に何を話したかで慌てません。',
+    Illustration: NotesIllustration,
+  },
+  {
+    titleLines: ['次の一手は、', 'AIに相談できる'],
+    body: '過去の会議を踏まえて、「この人に次どう連絡する？」といった相談に具体的に答えます。会議以外のちょっとしたメモは「AIと話す」から声で残せます。',
     Illustration: LightbulbIllustration,
   },
 ];

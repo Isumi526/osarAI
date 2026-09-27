@@ -84,6 +84,8 @@ export function MeetingRecord() {
   const [saving, setSaving] = useState(false);
   // 「自分の声を録るマイク」の選択（PC録音のみ・localStorage に保存）
   const [micId, setMicId] = useState<string | null>(() => getSavedMicId());
+  // 録音中に画面が消えていた合計秒（スマホ）。その間は録れていないので知らせる
+  const [gapNotice, setGapNotice] = useState<number | null>(null);
   const minutesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 復旧候補（IndexedDB の未処理録音／サーバーの未保存の解析結果）
   const [recoverable, setRecoverable] = useState<RecordingSession[]>([]);
@@ -165,8 +167,20 @@ export function MeetingRecord() {
       }
     };
     void requestWakeLock();
+    // スマホは画面を消す／他のアプリに切り替えると、その間マイクがミュートされる（iOS の仕様）。
+    // 防げないので、戻ってきた時に「何分録れていないか」を正直に知らせる。
+    let hiddenAt: number | null = null;
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') void requestWakeLock();
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      void requestWakeLock();
+      if (hiddenAt !== null && mode === 'mic') {
+        const sec = Math.round((Date.now() - hiddenAt) / 1000);
+        if (sec >= 3) setGapNotice((prev) => (prev ?? 0) + sec);
+      }
+      hiddenAt = null;
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
@@ -175,6 +189,10 @@ export function MeetingRecord() {
       void wakeLockRef.current?.release().catch(() => {});
       wakeLockRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ms.recording]);
+  useEffect(() => {
+    if (!ms.recording) setGapNotice(null);
   }, [ms.recording]);
   useEffect(() => {
     if (ms.recording) document.title = `${ms.paused ? '❚❚ 一時停止' : '● 録音中'} ${fmtSec(ms.elapsed)} | osarAI`;
@@ -637,19 +655,22 @@ export function MeetingRecord() {
 
         {showIdle && gate === 'ok' && mode === 'mic' && platform.mobile && (
           <>
-            <Card title={`使い方（${OS_LABEL[platform.os]}）`}>
+            <Card title={`対面の商談を録音する（${OS_LABEL[platform.os]}）`}>
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                スマホでは相手の声を直接取り込めないため、<b>イヤホンを外して端末のスピーカーで会議を再生</b>し、室内の音をマイクで録音します。
+                スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。
               </p>
               <ol style={listStyle}>
-                <li>イヤホンを外し、Zoom / Meet を<b>スピーカー</b>にする</li>
+                <li>スマホを机の上など、<b>二人の声が届く場所</b>に置く</li>
                 <li>「録音を開始」を押す（マイクの許可を求められたら許可）</li>
                 <li>
-                  <b>この画面を前面に表示したまま・画面ロックせずに</b>会議をする
-                  <span style={{ display: 'block', fontSize: 12 }}>（他のアプリに切り替えたり画面を消すと、録音が止まることがあります。Zoom を別の端末で行うのが確実です）</span>
+                  <b>この画面を開いたまま</b>話す
+                  <span style={{ display: 'block', fontSize: 12 }}>（画面は自動では消えません。電源ボタンで画面を消したり、他のアプリに切り替えると、その間は録音されません）</span>
                 </li>
-                <li>会議が終わったら「収録を終了」</li>
+                <li>終わったら「収録を終了」</li>
               </ol>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
+                Zoom などのオンライン会議は<b>パソコンの Chrome</b> で録音してください。スマホでは Zoom の相手の声を取り込めません。
+              </p>
             </Card>
             {nameHint && <NameHint />}
             <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
@@ -726,6 +747,12 @@ export function MeetingRecord() {
                   パソコンのマイクに切り替える
                 </button>
               </div>
+            )}
+            {mode === 'mic' && gapNotice !== null && (
+              <p style={{ margin: 0, padding: 10, borderRadius: 10, background: '#fff7f0', border: '1px solid var(--color-primary)', fontSize: 13, textAlign: 'center' }}>
+                画面が消えていた<b>{fmtSec(gapNotice)}</b>は録音されていません。録音はこのまま続いています。
+                <span style={{ display: 'block', fontSize: 12, color: 'var(--color-text-muted)' }}>この画面を開いたまま置いておいてください。</span>
+              </p>
             )}
             {!ms.paused && mode === 'mic' && ms.micSilentSec >= 60 && (
               <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)', textAlign: 'center' }}>
