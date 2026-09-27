@@ -16,3 +16,17 @@ apps/mobile/ios
 apps/mobile/android
 **/*.log
 **/tsconfig.tsbuildinfo
+
+# 秘密情報と手元専用のデータはデプロイのソースに含めない（2026-09-28）。
+# ルートから deploy すると .env（本番DB接続先・各種秘密鍵）と評価用の実会議音声（eval-data）まで
+# Vercel にアップロードされていた。本番の値は Vercel の環境変数に設定済みなので、ビルドには不要。
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+eval-data
+eval-out
+**/*.mp3
+**/*.m4a
+**/*.wav
