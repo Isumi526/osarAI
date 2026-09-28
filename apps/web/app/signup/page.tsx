@@ -6,6 +6,7 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { showLegalLinks } from '@/lib/legal';
 import { createBrowserSupabase } from '@/lib/supabase/browser';
 import { Spinner } from '@/components/Spinner';
 import { toJaAuthError } from '@/lib/auth-errors';
@@ -119,6 +120,20 @@ function SignupForm() {
               利用規約
             </button>
             に同意する
+            {/* 法務ページ（2026-09-28）。本番では穴埋めが済むまでリンクを出さない */}
+            {showLegalLinks() && (
+              <span style={{ display: 'block', fontSize: 13, marginTop: 4 }}>
+                （
+                <Link href="/privacy" target="_blank">
+                  プライバシーポリシー
+                </Link>
+                ・
+                <Link href="/tokushoho" target="_blank">
+                  特定商取引法に基づく表記
+                </Link>
+                ）
+              </span>
+            )}
           </span>
         </label>
         {error && <p style={{ color: '#c0392b', margin: 0 }}>{error}</p>}

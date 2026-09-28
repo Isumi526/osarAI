@@ -446,7 +446,9 @@ export function MinutesBlock({ minutes, onChange }: { minutes: string; onChange?
   return (
     <div style={{ paddingBottom: 12, borderBottom: '1px solid var(--color-border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong style={{ fontSize: 13 }}>議事録</strong>
+        <strong style={{ fontSize: 13 }}>
+          議事録 <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--color-text-muted)' }}>AI による要約</span>
+        </strong>
         {onChange && (
           <button
             type="button"

@@ -7,7 +7,7 @@
 //   次回 /meeting を開いた時に未処理の録音（録音中に離脱／未アップロード／解析済み未保存）を検出して続きから再開する。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { isMeetingSetupDone, markMeetingSetupDone } from '../lib/meetingSetup.js';
+import { hasRecordingConsent, isMeetingSetupDone, markMeetingSetupDone, markRecordingConsent } from '../lib/meetingSetup.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav.js';
 import { ReviewCard, MinutesBlock, MinutesView } from '../components/ReviewCard.js';
@@ -351,6 +351,8 @@ export function MeetingRecord() {
           capture,
           durationSec: rec.durationSec,
           selfSegments: rec.selfSegments,
+          // 初回に同意した記録を録音ごとに残す（meeting_recordings.consent_ack）
+          consentAck: hasRecordingConsent(),
         });
         applyIngest(res, sid);
       } catch (e) {
@@ -617,7 +619,7 @@ export function MeetingRecord() {
                     <li>会議が終わったら「収録を終了」。Zoom を先に閉じても自動で解析に進みます</li>
                   </ol>
                   <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                    相手にはボットも通知も一切表示されません（録音するときは、相手に一言伝えておくのがおすすめです）。録音中は他の画面に移動しても録音は続き、タブを閉じてもそこまでの録音は端末に残ります。
+                    相手にはボットも通知も一切表示されません（録音するときは、必ず相手の了承を得てから始めてください）。録音中は他の画面に移動しても録音は続き、タブを閉じてもそこまでの録音は端末に残ります。
                     {platform.os === 'mac' && ' システム音声の共有は Chrome 141 以降・macOS 14.2 以降。初回は macOS の「画面収録」の許可が必要です。'}
                   </p>
                 </Card>
@@ -658,7 +660,7 @@ export function MeetingRecord() {
             guide={
                 <Card title={`対面の商談を録音する（${OS_LABEL[platform.os]}）`}>
                   <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '8px 0 0' }}>
-                    スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。録音するときは、相手に一言伝えておくのがおすすめです。
+                    スマホは<b>対面で会う時</b>の録音用です。机の上に置いて、二人の声をそのまま録ります。録音するときは、必ず相手の了承を得てから始めてください。
                   </p>
                   <ol style={listStyle}>
                     <li>スマホを机の上など、<b>二人の声が届く場所</b>に置く</li>
@@ -712,6 +714,21 @@ export function MeetingRecord() {
                 {otherDetected ? '相手の音声を検知しました。このまま会議を続けてください。' : '相手の音声はまだ検知していません（相手が話し始めると自動で反応します）。'}
               </p>
             )}
+            {/* 締めの確認の案内（2026-09-28）。予定と約束を口に出して確認すると、相手にも親切で AI の取りこぼしも減る */}
+            <p
+              style={{
+                margin: 0,
+                padding: '10px 12px',
+                borderRadius: 10,
+                background: 'var(--color-primary-light)',
+                border: '1px solid var(--color-primary-border)',
+                fontSize: 13,
+                lineHeight: 1.7,
+                width: '100%',
+              }}
+            >
+              <b>終わる前に</b>「次回は◯日◯時ですね」「私は◯◯をお送りします」と口に出して確認すると、予定とTODOの取りこぼしが減ります。
+            </p>
             {/* どのマイクで録れているかを常に見せる（違う機器が選ばれていることに気づけるように） */}
             {mode === 'pc' && ms.micLabel && !ms.micLost && (
               <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center' }}>
@@ -874,6 +891,10 @@ export function MeetingRecord() {
           <>
             <section style={{ padding: 16, background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, display: 'grid', gap: 10 }}>
               <strong>保存しました</strong>
+              {/* AI の誤り・漏れへの注意（2026-09-28・クレーム対策）。直せる導線のすぐ上に置く */}
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+                AI が会話から作成しました。予定とTODOに誤りや漏れがないか確認してください（下の各項目から直せます）。
+              </p>
               {saved.customers.length > 0 ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                   {saved.customers.map((c) => (
@@ -1079,12 +1100,42 @@ function SetupOrQuickStart({
   guide: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [agreed, setAgreed] = useState(() => hasRecordingConsent());
   if (!setupDone) {
     return (
       <>
         {guide}
         {nameHint && <NameHint />}
-        <button type="button" onClick={onStart} style={{ minHeight: 52, fontSize: 16 }}>
+        {/* 初回だけの同意（2026-09-28・クレーム/コンプライアンス対策）。利用規約の第1条・AI の免責と同じ内容 */}
+        <label
+          style={{
+            display: 'flex',
+            gap: 10,
+            alignItems: 'flex-start',
+            padding: 12,
+            borderRadius: 10,
+            background: '#fff',
+            border: '1px solid var(--color-border)',
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => {
+              setAgreed(e.target.checked);
+              if (e.target.checked) markRecordingConsent();
+            }}
+            style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}
+          />
+          <span>
+            録音するときは、<b>相手の了承を得てから</b>始めます。
+            <br />
+            AI が作る議事録・予定・TODO には誤りや漏れがあり得るので、<b>大事な予定と約束は自分でも確認</b>します。
+          </span>
+        </label>
+        <button type="button" onClick={onStart} disabled={!agreed} style={{ minHeight: 52, fontSize: 16, opacity: agreed ? 1 : 0.5 }}>
           録音を開始
         </button>
       </>

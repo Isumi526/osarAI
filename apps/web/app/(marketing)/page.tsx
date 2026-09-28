@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Zen_Maru_Gothic, Zen_Kaku_Gothic_New, Fraunces } from 'next/font/google';
 import styles from './page.module.css';
+import { showLegalLinks } from '@/lib/legal';
 
 // LP（マーケティング）。議事録で共有されたデザイン(osarai_lp_(4).html)を移植。
 // 2026-09-27: 訴求を「AIと5分話すおさらい」から「会議を録音するだけで、議事録・予定・TODOが残る」に
@@ -52,6 +53,8 @@ export default async function LandingPage({
                 14日間、無料で試してみる <span className={styles.arrow}>→</span>
               </Link>
               <span className={styles.note}>初回14日間は課金なし（トライアル中の解約で0円）</span>
+              {/* AI の誤り・漏れの注記（2026-09-28・クレーム対策）。利用規約の「AI が作成する記録」と同じ趣旨 */}
+              <span className={styles.note}>※ AI による文字起こし・議事録・予定・TODO には、誤りや漏れが含まれることがあります。</span>
             </div>
           </div>
 
@@ -132,7 +135,7 @@ export default async function LandingPage({
             <div className={styles.step}>
               <div className={styles.stepN}>01</div>
               <h3>録る</h3>
-              <p>会う前に録音ボタンを押すだけ。会議にボットは入らないので、相手に気を遣わせません。録音するときは、相手に一言伝えておくのがおすすめです。</p>
+              <p>会う前に録音ボタンを押すだけ。会議にボットは入らないので、相手に気を遣わせません。録音するときは、必ず相手の了承を得てから始めてください。</p>
             </div>
             <div className={styles.step}>
               <div className={styles.stepN}>02</div>
@@ -252,6 +255,7 @@ export default async function LandingPage({
             14日間、無料で試してみる <span className={styles.arrow}>→</span>
           </Link>
           <p className={styles.finalNote}>初回14日間は無料（トライアル中の解約で課金なし）</p>
+          <p className={styles.finalNote}>※ AI による文字起こし・議事録・予定・TODO には、誤りや漏れが含まれることがあります。</p>
         </div>
       </section>
 
@@ -261,6 +265,22 @@ export default async function LandingPage({
             osar<b>AI</b> <small>おさらい</small>
           </div>
           <div>忙しくても、人を大切にできる自分に。</div>
+          {/* 法務ページ（2026-09-28）。本番では穴埋めが済むまで、下書きのページへのリンクは出さない */}
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+            <Link href="/terms" style={{ color: 'inherit' }}>
+              利用規約
+            </Link>
+            {showLegalLinks() && (
+              <>
+                <Link href="/privacy" style={{ color: 'inherit' }}>
+                  プライバシーポリシー
+                </Link>
+                <Link href="/tokushoho" style={{ color: 'inherit' }}>
+                  特定商取引法に基づく表記
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </footer>
     </div>
