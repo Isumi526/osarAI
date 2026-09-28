@@ -8,6 +8,7 @@ import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { MicPicker } from '../components/MicPicker.js';
+import { ContractSection, DeleteAccountSection } from '../components/AccountSection.js';
 
 // 目標・扱っている商品は複数登録できるよう別UI(goals/products)で扱うため、ここには含めない。
 // 性別は選択式、経歴は自動リサイズのテキストエリア、他は単一行入力(議事録要望)。
@@ -494,6 +495,22 @@ export function Settings() {
         {pushMsg && <p style={{ margin: '8px 0 0', fontSize: 13 }}>{pushMsg}</p>}
       </section>
 
+      {/* 録音に使うマイク（録音ページの初回準備画面と同じ設定）。2回目以降は録音ページに出さないのでここでも変えられる */}
+      <details
+        onToggle={(e) => setMicOpen((e.currentTarget as HTMLDetailsElement).open)}
+        style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16, marginTop: 16 }}
+      >
+        <summary style={{ cursor: 'pointer', fontSize: 16, fontWeight: 700 }}>マイクの設定</summary>
+        {micOpen && (
+          <div style={{ marginTop: 12 }}>
+            <MicPicker />
+          </div>
+        )}
+      </details>
+
+      {/* ご契約（プランの確認・変更・解約への導線）。ストア版アプリでは出さない */}
+      <ContractSection webOrigin={lpOrigin} />
+
       <button
         onClick={() => supabase.auth.signOut()}
         style={{
@@ -509,25 +526,14 @@ export function Settings() {
       >
         ログアウト
       </button>
-      {/* 録音に使うマイク（録音ページの初回準備画面と同じ設定）。2回目以降は録音ページに出さないのでここでも変えられる */}
-      <details
-        onToggle={(e) => setMicOpen((e.currentTarget as HTMLDetailsElement).open)}
-        style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 12, padding: 16, marginTop: 16 }}
-      >
-        <summary style={{ cursor: 'pointer', fontSize: 16, fontWeight: 700 }}>マイクの設定</summary>
-        {micOpen && (
-          <div style={{ marginTop: 12 }}>
-            <MicPicker />
-          </div>
-        )}
-      </details>
-
       {/* 使い方はヘッダーから外し、忘れた時の逃げ道としてここに小さく残す（2026-09-27） */}
       <p style={{ textAlign: 'center', margin: '24px 0 8px' }}>
         <Link to="/tutorial" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
           使い方をもう一度見る
         </Link>
       </p>
+      {/* 退会（アプリ内で完結）。一番下に控えめに置くが、隠しはしない */}
+      <DeleteAccountSection />
     </main>
   );
 }

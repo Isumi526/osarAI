@@ -946,6 +946,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_account_data: {
+        Args: { p_user: string }
+        Returns: undefined
+      }
       append_user_profile_notes: {
         Args: { new_notes: string[] }
         Returns: undefined

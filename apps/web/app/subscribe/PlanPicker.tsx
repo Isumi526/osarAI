@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { PLANS, type PlanId } from '@osarai/shared';
+import { PLANS, type PlanId, SELLABLE_PLAN_IDS } from '@osarai/shared';
 import { Spinner } from '@/components/Spinner';
 
 // phase1はLight単一プランのみ表示(Standard/Proはphase2以降)。
 // PLANS定義・Stripe Price・checkout APIは変更せず、UIの選択肢のみ絞る。
-const ORDER: PlanId[] = ['light'];
+// 販売しているプランは共有パッケージで一元管理（特商法の表記と揃えるため）
+const ORDER: PlanId[] = SELLABLE_PLAN_IDS;
 
 export function PlanPicker({ code, amountOff }: { code: string | null; amountOff: number | null }) {
   const [loading, setLoading] = useState<PlanId | null>(null);

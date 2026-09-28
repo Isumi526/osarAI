@@ -1,7 +1,7 @@
 // 特定商取引法に基づく表記（2026-09-28 下書き）。Web で月額課金（通信販売）を行うため必須。
 // 【要記入】が残っている間は本番では公開しない（lib/legal）。公開前に専門家の確認を推奨。
 import { notFound } from 'next/navigation';
-import { PLANS } from '@osarai/shared';
+import { PLANS, SELLABLE_PLAN_IDS } from '@osarai/shared';
 import { LEGAL, hasPlaceholder, isProduction } from '@/lib/legal';
 
 const SELLER = LEGAL.operator;
@@ -11,8 +11,8 @@ const ADDRESS = LEGAL.address;
 const PHONE = LEGAL.phone;
 const TAX = LEGAL.priceTax;
 
-// 公開している有料プラン（Light/Standard/Pro）。価格はプラン定義から出す（定義と表記がずれないように）
-const PAID = (['light', 'standard', 'pro'] as const).map((id) => PLANS[id]);
+// 実際に販売しているプラン（申し込み画面と同じ）。価格はプラン定義から出す（定義と表記がずれないように）
+const PAID = SELLABLE_PLAN_IDS.map((id) => PLANS[id]);
 
 export default function TokushohoPage() {
   if (isProduction() && hasPlaceholder(SELLER, MANAGER, EMAIL, ADDRESS, PHONE, TAX)) notFound();
