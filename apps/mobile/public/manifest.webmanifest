@@ -1,0 +1,14 @@
+{
+  "name": "osarAI 〜おさらい〜",
+  "short_name": "osarAI",
+  "description": "会う前に録音ボタンを押すだけで、議事録・次の予定・TODOをAIが残します。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf9f7",
+  "theme_color": "#fd780f",
+  "lang": "ja",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
