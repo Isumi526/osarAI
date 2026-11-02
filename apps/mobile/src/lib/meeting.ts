@@ -161,3 +161,19 @@ export async function getMeeting(id: string): Promise<SavedMeeting | null> {
   if (error) throw error;
   return (data as SavedMeeting | null) ?? null;
 }
+
+export interface MeetingAudioTrack {
+  label: string;
+  url: string;
+}
+
+/** 会議の音声（聞き返し用の短命URL）。音声を消した会議・テキスト取り込みの会議は空配列 */
+export async function getMeetingAudio(meetingId: string): Promise<MeetingAudioTrack[]> {
+  const res = await apiPost<{ tracks: MeetingAudioTrack[] }>(`/api/meeting/${meetingId}/audio`, { action: 'url' });
+  return res.tracks ?? [];
+}
+
+/** 会議の音声だけを消す（議事録・文字起こしは残る） */
+export async function deleteMeetingAudio(meetingId: string): Promise<void> {
+  await apiPost<{ ok: true }>(`/api/meeting/${meetingId}/audio`, { action: 'delete' });
+}

@@ -2,7 +2,7 @@
 // 承認は無いので「開く＝読む・直す」だけ。全文は折りたたみ（普段は議事録しか読まない）。
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { getMeeting, updateMeetingMinutes, type SavedMeeting } from '../lib/meeting.js';
+import { deleteMeetingAudio, getMeeting, getMeetingAudio, updateMeetingMinutes, type MeetingAudioTrack, type SavedMeeting } from '../lib/meeting.js';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { MinutesBlock } from '../components/ReviewCard.js';
@@ -18,6 +18,9 @@ export function MeetingDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 音声（録音の保存方針・2026-11-02）：契約中は聞き返せて、会議ごとに消せる
+  const [tracks, setTracks] = useState<MeetingAudioTrack[] | null>(null);
+  const [audioBusy, setAudioBusy] = useState(false);
 
   useEffect(() => {
     getMeeting(id)
@@ -31,7 +34,23 @@ export function MeetingDetail() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+    getMeetingAudio(id)
+      .then(setTracks)
+      .catch(() => setTracks([]));
   }, [id]);
+
+  async function onDeleteAudio() {
+    if (!window.confirm('この会議の音声を消しますか？議事録と文字起こしは残ります。消した音声は元に戻せません。')) return;
+    setAudioBusy(true);
+    try {
+      await deleteMeetingAudio(id);
+      setTracks([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAudioBusy(false);
+    }
+  }
 
   // 議事録の編集は1秒デバウンスで自動保存（保存直後の画面と同じ挙動）
   function onEdit(v: string) {
@@ -88,6 +107,26 @@ export function MeetingDetail() {
           <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
             {saving === 'saving' ? '保存中…' : saving === 'saved' ? '変更を保存しました' : '「編集」で直せます。変更は自動で保存されます。'}
           </span>
+
+          {tracks && tracks.length > 0 && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>録音</span>
+              {tracks.map((t) => (
+                <div key={t.label} style={{ display: 'grid', gap: 2 }}>
+                  {tracks.length > 1 && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{t.label}</span>}
+                  <audio controls preload="none" src={t.url} style={{ width: '100%' }} />
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={onDeleteAudio}
+                disabled={audioBusy}
+                style={{ justifySelf: 'start', minHeight: 40, background: '#fff', border: '1px solid var(--color-border)', color: '#c0392b' }}
+              >
+                {audioBusy ? '消しています…' : '音声を消す'}
+              </button>
+            </div>
+          )}
 
           {row.transcript && (
             <details>

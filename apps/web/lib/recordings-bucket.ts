@@ -18,3 +18,22 @@ export function extForMime(mime: string): string {
   if (mime.includes('wav')) return 'wav';
   return 'webm';
 }
+
+type Admin = ReturnType<typeof createServiceRoleClient>;
+
+/** ある利用者の録音ファイル（recordings/<userId>/ と その下の meetings/）を全部消す。消した件数を返す */
+export async function removeUserRecordings(admin: Admin, userId: string): Promise<number> {
+  let removed = 0;
+  for (const prefix of [`${userId}`, `${userId}/meetings`]) {
+    for (;;) {
+      const { data: files, error: listErr } = await admin.storage.from(RECORDINGS_BUCKET).list(prefix, { limit: 100 });
+      if (listErr) throw listErr;
+      const paths = (files ?? []).filter((f) => f.id).map((f) => `${prefix}/${f.name}`);
+      if (paths.length === 0) break;
+      const { error } = await admin.storage.from(RECORDINGS_BUCKET).remove(paths);
+      if (error) throw error;
+      removed += paths.length;
+    }
+  }
+  return removed;
+}

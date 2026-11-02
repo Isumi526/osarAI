@@ -387,6 +387,7 @@ export type Database = {
           minutes: string | null
           org_id: string
           proposals: Json | null
+          self_audio_url: string | null
           status: string
           transcript: string | null
           updated_at: string
@@ -406,6 +407,7 @@ export type Database = {
           minutes?: string | null
           org_id: string
           proposals?: Json | null
+          self_audio_url?: string | null
           status?: string
           transcript?: string | null
           updated_at?: string
@@ -425,6 +427,7 @@ export type Database = {
           minutes?: string | null
           org_id?: string
           proposals?: Json | null
+          self_audio_url?: string | null
           status?: string
           transcript?: string | null
           updated_at?: string
@@ -946,6 +949,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_account_data: {
+        Args: { p_user: string }
+        Returns: undefined
+      }
       append_user_profile_notes: {
         Args: { new_notes: string[] }
         Returns: undefined

@@ -239,7 +239,9 @@ export function CustomerDetail() {
                 {/* 会議録音の議事録（T3/T7）。次回会う直前に読み返す用途なので、既定で開いた状態で出す */}
                 {summary?.minutes ? (
                   <details open style={{ marginTop: 8 }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>議事録</summary>
+                    <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                      議事録 <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--color-text-muted)' }}>AI による要約</span>
+                    </summary>
                     <MinutesView text={summary.minutes} />
                   </details>
                 ) : null}

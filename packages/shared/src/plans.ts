@@ -83,3 +83,9 @@ export function planDef(plan: string | null | undefined): PlanDef | null {
   if (plan && plan in PLANS) return PLANS[plan as PlanId];
   return null;
 }
+
+/**
+ * Web で実際に販売しているプラン（申し込み画面に出すもの）。特定商取引法に基づく表記も
+ * これを見て価格を出すので、販売するプランを増やす時はここを変える（2026-09-28）。
+ */
+export const SELLABLE_PLAN_IDS: PlanId[] = ['light'];

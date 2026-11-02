@@ -79,7 +79,7 @@ const STEPS: { titleLines: string[]; body: string; Illustration: () => React.JSX
   },
   {
     titleLines: ['会う前に、', 'ボタンを1つ押すだけ'],
-    body: 'Zoomの前や、対面で会う前に、画面下の真ん中の録音ボタンを押すだけ。相手の画面には何も表示されません（会議にボットは入りません）。録音するときは、相手に一言伝えておくのがおすすめです。',
+    body: 'Zoomの前や、対面で会う前に、画面下の真ん中の録音ボタンを押すだけ。相手の画面には何も表示されません（会議にボットは入りません）。録音するときは、必ず相手の了承を得てから始めてください。',
     Illustration: MicIllustration,
   },
   {
