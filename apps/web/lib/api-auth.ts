@@ -48,7 +48,7 @@ export async function authedFromRequest(req: Request): Promise<AuthedContext | n
 // ---- CORS（Capacitor の capacitor://localhost 等、別オリジン対策）----
 export const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, content-type',
   'Access-Control-Max-Age': '86400',
 };
