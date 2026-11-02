@@ -387,6 +387,7 @@ export type Database = {
           minutes: string | null
           org_id: string
           proposals: Json | null
+          self_audio_url: string | null
           status: string
           transcript: string | null
           updated_at: string
@@ -406,6 +407,7 @@ export type Database = {
           minutes?: string | null
           org_id: string
           proposals?: Json | null
+          self_audio_url?: string | null
           status?: string
           transcript?: string | null
           updated_at?: string
@@ -425,6 +427,7 @@ export type Database = {
           minutes?: string | null
           org_id?: string
           proposals?: Json | null
+          self_audio_url?: string | null
           status?: string
           transcript?: string | null
           updated_at?: string

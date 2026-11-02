@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { createServiceRoleClient } from '@/lib/supabase/server';
-import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
+import { removeUserRecordings } from '@/lib/recordings-bucket';
 import { getStripe } from '@/lib/stripe';
 
 export const runtime = 'nodejs';
@@ -45,16 +45,7 @@ export async function POST(req: Request) {
 
   // ② 録音音声（Storage の recordings/<userId>/ 以下）
   try {
-    const prefixes = [`${user.id}`, `${user.id}/meetings`];
-    for (const prefix of prefixes) {
-      for (;;) {
-        const { data: files } = await admin.storage.from(RECORDINGS_BUCKET).list(prefix, { limit: 100 });
-        const paths = (files ?? []).filter((f) => f.id).map((f) => `${prefix}/${f.name}`);
-        if (paths.length === 0) break;
-        const { error } = await admin.storage.from(RECORDINGS_BUCKET).remove(paths);
-        if (error) throw error;
-      }
-    }
+    await removeUserRecordings(admin, user.id);
   } catch (e) {
     return json({ error: 'storage_delete_failed', detail: String(e) }, 500);
   }

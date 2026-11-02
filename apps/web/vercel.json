@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/action-suggest",
       "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/cron/audio-retention",
+      "schedule": "0 18 * * *"
     }
   ]
 }

@@ -155,6 +155,7 @@ export async function POST(req: Request) {
         user_id: user.id,
         capture,
         audio_url: recordingPath || null,
+        self_audio_url: selfRecordingPath || null,
         mime_type: importedText ? 'text/plain' : mimeType,
         duration_sec: typeof body.durationSec === 'number' ? Math.round(body.durationSec) : null,
         consent_ack: body.consentAck === true,
