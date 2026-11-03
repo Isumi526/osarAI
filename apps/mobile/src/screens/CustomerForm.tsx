@@ -11,6 +11,7 @@ import {
 } from '../lib/db.js';
 import { analyzeCustomerText, analyzeCustomerImage } from '../lib/customerAnalyze.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
+import { customerMemo } from '@osarai/shared';
 import { RequiredMark } from '../components/RequiredMark.js';
 
 export function CustomerForm() {
@@ -25,6 +26,7 @@ export function CustomerForm() {
 
   const [name, setName] = useState('');
   const [relationType, setRelationType] = useState<string>(DEFAULT_RELATION_TYPE);
+  // この人のメモ（customers.profile_notes・自由記述・0035）。自己紹介解析の結果（needs）もここへ入れる
   const [needs, setNeeds] = useState('');
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
@@ -74,7 +76,8 @@ export function CustomerForm() {
         if (!c) return;
         setName(c.name);
         setRelationType((c.relation_type as string | null) ?? DEFAULT_RELATION_TYPE);
-        setNeeds(c.needs ?? '');
+        // 新しい列を優先し、まだ無ければ旧 needs / custom_fields から畳んだ文章を初期値にする
+        setNeeds(customerMemo(c));
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -84,7 +87,7 @@ export function CustomerForm() {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const input: CustomerInput = { name, needs: needs || null, relationType };
+    const input: CustomerInput = { name, profileNotes: needs.trim() || null, relationType };
     try {
       if (isEdit && id) {
         await updateCustomer(id, input);

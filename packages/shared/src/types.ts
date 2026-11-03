@@ -24,12 +24,22 @@ export type SubscriptionStatus =
   | 'incomplete_expired'
   | 'unpaid';
 
-// おさらい対話で AI が抽出する顧客カード項目（§8-1）
+// おさらい対話で AI が抽出する顧客カード項目（§8-1）。
+// 2026-11-03 から要点/ニーズ/次アクション/custom_fields に分けず、自由記述のメモ1本（memo）＋
+// つながりたい人（wants_to_meet）で受け取る（migration 0035）。旧キーは途中のセッションの読み取り用に残す。
 export interface OsaraiExtracted {
-  points?: string[];
-  needs?: string[];
+  /** 相手について今回わかったこと・話した内容・約束を、読みやすい文章で1本にまとめたメモ */
+  memo?: string;
+  /** 相手が「どんな人とつながりたいか」（Phase2 マッチングの入力・構造のまま残す） */
+  wants_to_meet?: string[];
   temperature?: Temperature | null;
+  /** @deprecated 旧形式（0035 以前のセッション）。新規の抽出では使わない */
+  points?: string[];
+  /** @deprecated 旧形式 */
+  needs?: string[];
+  /** @deprecated 旧形式 */
   next_actions?: string[];
+  /** @deprecated 旧形式 */
   custom_fields?: Record<string, unknown>;
   /** 対話中に判明した相手の名前（未言及なら null）。§F-02: 新規/仮名のカードへの自動反映に使う */
   name?: string | null;
@@ -55,11 +65,16 @@ export interface OsaraiTurnResult {
   end_reason?: 'user_request' | 'time_up' | 'enough' | null;
 }
 
-// interactions.ai_summary の形（§6）
+// interactions.ai_summary の形（§6）。
+// 2026-11-03 から、その回の要約は interactions.summary（自由記述）に書く（migration 0035）。
+// ai_summary には議事録（minutes）だけを書き、points/needs/next_actions は旧データの読み取り用に残す。
 export interface AiSummary {
-  points: string[];
-  needs: string[];
-  next_actions: string[];
+  /** @deprecated 旧形式。新規には書かない（interactions.summary を使う） */
+  points?: string[];
+  /** @deprecated 旧形式 */
+  needs?: string[];
+  /** @deprecated 旧形式 */
+  next_actions?: string[];
   /** 会議録音由来の議事録（T3）。主たる相手の履歴にだけ付く。 */
   minutes?: string;
 }

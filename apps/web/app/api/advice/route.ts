@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('org_id, user_profile')
+    .select('org_id, user_profile, profile_text')
     .eq('id', user.id)
     .maybeSingle();
   if (!profile) return json({ error: 'profile not found' }, 400);
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
 
   // --- 顧客データをコンテキスト化 ---
   const data = await buildContext(supabase, scope, customerId);
-  const userProfile = formatUserProfile(profile.user_profile as Record<string, unknown> | null);
+  const userProfile = formatUserProfile(profile.user_profile as Record<string, unknown> | null, profile.profile_text);
   const systemAndData = buildAdvicePrompt({ scope, data, userProfile });
   const convo = (history ?? [])
     .map((m) => `${m.role === 'user' ? 'ユーザー' : 'コーチ'}: ${m.content}`)

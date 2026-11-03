@@ -17,10 +17,14 @@ import {
   buildOsaraiPrompt,
   OSARAI_SYSTEM_PROMPT,
   computeAutoTemperature,
+  personMemo,
+  personWantsToMeet,
+  customerMemo,
   type OsaraiTurnResult,
   type OsaraiExtracted,
-  type AiSummary,
 } from '@osarai/shared';
+import { mergeMemo } from '@/lib/proposal-extraction';
+import { mergeArrayFields } from '@/lib/assistant-persist';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
 import { geminiJson, GEMINI_MODEL_DIALOGUE, type GeminiSchema } from '@/lib/gemini';
@@ -32,12 +36,12 @@ export const maxDuration = 60;
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
 // 埋めたい顧客カード項目（プロンプトに渡す説明）
+// 2026-11-03（0035）から要点/ニーズ/次アクション/custom_fields に分けず、自由記述のメモ1本で受け取る。
 const CARD_SCHEMA_DESC =
-  '{points: 会話の要点(配列), needs: 相手の要望/困りごと(配列), ' +
-  'temperature: 見込み温度(hot/warm/cold), next_actions: 次にやること(配列), ' +
-  'custom_fields: その他特記事項(キー値。products: 相手が扱っている商品(文字列配列・判明していれば), ' +
-  'age: 相手の年齢(文字列・判明していれば), gender: 相手の性別(文字列・判明していれば)も' +
-  'このキーに含めてよい), name: 相手の名前(判明していれば), ' +
+  '{memo: 相手について今回わかったこと・話した内容・相手の状況や困りごと・約束したことを1本にまとめた文章' +
+  '(扱っている商品・年齢・性別も判明していればここに書く), ' +
+  'wants_to_meet: 相手がつながりたい人・紹介してほしい人物像(配列), ' +
+  'temperature: 見込み温度(hot/warm/cold), name: 相手の名前(判明していれば), ' +
   'self_fields: 会話中にユーザー自身について言及があった場合の構造化情報' +
   '(job/products/age/gender/background/goal。相手ではなく本人について。言及が無ければ含めない)}';
 
@@ -48,23 +52,11 @@ const TURN_SCHEMA: GeminiSchema = {
     extracted: {
       type: 'object',
       properties: {
-        points: { type: 'array', items: { type: 'string' } },
-        needs: { type: 'array', items: { type: 'string' } },
+        // memo / wants_to_meet は毎ターン必ず出力させる（requiredで強制）。Geminiはターンによって
+        // キーごと省略することがあるため（旧 custom_fields で商品/年齢/性別が丸ごと失われた件と同じ対策）。
+        memo: { type: 'string' },
+        wants_to_meet: { type: 'array', items: { type: 'string' } },
         temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], nullable: true },
-        next_actions: { type: 'array', items: { type: 'string' } },
-        // Geminiのresponse Schemaは宣言されていないプロパティを出力できないため、
-        // custom_fieldsに含めたいキーは明示的に列挙する必要がある(properties:{}のままだと常に空になる)。
-        // custom_fieldsは毎ターン必ず出力させる（requiredで強制）。Geminiはターンによって
-        // このキーごと省略することがあり、新規顧客の作成時は最終ターンの抽出結果をそのまま
-        // insertするため、省略されると対話中に判明した商品/年齢/性別が丸ごと失われていた。
-        custom_fields: {
-          type: 'object',
-          properties: {
-            products: { type: 'array', items: { type: 'string' } },
-            age: { type: 'string', nullable: true },
-            gender: { type: 'string', nullable: true },
-          },
-        },
         name: { type: 'string', nullable: true },
         self_fields: {
           type: 'object',
@@ -78,7 +70,7 @@ const TURN_SCHEMA: GeminiSchema = {
           },
         },
       },
-      required: ['points', 'needs', 'next_actions', 'custom_fields'],
+      required: ['memo', 'wants_to_meet'],
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },
@@ -136,7 +128,7 @@ export async function POST(req: Request) {
   let customerId: string | null = body.customerId ?? null;
   // 対話中に判明した内容のセッション累積（0025）。Geminiは毎ターン履歴全体から再抽出するが、
   // ターンによって一部の項目を落として返すため、最終ターンの結果だけを保存すると先に判明して
-  // いた情報（商品/年齢/性別＝custom_fields、および要点/ニーズ/次アクション）が失われる。
+  // いた情報（メモの一部の行・つながりたい人）が失われる。
   // ここへ都度マージして保持する。
   let accumulated: AccumulatedExtraction = {};
 
@@ -172,10 +164,19 @@ export async function POST(req: Request) {
   if (customerId) {
     const { data: c } = await supabase
       .from('customers')
-      .select('name, needs, temperature, custom_fields, last_met_at')
+      .select('name, profile_notes, needs, temperature, custom_fields, last_met_at')
       .eq('id', customerId)
       .maybeSingle();
-    if (c) customerJson = JSON.stringify(c);
+    // メモは新しい列（profile_notes）を優先し、無ければ旧項目から畳んだ文章を渡す（0035）
+    if (c) {
+      customerJson = JSON.stringify({
+        name: c.name,
+        memo: customerMemo(c) || null,
+        wants_to_meet: personWantsToMeet({ custom_fields: c.custom_fields }),
+        temperature: c.temperature,
+        last_met_at: c.last_met_at,
+      });
+    }
   }
 
   // ユーザー発話を履歴に追加（forceEndで空発話の場合は追加しない）
@@ -205,10 +206,8 @@ export async function POST(req: Request) {
     ...result,
     extracted: {
       ...result.extracted,
-      custom_fields: accumulated.custom_fields ?? {},
-      points: accumulated.points ?? [],
-      needs: accumulated.needs ?? [],
-      next_actions: accumulated.next_actions ?? [],
+      memo: accumulated.memo ?? '',
+      wants_to_meet: accumulated.wants_to_meet ?? [],
     },
   };
 
@@ -314,6 +313,8 @@ async function persistOnDone(
   let customerId = args.customerId;
   let customerName = '新しく会った人';
   const isNewCustomer = !customerId;
+  const memo = (extracted.memo ?? '').trim();
+  const wants = extracted.wants_to_meet ?? [];
   if (!customerId) {
     customerName = inferName(extracted) ?? '新しく会った人';
     const { data: c, error } = await supabase
@@ -322,9 +323,9 @@ async function persistOnDone(
         org_id: orgId,
         owner_id: authorId,
         name: customerName,
-        needs: joinList(extracted.needs),
+        // 今回のメモはその回の要約（interactions.summary）に置く。カードのメモは本人が書く欄（0035）
         temperature: 'cold', // 新規は履歴が無いためcoldから開始。直後にlast_met_atを踏まえ再計算する。
-        custom_fields: (extracted.custom_fields ?? {}) as never,
+        custom_fields: (wants.length ? { wants_to_meet: wants } : {}) as never,
         last_met_at: now,
       })
       .select('id')
@@ -332,25 +333,26 @@ async function persistOnDone(
     if (error || !c) return { error: 'customer create failed' };
     customerId = c.id;
   } else {
-    // custom_fieldsは複数ターンにまたがって判明することが多いため、既存値に新規抽出分を
-    // アトミックにマージして保存する（0013のmerge_user_profile_fieldsと同じパターン。
-    // 上書きすると前ターンで判明済みの項目が消える/一切保存されないバグがあった）。
+    // つながりたい人（配列）は既存に追記してアトミックにマージする（上書きすると前回までの蓄積が消える）。
+    // 旧 needs / custom_fields の商品・年齢等には書かない（0035）。
+    let mergedFields: Record<string, unknown> | null = null;
+    if (wants.length) {
+      const { data: cur } = await supabase.from('customers').select('custom_fields').eq('id', customerId).maybeSingle();
+      mergedFields = mergeArrayFields((cur?.custom_fields as Record<string, unknown> | null) ?? {}, { wants_to_meet: wants });
+    }
     await Promise.all([
-      supabase.rpc('merge_customer_custom_fields', {
-        target_customer_id: customerId,
-        new_fields: (extracted.custom_fields ?? {}) as never,
-      }),
+      mergedFields
+        ? supabase.rpc('merge_customer_custom_fields', {
+            target_customer_id: customerId,
+            new_fields: mergedFields as never,
+          })
+        : Promise.resolve(),
       supabase
         .from('customers')
-        .update({ needs: joinList(extracted.needs), last_met_at: now, updated_at: now })
+        .update({ last_met_at: now, updated_at: now })
         .eq('id', customerId),
     ]);
   }
-  const aiSummary: AiSummary = {
-    points: extracted.points ?? [],
-    needs: extracted.needs ?? [],
-    next_actions: extracted.next_actions ?? [],
-  };
   const transcript = args.messages
     .map((m) => `${m.role === 'user' ? 'あなた' : 'AI'}: ${m.content}`)
     .join('\n');
@@ -370,7 +372,8 @@ async function persistOnDone(
         source: 'ai_dialogue',
         type: 'text',
         raw_text: transcript,
-        ai_summary: aiSummary as never,
+        // その回の要約は自由記述1本（0035）。ai_summary（旧 points/needs/next_actions）には書かない
+        summary: memo || null,
         met_at: now,
       })
       .select('id')
@@ -381,59 +384,30 @@ async function persistOnDone(
   return { customerId, interactionId: interaction.id, customerName, isNewCustomer };
 }
 
-function joinList(v?: string[]): string | null {
-  if (!v || v.length === 0) return null;
-  return v.join(' / ');
-}
-
 // セッション(osarai_sessions.accumulated_fields・0025)に保持する累積抽出の形。
+// 0035 以降は memo / wants_to_meet。旧キーは途中のセッションの読み取り用（personMemo で畳む）。
 interface AccumulatedExtraction {
+  memo?: string;
+  wants_to_meet?: string[];
+  /** @deprecated 旧形式 */
   custom_fields?: Record<string, unknown>;
+  /** @deprecated 旧形式 */
   points?: string[];
+  /** @deprecated 旧形式 */
   needs?: string[];
+  /** @deprecated 旧形式 */
   next_actions?: string[];
 }
 
-// 対話で判明した構造化情報のターン間マージ。新しい抽出のうち「実際に値があるキー」だけを
-// 上書きし、null/空文字/空配列は無視する（そのターンで拾えなかった項目で、既に判明している
-// 値を消さないため）。
-function mergeFields(
-  base: Record<string, unknown>,
-  incoming?: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!incoming) return base;
-  const merged = { ...base };
-  for (const [key, value] of Object.entries(incoming)) {
-    if (value === null || value === undefined) continue;
-    if (typeof value === 'string' && value.trim() === '') continue;
-    if (Array.isArray(value) && value.length === 0) continue;
-    merged[key] = value;
-  }
-  return merged;
-}
-
-// 要点/ニーズ/次アクションのターン間マージ。既出の項目を保ったまま新規分を足す（和集合）。
-// 同一文言の重複だけ除く（言い回しの揺れによる重複はユーザーが保存前のサマリ編集で直せる。
-// 落ちて消えるより、多めに残る方を選ぶ）。
-function mergeList(base?: string[], incoming?: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const v of [...(base ?? []), ...(incoming ?? [])]) {
-    const t = typeof v === 'string' ? v.trim() : '';
-    if (!t || seen.has(t)) continue;
-    seen.add(t);
-    out.push(t);
-  }
-  return out;
-}
-
+// 対話で判明した内容のターン間マージ。メモは行単位の和集合、つながりたい人は配列の和集合にする
+// （そのターンで拾えなかった行・項目で、既に判明している内容を消さないため）。
 function mergeExtraction(base: AccumulatedExtraction, incoming?: OsaraiExtracted): AccumulatedExtraction {
   if (!incoming) return base;
+  const wants = [...personWantsToMeet(base)];
+  for (const w of personWantsToMeet(incoming)) if (!wants.includes(w)) wants.push(w);
   return {
-    custom_fields: mergeFields(base.custom_fields ?? {}, incoming.custom_fields),
-    points: mergeList(base.points, incoming.points),
-    needs: mergeList(base.needs, incoming.needs),
-    next_actions: mergeList(base.next_actions, incoming.next_actions),
+    memo: mergeMemo(personMemo(base), personMemo(incoming)),
+    wants_to_meet: wants,
   };
 }
 
@@ -467,7 +441,7 @@ async function recomputeTemperature(
   await supabase.from('customers').update({ temperature }).eq('id', customerId);
 }
 
-// extracted.name を優先し、無ければ custom_fields に名前らしき項目があれば拾う（無ければ null）
+// extracted.name を優先し、無ければ（旧形式の）custom_fields に名前らしき項目があれば拾う（無ければ null）
 function inferName(extracted: OsaraiExtracted): string | null {
   if (typeof extracted.name === 'string' && extracted.name.trim()) return extracted.name.trim();
   const cf = extracted.custom_fields ?? {};

@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { listCustomers, mergeCustomers, findDuplicateGroups, type Customer } from '../lib/db.js';
 import { getEntitlement } from '../lib/subscription.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
+import { customerMemo } from '@osarai/shared';
 import { useConfirm } from '../components/ConfirmDialog.js';
 
 
@@ -136,9 +137,10 @@ export function CustomerList() {
                   <span style={{ fontSize: 12 }}>さん</span>
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '50%' }}>
-                  {c.needs && (
+                  {/* この人のメモ（profile_notes・0035。無ければ旧 needs 等）の1行目 */}
+                  {customerMemo(c) && (
                     <span style={{ color: '#9a9183', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {c.needs}
+                      {customerMemo(c).split('\n')[0]}
                     </span>
                   )}
                   {c.last_met_at && (

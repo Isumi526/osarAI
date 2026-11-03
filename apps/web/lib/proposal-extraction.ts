@@ -4,7 +4,7 @@
 // これを import して使う。振る舞いは従来と同一（関数はそのまま移設）。
 import type { GeminiSchema } from '@/lib/gemini';
 import { normalizeName, type Proposals } from '@/lib/assistant-persist';
-import { findSimilarNames } from '@osarai/shared';
+import { findSimilarNames, personMemo, personWantsToMeet } from '@osarai/shared';
 import { isSpeakerLabel } from '@/lib/meeting-speakers';
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -12,9 +12,17 @@ export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 export interface ExtractedPerson {
   name: string;
   matched_customer_id?: string | null;
+  /** その人について今回わかったこと・話した内容・約束（自由記述1本・2026-11-03 / 0035） */
+  memo?: string;
+  /** 相手が「どんな人とつながりたいか」（紹介希望・Phase2 マッチングの入力。構造のまま残す） */
+  wants_to_meet?: string[];
+  /** @deprecated 旧形式（0035 以前に累積されたセッションの読み取り用）。新規の抽出では出さない */
   points?: string[];
+  /** @deprecated 旧形式 */
   needs?: string[];
+  /** @deprecated 旧形式 */
   next_actions?: string[];
+  /** @deprecated 旧形式 */
   custom_fields?: Record<string, unknown>;
 }
 export interface ExtractedSchedule {
@@ -77,21 +85,12 @@ export const TURN_SCHEMA: GeminiSchema = {
             properties: {
               name: { type: 'string' },
               matched_customer_id: { type: 'string', nullable: true },
-              points: { type: 'array', items: { type: 'string' } },
-              needs: { type: 'array', items: { type: 'string' } },
-              next_actions: { type: 'array', items: { type: 'string' } },
-              custom_fields: {
-                type: 'object',
-                properties: {
-                  products: { type: 'array', items: { type: 'string' } },
-                  age: { type: 'string', nullable: true },
-                  gender: { type: 'string', nullable: true },
-                  // 相手が「どんな人とつながりたいか」（紹介希望・T7）。紹介TODOの元データ。
-                  wants_to_meet: { type: 'array', items: { type: 'string' } },
-                },
-              },
+              // 要点/ニーズ/次アクション/商品・年齢などに分けず、自由記述のメモ1本で受け取る（2026-11-03・0035）
+              memo: { type: 'string' },
+              // 相手が「どんな人とつながりたいか」（紹介希望・T7）。紹介TODOとPhase2マッチングの元データ。
+              wants_to_meet: { type: 'array', items: { type: 'string' } },
             },
-            required: ['name', 'points', 'needs', 'next_actions'],
+            required: ['name', 'memo', 'wants_to_meet'],
           },
         },
         schedules: {
@@ -159,10 +158,10 @@ export function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted
     people.set(key, {
       name: p.name,
       matched_customer_id: p.matched_customer_id ?? prev?.matched_customer_id ?? null,
-      points: mergeList(prev?.points, p.points),
-      needs: mergeList(prev?.needs, p.needs),
-      next_actions: mergeList(prev?.next_actions, p.next_actions),
-      custom_fields: { ...(prev?.custom_fields ?? {}), ...nonEmpty(p.custom_fields) },
+      // メモは行単位で和集合にする（Geminiがターンによって一部の行を落としても、判明済みの内容を消さない）。
+      // 旧形式で累積されていた途中のセッションは personMemo で同じ書式の文章に直してから混ぜる。
+      memo: mergeMemo(prev ? personMemo(prev) : '', personMemo(p)),
+      wants_to_meet: mergeList(prev ? personWantsToMeet(prev) : [], personWantsToMeet(p)),
     });
   }
   // 予定・タスクのタイトルは、統合前に人名を落としておく（「サンプル太郎さんに資料を送る」と
@@ -224,8 +223,14 @@ export function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted
   };
 }
 
+/** メモ（自由記述）のターン間マージ。行ごとに mergeList と同じ規則で重複を潰し、順序は先に出た方を保つ。 */
+export function mergeMemo(a: string, b: string): string {
+  const lines = (t: string) => t.split('\n').map((x) => x.trim()).filter(Boolean);
+  return mergeList(lines(a), lines(b)).join('\n');
+}
+
 /**
- * 要点・ニーズ・次アクションのターン間マージ。
+ * 箇条（メモの行・つながりたい人・自分についての気づき）のターン間マージ。
  * Geminiは同じ内容をターンごとに言い換えて返すため（「交流会で話をした」「交流会で話した」）、
  * 完全一致だけの除去では確認カードが重複だらけになる。正規化した上で、片方がもう片方を
  * 含む場合は同一とみなし、情報量の多い（長い）方を残す。
@@ -311,10 +316,8 @@ export function toProposals(acc: Extracted, customers: { id: string; name: strin
     return {
       customer_id: matched,
       name: p.name,
-      points: p.points ?? [],
-      needs: p.needs ?? [],
-      next_actions: p.next_actions ?? [],
-      custom_fields: p.custom_fields ?? {},
+      memo: personMemo(p),
+      wants_to_meet: personWantsToMeet(p),
       // 新規登録になる場合だけ、表記揺れで同一人物の可能性がある既存つながりを添える。
       // 音声入力は「渡辺/渡邊」「タナカ/田中」のような揺れが出るため、勝手に寄せず確認カードで聞く。
       similar: matched || !p.name ? undefined : findSimilarNames(p.name, customers),

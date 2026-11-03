@@ -65,20 +65,34 @@ export async function appendUserProfileNotes(newNotes: string[]): Promise<void> 
   if (error) throw error;
 }
 
-// 「自分をおさらいする」対話の抽出結果(notes + job/products等の構造化フィールド)を
-// アトミックに保存する(migration 0013)。job/productsがuser_profileに反映されず、
-// 次回以降も未登録扱いのまま同じ質問を聞き直してしまうバグの修正。
-// notesの追記のみで構造化フィールドが無い場合は既存のappendUserProfileNotesと等価。
+// 「自分をおさらいする」対話の抽出結果を保存する。
+// 気づき(notes)は自由記述の「自分のメモ」(profiles.profile_text)へ1行ずつアトミックに追記し
+// (append_profile_text・migration 0035。旧 user_profile.notes には書かない)、
+// job/products等の構造化フィールドは従来どおり user_profile にアトミックにマージする(migration 0013)。
 export async function saveSelfOsaraiExtraction(
   newNotes: string[],
   fields: { job?: string; products?: string; age?: string; gender?: string; background?: string; goal?: string } = {},
 ): Promise<void> {
   const cleanFields = Object.fromEntries(Object.entries(fields).filter(([, v]) => !!v && v.trim()));
-  if (newNotes.length === 0 && Object.keys(cleanFields).length === 0) return;
-  const { error } = await supabase.rpc('merge_user_profile_fields', {
-    new_notes: newNotes,
-    new_fields: cleanFields,
-  });
+  const lines = newNotes.map((n) => n.trim()).filter(Boolean);
+  if (lines.length > 0) {
+    const { error } = await supabase.rpc('append_profile_text', { addition: lines.join('\n') });
+    if (error) throw error;
+  }
+  if (Object.keys(cleanFields).length > 0) {
+    const { error } = await supabase.rpc('merge_user_profile_fields', { new_notes: [], new_fields: cleanFields });
+    if (error) throw error;
+  }
+}
+
+// 自分のメモ(profiles.profile_text・migration 0035)を書き換える(設定画面での手直し)。
+// 空にした場合は空文字で保存する(null に戻すと旧 user_profile.notes が読み取り用に再び出てくるため)。
+export async function updateMyProfileText(text: string): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error('not authenticated');
+  const { error } = await supabase.from('profiles').update({ profile_text: text.trim() }).eq('id', user.id);
   if (error) throw error;
 }
 
@@ -119,7 +133,8 @@ export const DEFAULT_RELATION_TYPE = 'つながり';
 
 export interface CustomerInput {
   name: string;
-  needs: string | null;
+  /** この人のメモ（customers.profile_notes・自由記述・migration 0035）。旧 needs には書かない */
+  profileNotes: string | null;
   relationType: string | null;
 }
 
@@ -161,7 +176,7 @@ export async function createCustomer(
       owner_id: profile.id, //    owner_id = auth.uid()
       name: input.name,
       temperature: 'cold' satisfies Temperature, // 新規は履歴が無いためcoldから開始。以後は自動算出。
-      needs: input.needs,
+      profile_notes: input.profileNotes,
       relation_type: input.relationType,
       status: 'active' satisfies CustomerStatus,
     })
@@ -176,7 +191,7 @@ export async function updateCustomer(id: string, input: CustomerInput): Promise<
     .from('customers')
     .update({
       name: input.name,
-      needs: input.needs,
+      profile_notes: input.profileNotes,
       relation_type: input.relationType,
       updated_at: new Date().toISOString(),
     })
@@ -194,9 +209,8 @@ export async function archiveCustomer(id: string): Promise<void> {
 }
 
 export interface SummaryEdit {
-  points: string[];
-  needs: string[];
-  next_actions: string[];
+  /** その回の要約（自由記述・interactions.summary・migration 0035） */
+  memo: string;
   name?: string;
 }
 
@@ -213,18 +227,16 @@ export async function updateInteractionSummary(
   customerId: string,
   edit: SummaryEdit,
 ): Promise<void> {
+  // 要約は自由記述1本で interactions.summary に保存する（旧 ai_summary.points 等・customers.needs には書かない）
   const { error: ixError } = await supabase
     .from('interactions')
-    .update({
-      ai_summary: { points: edit.points, needs: edit.needs, next_actions: edit.next_actions } as never,
-    })
+    .update({ summary: edit.memo.trim() || null })
     .eq('id', interactionId);
   if (ixError) throw ixError;
 
   const { error: custError } = await supabase
     .from('customers')
     .update({
-      needs: edit.needs.length ? edit.needs.join(' / ') : null,
       updated_at: new Date().toISOString(),
       ...(edit.name && edit.name.trim() ? { name: edit.name.trim() } : {}),
     })

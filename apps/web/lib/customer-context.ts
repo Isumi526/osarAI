@@ -1,6 +1,9 @@
 // 顧客データをAIプロンプト用のテキストにまとめる共通ヘルパー。
 // /api/advice（AI戦略相談）と /api/cron/apo-strategy（アポ当日事前戦略提案）で共用。
-import type { ChatScope, AiSummary } from '@osarai/shared';
+// 2026-11-03（0035）: つながりのメモ（customers.profile_notes）・その回の要約（interactions.summary）・
+// 自分のメモ（profiles.profile_text）を先に読み、空なら旧項目（needs / custom_fields / ai_summary.points 等 /
+// user_profile.notes）から同じ書式に畳んで使う。
+import { customerMemo, interactionSummaryText, personWantsToMeet, selfMemo, type ChatScope, type AiSummary } from '@osarai/shared';
 
 export type SB = import('@supabase/supabase-js').SupabaseClient<
   import('@osarai/shared/database.types').Database
@@ -14,13 +17,13 @@ export async function buildContext(
   if (scope === 'customer' && customerId) {
     const { data: c } = await supabase
       .from('customers')
-      .select('name, temperature, needs, last_met_at, custom_fields')
+      .select('name, temperature, profile_notes, needs, last_met_at, custom_fields')
       .eq('id', customerId)
       .maybeSingle();
     if (!c) return 'データなし';
     const { data: ix } = await supabase
       .from('interactions')
-      .select('source, met_at, ai_summary, raw_text')
+      .select('source, met_at, summary, ai_summary, raw_text')
       .eq('customer_id', customerId)
       .order('met_at', { ascending: false, nullsFirst: false })
       .limit(10);
@@ -28,23 +31,27 @@ export async function buildContext(
       .map((r, i) => {
         const s = r.ai_summary as AiSummary | null;
         const when = r.met_at ? new Date(r.met_at).toLocaleDateString('ja-JP') : '日付不明';
+        // その回の要約（新しい列 summary、無ければ旧 points/needs/next_actions を畳んだ文章）
+        const summary = interactionSummaryText(r);
         // 会議録音の議事録があればそれを優先（直近3件は全文、それ以前は冒頭のみ）。
         // AI相談が「前回どんな話をしたか」を踏まえて答えられるようにする（T7c）。
         if (s?.minutes) {
           const body = i < 3 ? s.minutes : s.minutes.slice(0, 300) + (s.minutes.length > 300 ? '…' : '');
-          return `- ${when}（会議の議事録）:\n${body.replace(/^/gm, '    ')}`;
+          const memo = summary ? `\n    メモ: ${summary.replace(/\n/g, ' / ')}` : '';
+          return `- ${when}（会議の議事録）:\n${body.replace(/^/gm, '    ')}${memo}`;
         }
-        const bodyText = s?.points?.length ? s.points.join('、') : (r.raw_text ?? '').slice(0, 120);
-        const next = s?.next_actions?.length ? ` / 次: ${s.next_actions.join('、')}` : '';
-        return `- ${when}: ${bodyText}${next}`;
+        const bodyText = summary ? summary.replace(/\n/g, ' / ') : (r.raw_text ?? '').slice(0, 120);
+        return `- ${when}: ${bodyText}`;
       })
       .join('\n');
+    const memo = customerMemo(c);
+    const wants = personWantsToMeet({ custom_fields: c.custom_fields });
     return [
       `名前: ${c.name}`,
       `温度感: ${c.temperature ?? '未設定'}`,
-      `ニーズ: ${c.needs ?? '未把握'}`,
       `最終接触: ${c.last_met_at ? new Date(c.last_met_at).toLocaleDateString('ja-JP') : '未記録'}`,
-      ...formatCustomerFieldLines(c.custom_fields as Record<string, unknown> | null),
+      `この人のメモ:\n${memo || '（未記入）'}`,
+      ...(wants.length ? [`つながりたい人: ${wants.join('、')}`] : []),
       `履歴:\n${timeline || '（履歴なし）'}`,
     ].join('\n');
   }
@@ -52,7 +59,7 @@ export async function buildContext(
   // scope=all: 顧客一覧サマリ（RLS で自分の担当分のみ）
   const { data: customers } = await supabase
     .from('customers')
-    .select('name, temperature, needs, last_met_at, status')
+    .select('name, temperature, profile_notes, needs, custom_fields, last_met_at, status')
     .eq('status', 'active')
     .order('last_met_at', { ascending: false, nullsFirst: false })
     .limit(50);
@@ -60,28 +67,15 @@ export async function buildContext(
   return customers
     .map((c) => {
       const when = c.last_met_at ? new Date(c.last_met_at).toLocaleDateString('ja-JP') : '未記録';
-      return `- ${c.name}（温度: ${c.temperature ?? '?'} / ニーズ: ${c.needs ?? '未把握'} / 最終接触: ${when}）`;
+      return `- ${c.name}（温度: ${c.temperature ?? '?'} / メモ: ${memoHead(customerMemo(c)) || '未記入'} / 最終接触: ${when}）`;
     })
     .join('\n');
 }
 
-// customers.custom_fields内の商品/年齢/性別（おさらい対話でのAI抽出先。0007_profile_user_context.sql
-// のuserProfile(products/age/gender)と同じパターンを顧客側にも適用）。
-function formatCustomerFieldLines(customFields: Record<string, unknown> | null): string[] {
-  if (!customFields) return [];
-  const lines: string[] = [];
-  const age = customFields.age;
-  if (typeof age === 'string' && age.trim()) lines.push(`年齢: ${age}`);
-  const gender = customFields.gender;
-  if (typeof gender === 'string' && gender.trim()) lines.push(`性別: ${gender}`);
-  const products = customFields.products;
-  if (Array.isArray(products)) {
-    const productLines = products.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
-    if (productLines.length > 0) lines.push(`扱っている商品: ${productLines.join('、')}`);
-  } else if (typeof products === 'string' && products.trim()) {
-    lines.push(`扱っている商品: ${products}`);
-  }
-  return lines;
+/** メモを名簿・一覧向けに1行へ縮める（改行を「 / 」にし、長ければ切る）。 */
+export function memoHead(memo: string, max = 80): string {
+  const one = memo.replace(/\s*\n\s*/g, ' / ').trim();
+  return one.length > max ? `${one.slice(0, max)}…` : one;
 }
 
 const USER_PROFILE_LABEL: Record<string, string> = {
@@ -92,8 +86,16 @@ const USER_PROFILE_LABEL: Record<string, string> = {
   goal: '目標',
 };
 
-export function formatUserProfile(userProfile: Record<string, unknown> | null): string | undefined {
-  if (!userProfile) return undefined;
+/**
+ * 自分のプロフィールをAI向けに整形する。profileText（profiles.profile_text・0035）を渡すと
+ * 「自分のメモ」として使い、渡さない（undefined）・null なら旧 user_profile.notes を読む。
+ */
+export function formatUserProfile(
+  userProfile: Record<string, unknown> | null,
+  profileText?: string | null,
+): string | undefined {
+  if (!userProfile && profileText == null) return undefined;
+  userProfile = userProfile ?? {};
   const lines = Object.entries(userProfile)
     .filter(([k, v]) => k !== 'notes' && k !== 'goals' && k !== 'products' && typeof v === 'string' && v.trim())
     .map(([k, v]) => `${USER_PROFILE_LABEL[k] ?? k}: ${v as string}`);
@@ -130,10 +132,10 @@ export function formatUserProfile(userProfile: Record<string, unknown> | null): 
     lines.push(`扱っている商品: ${products}`);
   }
 
-  // 「自分をおさらいする」対話で蓄積した自由記述の気づき（notes: string[]）
-  const notes = userProfile.notes;
-  if (Array.isArray(notes) && notes.length > 0) {
-    lines.push(`本人との対話から蓄積した気づき:\n${notes.map((n) => `- ${n}`).join('\n')}`);
+  // 自分についてのメモ（自由記述・profile_text）。無ければ旧「自分をおさらい」の気づき（notes: string[]）
+  const memo = selfMemo({ profile_text: profileText, user_profile: userProfile });
+  if (memo) {
+    lines.push(`本人についてのメモ:\n${memo}`);
   }
 
   return lines.length > 0 ? lines.join('\n') : undefined;

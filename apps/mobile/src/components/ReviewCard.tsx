@@ -1,37 +1,27 @@
 // 保存前の確認カード（共有）。AIの抽出をそのまま保存せず、必ずユーザーが目で見て直せるようにする。
 // 統合AIチャット(AssistantChat) と 会議録音(Meeting) の両方で使う（2026-08-25 会議録音T1で切り出し）。
 import { useState } from 'react';
-import { type Proposals } from '../lib/assistant.js';
+import { type PersonProposal, type Proposals } from '../lib/assistant.js';
 import { AutoResizeTextarea } from './AutoResizeTextarea.js';
+import { personMemo, personWantsToMeet } from '@osarai/shared';
 
 const toLines = (v: string[]) => v.join('\n');
-/** 人物の各欄（要点/ニーズ/次アクション/つながりたい人）を1つのメモ行リストに畳む（表示・編集用）。 */
-function personMemoLines(p: { points: string[]; needs: string[]; next_actions: string[]; custom_fields?: Record<string, unknown> }): string[] {
-  const wants = wantsToMeet(p.custom_fields);
-  const out: string[] = [...p.points];
-  for (const n of p.needs) if (!out.includes(n)) out.push(n);
-  for (const a of p.next_actions) if (!out.includes(a)) out.push(a);
-  for (const w of wants) {
-    const line = `つながりたい人: ${w}`;
-    if (!out.includes(line)) out.push(line);
-  }
-  return out;
+/**
+ * 人物の編集結果を書き戻す（2026-11-03・0035: メモは自由記述1本＋つながりたい人）。
+ * 旧形式で保存されていた会議候補（points/needs/next_actions/custom_fields）は、編集した時点で
+ * 新しい形に置き換える（旧項目が残ると、メモを空にした時に旧い内容が戻って見えるため）。
+ */
+function applyPerson(p: PersonProposal, patch: { memo?: string; wants_to_meet?: string[] }): PersonProposal {
+  return {
+    ...p,
+    memo: patch.memo ?? p.memo ?? personMemo(p),
+    wants_to_meet: patch.wants_to_meet ?? personWantsToMeet(p),
+    points: undefined,
+    needs: undefined,
+    next_actions: undefined,
+    custom_fields: undefined,
+  };
 }
-/** メモ行を人物に書き戻す。「つながりたい人: 〜」の行だけは custom_fields.wants_to_meet（将来のマッチング用）にも残す。 */
-function applyPersonMemo<T extends { points: string[]; needs: string[]; next_actions: string[]; custom_fields?: Record<string, unknown> }>(p: T, lines: string[]): T {
-  const wants: string[] = [];
-  const points: string[] = [];
-  for (const l of lines) {
-    const m = /^つながりたい人[:：]\s*(.+)$/.exec(l);
-    if (m) wants.push(m[1]!.trim());
-    else points.push(l);
-  }
-  return { ...p, points, needs: [], next_actions: [], custom_fields: { ...(p.custom_fields ?? {}), wants_to_meet: wants } };
-}
-const wantsToMeet = (cf?: Record<string, unknown>): string[] => {
-  const v = cf?.wants_to_meet;
-  return Array.isArray(v) ? v.map((x) => String(x)) : [];
-};
 const fromLines = (v: string) => v.split('\n').map((s) => s.trim()).filter(Boolean);
 // datetime-local / date 入力とISO文字列の相互変換
 const toLocalInput = (iso: string, withTime: boolean) => {
@@ -87,7 +77,7 @@ export function ReviewCard({
   const addPerson = () =>
     setProposals({
       ...proposals,
-      people: [...proposals.people, { customer_id: null, name: '', points: [], needs: [], next_actions: [], custom_fields: {} }],
+      people: [...proposals.people, { customer_id: null, name: '', memo: '', wants_to_meet: [] }],
     });
 
   return (
@@ -214,23 +204,39 @@ export function ReviewCard({
               </div>
             </div>
           )}
-          {/* その人についてのメモ（要点/ニーズ/次アクション/つながりたい人を1本に統合）。会議録音では
-              議事録が主役なので既定は畳み、必要な時だけ開く（2026-09-21 レビュー）。保存先は従来どおり points(行) */}
-          <details open={personMemoLines(p).length > 0 && !minutes}>
+          {/* その人についてのメモ（自由記述1本・2026-11-03 / 0035）。その回の対応履歴に保存される。
+              つながりたい人は将来のマッチングで機械が使うので、メモとは別の欄に1行1人で持つ。
+              会議録音では議事録が主役なので既定は畳み、必要な時だけ開く（2026-09-21 レビュー）。 */}
+          <details open={(!!personMemo(p) || personWantsToMeet(p).length > 0) && !minutes}>
             <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--color-text-muted)' }}>
-              この人についてのメモ{personMemoLines(p).length > 0 ? `（${personMemoLines(p).length}件）` : '（任意）'}
+              この人についてのメモ{personMemo(p) || personWantsToMeet(p).length > 0 ? '' : '（任意）'}
             </summary>
-            <LinesField
-              label=""
-              value={personMemoLines(p)}
-              onChange={(v) =>
-                setProposals({
-                  ...proposals,
-                  people: proposals.people.map((x, j) => (j === i ? applyPersonMemo(x, v) : x)),
-                })
-              }
-              placeholder="話した内容・相手の状況・約束したことなど（1行に1つ）"
-            />
+            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+              <AutoResizeTextarea
+                // 入力中の末尾の改行・空白を消さないよう、新しい形（memo）があればそのまま使う
+                value={p.memo ?? personMemo(p)}
+                onChange={(e) =>
+                  setProposals({
+                    ...proposals,
+                    people: proposals.people.map((x, j) => (j === i ? applyPerson(x, { memo: e.target.value }) : x)),
+                  })
+                }
+                placeholder="話した内容・相手の状況・約束したことなど"
+                rows={2}
+                style={{ padding: 10, fontSize: 14, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8, resize: 'none' }}
+              />
+              <LinesField
+                label="つながりたい人（紹介してほしい人物像・1行に1人）"
+                value={personWantsToMeet(p)}
+                onChange={(v) =>
+                  setProposals({
+                    ...proposals,
+                    people: proposals.people.map((x, j) => (j === i ? applyPerson(x, { wants_to_meet: v }) : x)),
+                  })
+                }
+                placeholder="例: 30代のフリーランス"
+              />
+            </div>
           </details>
         </div>
       ))}

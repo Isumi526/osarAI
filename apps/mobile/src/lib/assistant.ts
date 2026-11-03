@@ -9,9 +9,17 @@ export interface SimilarNameCandidate {
 export interface PersonProposal {
   customer_id: string | null;
   name: string;
-  points: string[];
-  needs: string[];
-  next_actions: string[];
+  /** その人について今回わかったこと・話した内容・約束（自由記述1本・0035） */
+  memo: string;
+  /** 相手が「どんな人とつながりたいか」（Phase2 マッチングの入力） */
+  wants_to_meet: string[];
+  /** @deprecated 旧形式（0035 以前に保存された会議候補）。表示時は personMemo / personWantsToMeet で読み替える */
+  points?: string[];
+  /** @deprecated 旧形式 */
+  needs?: string[];
+  /** @deprecated 旧形式 */
+  next_actions?: string[];
+  /** @deprecated 旧形式 */
   custom_fields?: Record<string, unknown>;
   /** 同一人物かもしれない既存つながり（新規登録になる時だけサーバーが付ける）。 */
   similar?: SimilarNameCandidate[];

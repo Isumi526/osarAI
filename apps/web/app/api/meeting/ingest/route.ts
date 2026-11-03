@@ -5,10 +5,10 @@
 // 承認後の登録は /api/meeting/commit（既存 commitProposals を再利用）。
 // 抽出スキーマ/整形は lib/proposal-extraction を共有（統合AIチャットと同一ロジック）。
 import { NextResponse } from 'next/server';
-import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT, buildMeetingMinutesPrompt, pruneEmptyMinutesSections } from '@osarai/shared';
+import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT, buildMeetingMinutesPrompt, pruneEmptyMinutesSections, customerMemo } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
-import { formatUserProfile } from '@/lib/customer-context';
+import { formatUserProfile, memoHead } from '@/lib/customer-context';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
 
   const [ent, profileRes] = await Promise.all([
     getEntitlement(supabase, user.id),
-    supabase.from('profiles').select('org_id, user_profile, display_name').eq('id', user.id).maybeSingle(),
+    supabase.from('profiles').select('org_id, user_profile, profile_text, display_name').eq('id', user.id).maybeSingle(),
   ]);
   if (!ent.active) return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
   // plan が未知（PLANS に無い文字列）ならフェイルクローズ（T7）
@@ -238,7 +238,7 @@ export async function POST(req: Request) {
   const [customersRes, agencyRes] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, name, relation_type, needs')
+      .select('id, name, relation_type, profile_notes, needs, custom_fields')
       .eq('owner_id', user.id)
       .eq('status', 'active')
       // 直近に会った人から名簿に載せる（100件超のユーザーで名寄せ対象が不定にならないように）
@@ -248,17 +248,19 @@ export async function POST(req: Request) {
   ]);
   const customers = customersRes.data ?? [];
   const customerRoster = customers
-    .map((c) => `- id=${c.id} 名前=${c.name}${c.relation_type ? ` 区分=${c.relation_type}` : ''}${c.needs ? ` ニーズ=${c.needs}` : ''}`)
+    .map((c) => {
+      // メモは新しい列（profile_notes）を優先し、無ければ旧 needs 等から畳む（0035）
+      const memo = memoHead(customerMemo(c), 60);
+      return `- id=${c.id} 名前=${c.name}${c.relation_type ? ` 区分=${c.relation_type}` : ''}${memo ? ` メモ=${memo}` : ''}`;
+    })
     .join('\n');
   const userProfile = (profile.user_profile as Record<string, unknown> | null) ?? {};
   const ownProducts = Array.isArray(userProfile.products)
     ? (userProfile.products as { name?: string }[]).map((p) => p?.name).filter(Boolean)
     : [];
   const productRoster = [...ownProducts, ...(agencyRes.data ?? []).map((p) => p.name)].map((n) => `- ${n}`).join('\n');
-  const notes = Array.isArray(userProfile.notes) ? (userProfile.notes as string[]).slice(-30) : [];
-  const userContext = [formatUserProfile(userProfile), notes.length ? `これまでの気づき:\n${notes.map((n) => `- ${n}`).join('\n')}` : '']
-    .filter(Boolean)
-    .join('\n');
+  // 自分のメモ（profile_text・0035。無ければ旧 notes）は formatUserProfile の中で「本人についてのメモ」として入る
+  const userContext = formatUserProfile(userProfile, profile.profile_text) ?? '';
 
   // 相対日付（「来週火曜」）の基準。取り込みで会議日時が指定されていればそれを使う
   const now = recordedAt ?? new Date();
@@ -287,7 +289,7 @@ export async function POST(req: Request) {
           selfName ? `ユーザー本人（議事録での「自分」）の名前: ${selfName}` : '',
           // マイクが実質無音だった録音では、本人が話した前提の記述を書かせない
           selfSilent ? `この録音でユーザー本人はほとんど発言していません。本人が話した・約束したという記述は書かないでください。` : '',
-          formatUserProfile(userProfile),
+          formatUserProfile(userProfile, profile.profile_text),
         ]
           .filter(Boolean)
           .join('\n'),

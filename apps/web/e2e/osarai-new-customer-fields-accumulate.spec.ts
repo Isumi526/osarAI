@@ -6,6 +6,8 @@ import { test, expect } from '@playwright/test';
 // 対話中に判明していた商品/年齢/性別が丸ごと失われていた（実際に custom_fields={} になった）。
 // 既存顧客は merge_customer_custom_fields(0023) で守られていたが、新規顧客には効かない経路だった。
 // 0025 で osarai_sessions.accumulated_fields にターンごとマージして保持するようにした。
+// 2026-11-03（0035）から項目に分けず自由記述のメモ1本で持つため、判明した内容が
+// その回の要約（interactions.summary）に残っていることを確かめる（メモは行単位で累積する）。
 //
 // 注: このspecは実際のGemini APIを叩く（抽出そのものが検証対象のため）。
 
@@ -14,7 +16,7 @@ const LOCAL_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 const SERVICE_KEY = 'sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz';
 const svc = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'content-type': 'application/json' };
 
-test('おさらいで新規作成したつながりに、複数ターンで判明した商品/年齢/性別がすべて保存される', async ({ request }) => {
+test('おさらいで新規作成したつながりの履歴メモに、複数ターンで判明した商品/年齢/性別がすべて残る', async ({ request }) => {
   test.setTimeout(180_000); // 実Gemini呼び出しを複数ターン行うため
 
   const email = `e2e-osarai-accum-${Date.now()}@example.com`;
@@ -55,16 +57,16 @@ test('おさらいで新規作成したつながりに、複数ターンで判�
   // 既にdone済みなら409（その場合は上のループ内で保存済み）
   expect([200, 409]).toContain(endRes.status());
 
-  const customersRes = await request.get(
-    `${LOCAL_SUPABASE_URL}/rest/v1/customers?owner_id=eq.${user.id}&select=name,custom_fields`,
+  const ixRes = await request.get(
+    `${LOCAL_SUPABASE_URL}/rest/v1/interactions?author_id=eq.${user.id}&select=summary`,
     { headers: { ...svc } },
   );
-  const customers = (await customersRes.json()) as { name: string; custom_fields: Record<string, unknown> }[];
-  expect(customers.length).toBeGreaterThan(0);
-  const cf = customers[0]!.custom_fields ?? {};
+  const rows = (await ixRes.json()) as { summary: string | null }[];
+  expect(rows.length).toBeGreaterThan(0);
+  const memo = rows[0]!.summary ?? '';
 
   // 会話で明確に話した3項目がすべて残っていること（どれか1つでも欠けたら回帰）
-  expect(Array.isArray(cf.products) ? (cf.products as string[]).join('') : '').toContain('保険');
-  expect(String(cf.age ?? '')).toContain('30');
-  expect(String(cf.gender ?? '')).toBeTruthy();
+  expect(memo).toContain('保険');
+  expect(memo).toContain('30');
+  expect(memo).toMatch(/男/);
 });

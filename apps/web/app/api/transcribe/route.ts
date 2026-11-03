@@ -1,9 +1,9 @@
 // 録音取り込み（サブ経路・§8-2 / F-03）。
 // モバイルが録れた音声(base64)を送る → サーバーが Storage(recordings) に保存 →
-// Gemini で文字起こし → 要約(ai_summary) → interactions(source=録音種別) を作成。
+// Gemini で文字起こし → 要約(summary・自由記述・0035) → interactions(source=録音種別) を作成。
 // 音声は service_role で保存（非公開バケット）。interaction はユーザーのRLSクライアントで作成。
 import { NextResponse } from 'next/server';
-import type { AiSummary, InteractionSource, OsaraiExtracted } from '@osarai/shared';
+import type { InteractionSource, OsaraiExtracted } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
 import { createServiceRoleClient } from '@/lib/supabase/server';
@@ -24,12 +24,11 @@ const REC_SOURCES: InteractionSource[] = ['in_person_rec', 'zoom_rec'];
 const SUMMARY_SCHEMA: GeminiSchema = {
   type: 'object',
   properties: {
-    points: { type: 'array', items: { type: 'string' } },
-    needs: { type: 'array', items: { type: 'string' } },
-    next_actions: { type: 'array', items: { type: 'string' } },
+    // 要点/ニーズ/次アクションに分けず、自由記述の要約1本で受け取る（2026-11-03・0035）
+    summary: { type: 'string' },
     temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], nullable: true },
   },
-  required: ['points', 'needs', 'next_actions'],
+  required: ['summary'],
 };
 
 export function OPTIONS() {
@@ -113,16 +112,17 @@ export async function POST(req: Request) {
     return json({ error: 'transcribe failed', detail: String(e) }, 502);
   }
 
-  let summary: AiSummary = { points: [], needs: [], next_actions: [] };
+  let summary = '';
   let temperature: OsaraiExtracted['temperature'] = null;
   if (transcript) {
     try {
-      const s = await geminiJson<AiSummary & { temperature?: OsaraiExtracted['temperature'] }>(
-        `次の商談メモ（文字起こし）を要約してください。\n---\n${transcript}\n---`,
+      const s = await geminiJson<{ summary?: string; temperature?: OsaraiExtracted['temperature'] }>(
+        `次の商談メモ（文字起こし）を、話した内容・相手の状況や困りごと・約束したことが読み返して分かるよう、` +
+          `短い文で改行しながら1本の文章に要約してください（項目に分けない）。\n---\n${transcript}\n---`,
         SUMMARY_SCHEMA,
         { model: GEMINI_MODEL_LITE, temperature: 0.2 },
       );
-      summary = { points: s.points ?? [], needs: s.needs ?? [], next_actions: s.next_actions ?? [] };
+      summary = (s.summary ?? '').trim();
       temperature = s.temperature ?? null;
     } catch {
       // 要約失敗時も transcript は残す（要約なしで interaction 作成）
@@ -141,21 +141,20 @@ export async function POST(req: Request) {
       type: 'audio',
       audio_url: path,
       transcript,
-      ai_summary: summary as never,
+      summary: summary || null,
       met_at: now,
     })
     .select('id')
     .single();
   if (ixErr || !interaction) return json({ error: 'interaction create failed' }, 500);
 
-  // 顧客カード更新（温度感/最終接触。needs は要約があれば補完）
+  // 顧客カード更新（温度感/最終接触。要約は対応履歴の summary に残し、カードのメモ・旧 needs には書かない）
   await supabase
     .from('customers')
     .update({
       last_met_at: now,
       updated_at: now,
       ...(temperature ? { temperature } : {}),
-      ...(summary.needs.length ? { needs: summary.needs.join(' / ') } : {}),
     })
     .eq('id', customerId);
 

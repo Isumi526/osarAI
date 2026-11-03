@@ -9,7 +9,8 @@ import { NextResponse } from 'next/server';
 import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
-import { formatUserProfile, buildContext, isNameMentioned } from '@/lib/customer-context';
+import { formatUserProfile, buildContext, isNameMentioned, memoHead } from '@/lib/customer-context';
+import { customerMemo } from '@osarai/shared';
 import { geminiJson, GEMINI_MODEL_DIALOGUE } from '@/lib/gemini';
 import {
   TURN_SCHEMA,
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
 
   const [ent, profileRes] = await Promise.all([
     getEntitlement(supabase, user.id),
-    supabase.from('profiles').select('org_id, user_profile').eq('id', user.id).maybeSingle(),
+    supabase.from('profiles').select('org_id, user_profile, profile_text').eq('id', user.id).maybeSingle(),
   ]);
   if (!ent.active) {
     return json({ error: 'subscription_required', message: '契約が必要です（Webで登録）' }, 402);
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
   const [customersRes, agencyRes] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, name, relation_type, needs')
+      .select('id, name, relation_type, profile_notes, needs, custom_fields')
       .eq('owner_id', user.id)
       .eq('status', 'active')
       .limit(100),
@@ -97,7 +98,11 @@ export async function POST(req: Request) {
   ]);
   const customers = customersRes.data ?? [];
   const customerRoster = customers
-    .map((c) => `- id=${c.id} 名前=${c.name}${c.relation_type ? ` 区分=${c.relation_type}` : ''}${c.needs ? ` ニーズ=${c.needs}` : ''}`)
+    .map((c) => {
+      // メモは新しい列（profile_notes）を優先し、無ければ旧 needs 等から畳む（0035）
+      const memo = memoHead(customerMemo(c), 60);
+      return `- id=${c.id} 名前=${c.name}${c.relation_type ? ` 区分=${c.relation_type}` : ''}${memo ? ` メモ=${memo}` : ''}`;
+    })
     .join('\n');
 
   const userProfile = (profile.user_profile as Record<string, unknown> | null) ?? {};
@@ -108,10 +113,8 @@ export async function POST(req: Request) {
     .map((n) => `- ${n}`)
     .join('\n');
 
-  const notes = Array.isArray(userProfile.notes) ? (userProfile.notes as string[]).slice(-30) : [];
-  const userContext = [formatUserProfile(userProfile), notes.length ? `これまでの気づき:\n${notes.map((n) => `- ${n}`).join('\n')}` : '']
-    .filter(Boolean)
-    .join('\n');
+  // 自分のメモ（profile_text・0035。無ければ旧 notes）は formatUserProfile の中で「本人についてのメモ」として入る
+  const userContext = formatUserProfile(userProfile, profile.profile_text) ?? '';
 
   const now = new Date();
   const nowLabel = now.toLocaleString('ja-JP', {

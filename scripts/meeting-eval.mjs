@@ -217,7 +217,7 @@ async function main() {
   }
   lines.push('', '## 議事録', '', res.minutes ?? '(なし)');
   lines.push('', '## 候補（要約）');
-  for (const x of p.people ?? []) lines.push(`- 人: ${x.name || '(名前不明)'}${x.customer_id ? '（登録済み）' : ''} / needs=${(x.needs ?? []).join('・')} / wants_to_meet=${(x.custom_fields?.wants_to_meet ?? []).join('・')}`);
+  for (const x of p.people ?? []) lines.push(`- 人: ${x.name || '(名前不明)'}${x.customer_id ? '（登録済み）' : ''} / メモ=${(x.memo ?? '').replace(/\n/g, ' / ')} / wants_to_meet=${(x.wants_to_meet ?? x.custom_fields?.wants_to_meet ?? []).join('・')}`);
   for (const x of p.schedules ?? []) lines.push(`- 予定: ${x.title} ${x.start_at}${x.location ? ` @${x.location}` : ''}`);
   for (const x of p.tasks ?? []) lines.push(`- タスク: ${x.title}${x.due_at ? ` 期限 ${x.due_at}` : ''}`);
   writeFileSync(resolve(outDir, 'report.md'), lines.join('\n'));
