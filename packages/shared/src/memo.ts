@@ -21,6 +21,68 @@ function list(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean) : [];
 }
 
+/**
+ * 言い回しの揺れを吸収する比較キー。
+ * 「不動産も扱っている」と「不動産を扱っている」、「カフェで会う」と「カフェで会う（保険の提案）」
+ * のような差は同一とみなしたいので、括弧内の補足・助詞・記号・語尾を落として比べる。
+ */
+export function compactKey(s: string): string {
+  return s
+    .normalize('NFKC')
+    .replace(/[（(][^）)]*[）)]/g, '') // 括弧の補足は無視する
+    .replace(/[\s、。，．・「」『』〜~!！?？]/g, '')
+    .replace(/(をした|をする|した|する|です|ます|になった|になる|予定|することになった)$/u, '')
+    .replace(/[をもがはにへとでやのか]/g, '') // 助詞違いだけの重複を潰す
+    .toLowerCase();
+}
+
+function memoLines(t: string | null | undefined): string[] {
+  return (t ?? '').split('\n').map((x) => x.replace(/^[-・*]\s*/, '').trim()).filter(Boolean);
+}
+
+/** key がどれかの行に含まれていれば true（長い新情報が短い既存行に吸われないよう、片方向だけ見る）。 */
+function coveredBy(key: string, lines: string[]): boolean {
+  return lines.some((l) => compactKey(l).includes(key));
+}
+
+/** 2文字ずつの重なり（短い方に対する割合）。言い換えの近さを見る。 */
+function bigramOverlap(a: string, b: string): number {
+  const grams = (k: string) => new Set(Array.from({ length: Math.max(k.length - 1, 0) }, (_, i) => k.slice(i, i + 2)));
+  const [x, y] = [grams(a), grams(b)];
+  if (!x.size || !y.size) return 0;
+  return [...x].filter((g) => y.has(g)).length / Math.min(x.size, y.size);
+}
+
+/** これ以上重なる行は、同じ事実の言い換えとみなす（実データ相当の確認で「川崎に2店舗目」が重なった値から） */
+const PARAPHRASE_OVERLAP = 0.6;
+
+/**
+ * カードのメモに足す行と、その回の要約を切り分ける（2026-11-05 人判断「AI も書き足す」）。
+ * AI の言い換え漏れの保険で、プロンプト任せにせず保存の直前に決定的に確かめる。
+ * - additions: card_note のうち、既存のメモに無い行だけ
+ * - summary: その回の要約から、カードのメモ（既存＋今回足す行）と同じ行と、今回足す行の言い換えを除いたもの
+ *   （言い換えの判定は今回足す行だけに使う。既存メモと比べると「2年生→3年生」のような進展まで消えるため）
+ */
+export function splitCardNote(args: { existing: string; cardNote?: string | null; memo: string }): { additions: string; summary: string } {
+  const existing = memoLines(args.existing);
+  const additions: string[] = [];
+  for (const line of memoLines(args.cardNote)) {
+    const key = compactKey(line);
+    if (key && !coveredBy(key, [...existing, ...additions])) additions.push(line);
+  }
+  const card = [...existing, ...additions];
+  const summary = args.memo
+    .split('\n')
+    .filter((l) => {
+      const key = compactKey(l.replace(/^[-・*]\s*/, ''));
+      if (!key) return true;
+      return !coveredBy(key, card) && !additions.some((x) => bigramOverlap(key, compactKey(x)) >= PARAPHRASE_OVERLAP);
+    })
+    .join('\n')
+    .trim();
+  return { additions: additions.join('\n'), summary };
+}
+
 /** 旧 customers.needs ＋ custom_fields を、メモの文章に畳む（0035 の埋め戻しと同じ書式）。 */
 export function legacyCustomerMemo(c: { needs?: string | null; custom_fields?: unknown }): string {
   const lines: string[] = [];

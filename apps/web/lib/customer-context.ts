@@ -73,6 +73,15 @@ export async function buildContext(
 }
 
 /** メモを名簿・一覧向けに1行へ縮める（改行を「 / 」にし、長ければ切る）。 */
+/** 話に出た相手のカードのメモ全文（プロンプト用）。AI が card_note に同じことを書かないように渡す。 */
+export function knownMemos(customers: { name: string; profile_notes?: string | null; needs?: string | null; custom_fields?: unknown }[]): string {
+  return customers
+    .map((c) => ({ name: c.name, memo: customerMemo(c) }))
+    .filter((c) => c.memo)
+    .map((c) => `- ${c.name}:\n${c.memo.replace(/^/gm, '    ')}`)
+    .join('\n');
+}
+
 export function memoHead(memo: string, max = 80): string {
   const one = memo.replace(/\s*\n\s*/g, ' / ').trim();
   return one.length > max ? `${one.slice(0, max)}…` : one;

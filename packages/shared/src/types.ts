@@ -30,6 +30,8 @@ export type SubscriptionStatus =
 export interface OsaraiExtracted {
   /** 相手について今回わかったこと・話した内容・約束を、読みやすい文章で1本にまとめたメモ */
   memo?: string;
+  /** カードのメモに足す、この人について新しく分かったこと（memo と同じ文は書かない・0036） */
+  card_note?: string;
   /** 相手が「どんな人とつながりたいか」（Phase2 マッチングの入力・構造のまま残す） */
   wants_to_meet?: string[];
   temperature?: Temperature | null;

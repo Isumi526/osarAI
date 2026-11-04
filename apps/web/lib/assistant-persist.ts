@@ -4,15 +4,19 @@
 // 既存 osarai/turn の persistOnDone と同じ規律（wants_to_meet はマージRPC・温度感再計算・
 // interactions(source='ai_dialogue')作成）を踏襲し、Homeの個人集計との互換を保つ。
 // 2026-11-03（0035）から、人物ごとのメモは自由記述1本（memo）で受け取り、その回の要約は
-// interactions.summary に書く（customers.profile_notes は本人が書く欄）。旧項目（needs /
-// custom_fields の商品・年齢等 / ai_summary の points・needs・next_actions）には書かない。
+// interactions.summary に書く。旧項目（needs / custom_fields の商品・年齢等 / ai_summary の
+// points・needs・next_actions）には書かない。
+// 2026-11-05（0036）から、この人について新しく分かったこと（card_note）は customers.profile_notes に
+// 追記する。既存メモと同じ行は足さず、カードと同じ行はその回の要約から除く（splitCardNote）。
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@osarai/shared/database.types';
 import {
   computeAutoTemperature,
+  customerMemo,
   normalizeName,
   personMemo,
   personWantsToMeet,
+  splitCardNote,
   type AiSummary,
   type SimilarNameCandidate,
 } from '@osarai/shared';
@@ -24,6 +28,8 @@ export interface PersonProposal {
   name: string;
   /** その人について今回わかったこと・話した内容・約束（自由記述1本） */
   memo?: string;
+  /** カードのメモに足す、この人について新しく分かったこと（profile_notes に追記・0036） */
+  card_note?: string;
   /** 相手が「どんな人とつながりたいか」（Phase2 マッチングの入力・custom_fields.wants_to_meet に追記） */
   wants_to_meet?: string[];
   /** @deprecated 旧形式（0035 以前のクライアント・保存済みの会議候補）。personMemo で memo に読み替える */
@@ -125,19 +131,20 @@ export async function commitProposals(args: {
     let customerId = person.customer_id ?? byName.get(normalizeName(name)) ?? null;
     const isNew = !customerId;
 
-    const memo = personMemo(person);
     const wants = personWantsToMeet(person);
+    let summary = personMemo(person);
 
     if (customerId) {
       // 既存つながりの wants_to_meet（配列）は上書きせず追記する。1回の会議で相手の希望が
       // 全部再抽出される保証はなく、前回までの蓄積を消さない（T7）。
-      // つながりのメモ（profile_notes）は本人が書き直すものなので AI は触らない。今回わかったことは
-      // 対応履歴（interactions.summary）に残り、カードのタイムラインと AI 相談の文脈で読める。
       const { data: cur } = await supabase
         .from('customers')
-        .select('custom_fields, last_met_at')
+        .select('profile_notes, needs, custom_fields, last_met_at')
         .eq('id', customerId)
         .maybeSingle();
+      // カードのメモには新しく分かったことだけを足す（書き直しは本人の編集に任せ、AI は追記のみ）
+      const split = splitCardNote({ existing: cur ? customerMemo(cur) : '', cardNote: person.card_note, memo: summary });
+      summary = split.summary;
       const mergedFields = wants.length
         ? mergeArrayFields((cur?.custom_fields as Record<string, unknown> | null) ?? {}, { wants_to_meet: wants })
         : null;
@@ -147,6 +154,9 @@ export async function commitProposals(args: {
               target_customer_id: customerId,
               new_fields: mergedFields as never,
             })
+          : Promise.resolve(),
+        split.additions
+          ? supabase.rpc('append_customer_profile_notes', { target_customer_id: customerId, addition: split.additions })
           : Promise.resolve(),
         supabase
           .from('customers')
@@ -158,14 +168,15 @@ export async function commitProposals(args: {
           .eq('id', customerId),
       ]);
     } else {
+      const split = splitCardNote({ existing: '', cardNote: person.card_note, memo: summary });
+      summary = split.summary;
       const { data: created, error } = await supabase
         .from('customers')
         .insert({
           org_id: orgId,
           owner_id: userId,
           name,
-          // メモはその回の要約（interactions.summary）に置き、カードのメモは本人が書く欄として空で始める
-          // （同じ文章がカードとタイムラインに二重に出ないように）。
+          profile_notes: split.additions || null,
           temperature: 'cold', // 新規は履歴が無いためcoldから開始し、直後に再計算する
           custom_fields: (wants.length ? { wants_to_meet: wants } : {}) as never,
           last_met_at: metAt,
@@ -196,7 +207,7 @@ export async function commitProposals(args: {
           source,
           type: 'text',
           raw_text: transcript,
-          summary: memo || null,
+          summary: summary || null,
           ai_summary: aiSummary as never,
           met_at: metAt,
         })

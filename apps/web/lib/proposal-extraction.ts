@@ -4,7 +4,7 @@
 // これを import して使う。振る舞いは従来と同一（関数はそのまま移設）。
 import type { GeminiSchema } from '@/lib/gemini';
 import { normalizeName, type Proposals } from '@/lib/assistant-persist';
-import { findSimilarNames, personMemo, personWantsToMeet } from '@osarai/shared';
+import { compactKey, findSimilarNames, personMemo, personWantsToMeet } from '@osarai/shared';
 import { isSpeakerLabel } from '@/lib/meeting-speakers';
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -14,6 +14,8 @@ export interface ExtractedPerson {
   matched_customer_id?: string | null;
   /** その人について今回わかったこと・話した内容・約束（自由記述1本・2026-11-03 / 0035） */
   memo?: string;
+  /** カードのメモに足す、この人について新しく分かったこと（memo と同じ文は書かない・0036） */
+  card_note?: string;
   /** 相手が「どんな人とつながりたいか」（紹介希望・Phase2 マッチングの入力。構造のまま残す） */
   wants_to_meet?: string[];
   /** @deprecated 旧形式（0035 以前に累積されたセッションの読み取り用）。新規の抽出では出さない */
@@ -87,10 +89,12 @@ export const TURN_SCHEMA: GeminiSchema = {
               matched_customer_id: { type: 'string', nullable: true },
               // 要点/ニーズ/次アクション/商品・年齢などに分けず、自由記述のメモ1本で受け取る（2026-11-03・0035）
               memo: { type: 'string' },
+              // カードのメモに足す新しい情報（2026-11-05・0036）。無ければ空文字
+              card_note: { type: 'string' },
               // 相手が「どんな人とつながりたいか」（紹介希望・T7）。紹介TODOとPhase2マッチングの元データ。
               wants_to_meet: { type: 'array', items: { type: 'string' } },
             },
-            required: ['name', 'memo', 'wants_to_meet'],
+            required: ['name', 'memo', 'card_note', 'wants_to_meet'],
           },
         },
         schedules: {
@@ -161,6 +165,7 @@ export function mergeExtracted(base: Extracted, incoming?: Extracted): Extracted
       // メモは行単位で和集合にする（Geminiがターンによって一部の行を落としても、判明済みの内容を消さない）。
       // 旧形式で累積されていた途中のセッションは personMemo で同じ書式の文章に直してから混ぜる。
       memo: mergeMemo(prev ? personMemo(prev) : '', personMemo(p)),
+      card_note: mergeMemo(prev?.card_note ?? '', p.card_note ?? ''),
       wants_to_meet: mergeList(prev ? personWantsToMeet(prev) : [], personWantsToMeet(p)),
     });
   }
@@ -273,21 +278,6 @@ function dedupeTitles<T extends { title: string; due_at?: string | null; person_
   return out;
 }
 
-/**
- * 言い回しの揺れを吸収する比較キー。
- * 「不動産も扱っている」と「不動産を扱っている」、「カフェで会う」と「カフェで会う（保険の提案）」
- * のような差は同一とみなしたいので、括弧内の補足・助詞・記号・語尾を落として比べる。
- */
-function compactKey(s: string): string {
-  return s
-    .normalize('NFKC')
-    .replace(/[（(][^）)]*[）)]/g, '') // 括弧の補足は無視する
-    .replace(/[\s、。，．・「」『』〜~!！?？]/g, '')
-    .replace(/(をした|をする|した|する|です|ます|になった|になる|予定|することになった)$/u, '')
-    .replace(/[をもがはにへとでやのか]/g, '') // 助詞違いだけの重複を潰す
-    .toLowerCase();
-}
-
 function nonEmpty<T extends Record<string, unknown>>(o?: T): Record<string, unknown> {
   if (!o) return {};
   return Object.fromEntries(
@@ -317,6 +307,7 @@ export function toProposals(acc: Extracted, customers: { id: string; name: strin
       customer_id: matched,
       name: p.name,
       memo: personMemo(p),
+      card_note: (p.card_note ?? '').trim(),
       wants_to_meet: personWantsToMeet(p),
       // 新規登録になる場合だけ、表記揺れで同一人物の可能性がある既存つながりを添える。
       // 音声入力は「渡辺/渡邊」「タナカ/田中」のような揺れが出るため、勝手に寄せず確認カードで聞く。

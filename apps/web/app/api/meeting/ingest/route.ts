@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { buildAssistantPrompt, ASSISTANT_SYSTEM_PROMPT, buildMeetingMinutesPrompt, pruneEmptyMinutesSections, customerMemo } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
-import { formatUserProfile, memoHead } from '@/lib/customer-context';
+import { formatUserProfile, isNameMentioned, knownMemos, memoHead } from '@/lib/customer-context';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { RECORDINGS_BUCKET } from '@/lib/recordings-bucket';
 import { geminiTranscribeLong, geminiJson, geminiText, GEMINI_MODEL_DIALOGUE, GEMINI_MODEL_LITE } from '@/lib/gemini';
@@ -323,9 +323,12 @@ export async function POST(req: Request) {
     `期限に当たる発話が無ければ null にしてください（推測で決めない）。` +
     `schedules は、日付（少なくとも「来週水曜」のように日が特定できる表現）が実際に発話されたものだけにしてください` +
     `（「また会いましょう」のような日付の無い約束は入れない）。` +
+    `people の memo には会議で話したことと約束を、card_note にはこの人自身について新しく分かったこと（プロフィール）を書いてください。` +
     `self_notes は空配列にしてください。` +
     `\n---\n${transcript}\n---`;
-  const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history });
+  // 名簿のメモは冒頭だけなので、文字起こしに名前が出た相手は全文を渡す（新しく分かったことだけ足すため）
+  const memos = knownMemos(customers.filter((c) => isNameMentioned(transcript, c.name)).slice(0, MAX_PEOPLE));
+  const prompt = buildAssistantPrompt({ now: nowLabel, customerRoster, productRoster, userContext, history, knownMemos: memos });
 
   let extracted: Extracted;
   let extractError: string | null = null;

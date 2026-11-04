@@ -962,6 +962,10 @@ export type Database = {
         Args: { p_user: string }
         Returns: undefined
       }
+      append_customer_profile_notes: {
+        Args: { addition: string; target_customer_id: string }
+        Returns: undefined
+      }
       append_profile_text: {
         Args: { addition: string }
         Returns: undefined

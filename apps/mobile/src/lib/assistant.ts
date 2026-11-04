@@ -11,6 +11,8 @@ export interface PersonProposal {
   name: string;
   /** その人について今回わかったこと・話した内容・約束（自由記述1本・0035） */
   memo: string;
+  /** カードのメモに足す、この人について新しく分かったこと（0036） */
+  card_note?: string;
   /** 相手が「どんな人とつながりたいか」（Phase2 マッチングの入力） */
   wants_to_meet: string[];
   /** @deprecated 旧形式（0035 以前に保存された会議候補）。表示時は personMemo / personWantsToMeet で読み替える */

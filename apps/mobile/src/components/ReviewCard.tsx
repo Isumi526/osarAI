@@ -11,10 +11,11 @@ const toLines = (v: string[]) => v.join('\n');
  * 旧形式で保存されていた会議候補（points/needs/next_actions/custom_fields）は、編集した時点で
  * 新しい形に置き換える（旧項目が残ると、メモを空にした時に旧い内容が戻って見えるため）。
  */
-function applyPerson(p: PersonProposal, patch: { memo?: string; wants_to_meet?: string[] }): PersonProposal {
+function applyPerson(p: PersonProposal, patch: { memo?: string; card_note?: string; wants_to_meet?: string[] }): PersonProposal {
   return {
     ...p,
     memo: patch.memo ?? p.memo ?? personMemo(p),
+    card_note: patch.card_note ?? p.card_note,
     wants_to_meet: patch.wants_to_meet ?? personWantsToMeet(p),
     points: undefined,
     needs: undefined,
@@ -205,11 +206,12 @@ export function ReviewCard({
             </div>
           )}
           {/* その人についてのメモ（自由記述1本・2026-11-03 / 0035）。その回の対応履歴に保存される。
+              「カードのメモに足すこと」は新しく分かったことで、保存時に profile_notes へ追記する（0036）。
               つながりたい人は将来のマッチングで機械が使うので、メモとは別の欄に1行1人で持つ。
               会議録音では議事録が主役なので既定は畳み、必要な時だけ開く（2026-09-21 レビュー）。 */}
-          <details open={(!!personMemo(p) || personWantsToMeet(p).length > 0) && !minutes}>
+          <details open={(!!personMemo(p) || !!p.card_note || personWantsToMeet(p).length > 0) && !minutes}>
             <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--color-text-muted)' }}>
-              この人についてのメモ{personMemo(p) || personWantsToMeet(p).length > 0 ? '' : '（任意）'}
+              今回のメモ{personMemo(p) || p.card_note || personWantsToMeet(p).length > 0 ? '' : '（任意）'}
             </summary>
             <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
               <AutoResizeTextarea
@@ -222,6 +224,20 @@ export function ReviewCard({
                   })
                 }
                 placeholder="話した内容・相手の状況・約束したことなど"
+                rows={2}
+                style={{ padding: 10, fontSize: 14, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8, resize: 'none' }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: -4 }}>カードのメモに足すこと</span>
+              <AutoResizeTextarea
+                aria-label="カードのメモに足すこと"
+                value={p.card_note ?? ''}
+                onChange={(e) =>
+                  setProposals({
+                    ...proposals,
+                    people: proposals.people.map((x, j) => (j === i ? applyPerson(x, { card_note: e.target.value }) : x)),
+                  })
+                }
+                placeholder="仕事・家族など、新しく分かったこと"
                 rows={2}
                 style={{ padding: 10, fontSize: 14, fontFamily: 'inherit', border: '1px solid var(--color-border)', borderRadius: 8, resize: 'none' }}
               />

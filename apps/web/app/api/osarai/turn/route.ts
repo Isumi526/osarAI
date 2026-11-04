@@ -20,6 +20,7 @@ import {
   personMemo,
   personWantsToMeet,
   customerMemo,
+  splitCardNote,
   type OsaraiTurnResult,
   type OsaraiExtracted,
 } from '@osarai/shared';
@@ -38,8 +39,9 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
 // 埋めたい顧客カード項目（プロンプトに渡す説明）
 // 2026-11-03（0035）から要点/ニーズ/次アクション/custom_fields に分けず、自由記述のメモ1本で受け取る。
 const CARD_SCHEMA_DESC =
-  '{memo: 相手について今回わかったこと・話した内容・相手の状況や困りごと・約束したことを1本にまとめた文章' +
-  '(扱っている商品・年齢・性別も判明していればここに書く), ' +
+  '{memo: その回に話した内容・相手の近況や困りごと・約束したことを1本にまとめた文章, ' +
+  'card_note: カードのメモに足す、この人自身について新しく分かったこと(扱っている商品・年齢・性別なども。' +
+  '既存データの memo にある内容と、memo に書いた文は書かない。無ければ空文字), ' +
   'wants_to_meet: 相手がつながりたい人・紹介してほしい人物像(配列), ' +
   'temperature: 見込み温度(hot/warm/cold), name: 相手の名前(判明していれば), ' +
   'self_fields: 会話中にユーザー自身について言及があった場合の構造化情報' +
@@ -55,6 +57,7 @@ const TURN_SCHEMA: GeminiSchema = {
         // memo / wants_to_meet は毎ターン必ず出力させる（requiredで強制）。Geminiはターンによって
         // キーごと省略することがあるため（旧 custom_fields で商品/年齢/性別が丸ごと失われた件と同じ対策）。
         memo: { type: 'string' },
+        card_note: { type: 'string' },
         wants_to_meet: { type: 'array', items: { type: 'string' } },
         temperature: { type: 'string', enum: ['hot', 'warm', 'cold'], nullable: true },
         name: { type: 'string', nullable: true },
@@ -70,7 +73,7 @@ const TURN_SCHEMA: GeminiSchema = {
           },
         },
       },
-      required: ['memo', 'wants_to_meet'],
+      required: ['memo', 'card_note', 'wants_to_meet'],
     },
     next_question: { type: 'string', nullable: true },
     done: { type: 'boolean' },
@@ -207,6 +210,7 @@ export async function POST(req: Request) {
     extracted: {
       ...result.extracted,
       memo: accumulated.memo ?? '',
+      card_note: accumulated.card_note ?? '',
       wants_to_meet: accumulated.wants_to_meet ?? [],
     },
   };
@@ -255,6 +259,8 @@ export async function POST(req: Request) {
     resultingInteractionId = persisted.interactionId;
     customerName = persisted.customerName;
     isNewCustomer = persisted.isNewCustomer;
+    // 確認画面の編集欄には、カードと重ならない実際の要約を見せる（編集保存で同じ文が戻らないように）
+    result = { ...result, extracted: { ...result.extracted, memo: persisted.summary } };
   }
 
   // セッション更新（interaction/customerは既に確定保存済み。ここが失敗してもユーザーの
@@ -303,7 +309,7 @@ interface PersistArgs {
 async function persistOnDone(
   args: PersistArgs,
 ): Promise<
-  | { customerId: string; interactionId: string; customerName: string; isNewCustomer: boolean }
+  | { customerId: string; interactionId: string; customerName: string; isNewCustomer: boolean; summary: string }
   | { error: string }
 > {
   const { supabase, orgId, authorId, extracted } = args;
@@ -313,17 +319,19 @@ async function persistOnDone(
   let customerId = args.customerId;
   let customerName = '新しく会った人';
   const isNewCustomer = !customerId;
-  const memo = (extracted.memo ?? '').trim();
+  let summary = (extracted.memo ?? '').trim();
   const wants = extracted.wants_to_meet ?? [];
   if (!customerId) {
     customerName = inferName(extracted) ?? '新しく会った人';
+    const split = splitCardNote({ existing: '', cardNote: extracted.card_note, memo: summary });
+    summary = split.summary;
     const { data: c, error } = await supabase
       .from('customers')
       .insert({
         org_id: orgId,
         owner_id: authorId,
         name: customerName,
-        // 今回のメモはその回の要約（interactions.summary）に置く。カードのメモは本人が書く欄（0035）
+        profile_notes: split.additions || null,
         temperature: 'cold', // 新規は履歴が無いためcoldから開始。直後にlast_met_atを踏まえ再計算する。
         custom_fields: (wants.length ? { wants_to_meet: wants } : {}) as never,
         last_met_at: now,
@@ -335,17 +343,26 @@ async function persistOnDone(
   } else {
     // つながりたい人（配列）は既存に追記してアトミックにマージする（上書きすると前回までの蓄積が消える）。
     // 旧 needs / custom_fields の商品・年齢等には書かない（0035）。
-    let mergedFields: Record<string, unknown> | null = null;
-    if (wants.length) {
-      const { data: cur } = await supabase.from('customers').select('custom_fields').eq('id', customerId).maybeSingle();
-      mergedFields = mergeArrayFields((cur?.custom_fields as Record<string, unknown> | null) ?? {}, { wants_to_meet: wants });
-    }
+    const { data: cur } = await supabase
+      .from('customers')
+      .select('profile_notes, needs, custom_fields')
+      .eq('id', customerId)
+      .maybeSingle();
+    const mergedFields = wants.length
+      ? mergeArrayFields((cur?.custom_fields as Record<string, unknown> | null) ?? {}, { wants_to_meet: wants })
+      : null;
+    // カードのメモには新しく分かったことだけを足す（0036）
+    const split = splitCardNote({ existing: cur ? customerMemo(cur) : '', cardNote: extracted.card_note, memo: summary });
+    summary = split.summary;
     await Promise.all([
       mergedFields
         ? supabase.rpc('merge_customer_custom_fields', {
             target_customer_id: customerId,
             new_fields: mergedFields as never,
           })
+        : Promise.resolve(),
+      split.additions
+        ? supabase.rpc('append_customer_profile_notes', { target_customer_id: customerId, addition: split.additions })
         : Promise.resolve(),
       supabase
         .from('customers')
@@ -373,7 +390,7 @@ async function persistOnDone(
         type: 'text',
         raw_text: transcript,
         // その回の要約は自由記述1本（0035）。ai_summary（旧 points/needs/next_actions）には書かない
-        summary: memo || null,
+        summary: summary || null,
         met_at: now,
       })
       .select('id')
@@ -381,13 +398,14 @@ async function persistOnDone(
   ]);
   if (error || !interaction) return { error: 'interaction create failed' };
 
-  return { customerId, interactionId: interaction.id, customerName, isNewCustomer };
+  return { customerId, interactionId: interaction.id, customerName, isNewCustomer, summary };
 }
 
 // セッション(osarai_sessions.accumulated_fields・0025)に保持する累積抽出の形。
 // 0035 以降は memo / wants_to_meet。旧キーは途中のセッションの読み取り用（personMemo で畳む）。
 interface AccumulatedExtraction {
   memo?: string;
+  card_note?: string;
   wants_to_meet?: string[];
   /** @deprecated 旧形式 */
   custom_fields?: Record<string, unknown>;
@@ -407,6 +425,7 @@ function mergeExtraction(base: AccumulatedExtraction, incoming?: OsaraiExtracted
   for (const w of personWantsToMeet(incoming)) if (!wants.includes(w)) wants.push(w);
   return {
     memo: mergeMemo(personMemo(base), personMemo(incoming)),
+    card_note: mergeMemo(base.card_note ?? '', incoming.card_note ?? ''),
     wants_to_meet: wants,
   };
 }
