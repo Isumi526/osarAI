@@ -255,6 +255,7 @@ export type Database = {
           needs: string | null
           org_id: string
           owner_id: string
+          profile_notes: string | null
           relation_type: string | null
           status: string
           temperature: string | null
@@ -269,6 +270,7 @@ export type Database = {
           needs?: string | null
           org_id: string
           owner_id: string
+          profile_notes?: string | null
           relation_type?: string | null
           status?: string
           temperature?: string | null
@@ -283,6 +285,7 @@ export type Database = {
           needs?: string | null
           org_id?: string
           owner_id?: string
+          profile_notes?: string | null
           relation_type?: string | null
           status?: string
           temperature?: string | null
@@ -317,6 +320,7 @@ export type Database = {
           org_id: string
           raw_text: string | null
           source: string
+          summary: string | null
           transcript: string | null
           type: string
         }
@@ -331,6 +335,7 @@ export type Database = {
           org_id: string
           raw_text?: string | null
           source: string
+          summary?: string | null
           transcript?: string | null
           type: string
         }
@@ -345,6 +350,7 @@ export type Database = {
           org_id?: string
           raw_text?: string | null
           source?: string
+          summary?: string | null
           transcript?: string | null
           type?: string
         }
@@ -619,6 +625,7 @@ export type Database = {
           id: string
           industry: string | null
           org_id: string
+          profile_text: string | null
           referred_by: string | null
           role: string
           user_profile: Json
@@ -630,6 +637,7 @@ export type Database = {
           id: string
           industry?: string | null
           org_id: string
+          profile_text?: string | null
           referred_by?: string | null
           role?: string
           user_profile?: Json
@@ -641,6 +649,7 @@ export type Database = {
           id?: string
           industry?: string | null
           org_id?: string
+          profile_text?: string | null
           referred_by?: string | null
           role?: string
           user_profile?: Json
@@ -951,6 +960,14 @@ export type Database = {
     Functions: {
       delete_account_data: {
         Args: { p_user: string }
+        Returns: undefined
+      }
+      append_customer_profile_notes: {
+        Args: { addition: string; target_customer_id: string }
+        Returns: undefined
+      }
+      append_profile_text: {
+        Args: { addition: string }
         Returns: undefined
       }
       append_user_profile_notes: {

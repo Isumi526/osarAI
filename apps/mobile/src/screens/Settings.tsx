@@ -3,7 +3,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { enablePush, isPushSupported } from '../lib/push.js';
-import { getMyProfile, updateMyUserProfile, updateMyDisplayName, listAgencyProducts, type AgencyProduct } from '../lib/db.js';
+import {
+  getMyProfile,
+  updateMyUserProfile,
+  updateMyProfileText,
+  updateMyDisplayName,
+  listAgencyProducts,
+  type AgencyProduct,
+} from '../lib/db.js';
+import { selfMemo } from '@osarai/shared';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { useRegisterNavGuard } from '../components/NavGuard.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
@@ -31,6 +39,8 @@ export function Settings() {
   const [userProfile, setUserProfile] = useState<Record<string, string>>({});
   const [goals, setGoals] = useState<Goal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  // 自分についてのメモ（profiles.profile_text・自由記述・0035）。「自分をおさらい」の気づきもここに追記される
+  const [profileText, setProfileText] = useState('');
   // 代理店(leader)の商品リストからのインポート(議事録『review』回答A)。
   const [agencyProducts, setAgencyProducts] = useState<AgencyProduct[]>([]);
   const [showAgencyPicker, setShowAgencyPicker] = useState(false);
@@ -64,6 +74,8 @@ export function Settings() {
         const strFields: Record<string, string> = {};
         for (const [k, v] of Object.entries(rest)) if (typeof v === 'string') strFields[k] = v;
         setUserProfile(strFields);
+        // 新しい列を優先し、まだ無ければ旧 user_profile.notes を1行ずつ並べたものを初期値にする
+        setProfileText(p ? selfMemo(p) : '');
         // 旧: 単一のgoal(文字列) → 新: goals配列へ移行。
         if (Array.isArray(rawGoals)) setGoals(rawGoals.filter((g) => g && typeof g.text === 'string'));
         else if (legacyGoal) setGoals([{ text: legacyGoal, by: '' }]);
@@ -125,6 +137,7 @@ export function Settings() {
       const cleanGoals = goals.filter((g) => g.text.trim());
       const cleanProducts = products.filter((p) => p.name.trim());
       await updateMyUserProfile({ ...userProfile, goals: cleanGoals, products: cleanProducts });
+      await updateMyProfileText(profileText);
       setProfileMsg('保存しました。');
       setProfileDirty(false);
     } catch (e) {
@@ -262,6 +275,18 @@ export function Settings() {
         <details style={{ marginTop: 16 }}>
           <summary style={{ cursor: 'pointer', fontSize: 14 }}>くわしい自己紹介（任意・AIへの相談で使います）</summary>
         <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+          <label style={{ display: 'block', fontSize: 13 }}>
+            自分についてのメモ（自由に書けます。「自分をおさらい」で話した気づきもここに追記されます）
+            <AutoResizeTextarea
+              value={profileText}
+              onChange={(e) => {
+                setProfileText(e.target.value);
+                setProfileDirty(true);
+              }}
+              rows={3}
+              style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
+            />
+          </label>
           {PROFILE_FIELDS.map((f) => (
             <label key={f.key} style={{ display: 'block', fontSize: 13 }}>
               {f.label}

@@ -24,12 +24,19 @@ export const ASSISTANT_SYSTEM_PROMPT = `あなたは osarAI のパートナーAI
 【抽出の規律】
 - 推測・憶測を含めない。ユーザーが実際に話した事実だけを抽出する。相手の意図・関心・将来の
   可能性など、ユーザーが明言していないことを勝手に補ってはならない。
-- points は「営業に関係ありそうな要点」に絞らない。雑談で出た具体的な出来事・個人的な変化・
-  近況の断片も、一見重要度が低そうでもそのまま拾う。
-- custom_fields（products/age/gender/wants_to_meet）は会話で自然に触れられた場合のみ拾う。年齢・性別を
-  確認するためだけの質問はしない。wants_to_meet は「相手がどんな人とつながりたいか・紹介してほしい人物像」
-  （例:「30代のフリーランス」「経営者」）を1件ずつ配列で入れる。
-- 【重要】people の各項目と custom_fields は毎ターン、対話履歴全体から再抽出して必ず出力する。
+- people の各人物について、その回のことは memo（自由記述の文章1本）にまとめる。要点・ニーズ・
+  次にやることなどを項目に分けない。読み返して状況が思い出せるよう、話した内容・相手の近況や
+  困りごと・約束したことを短い文で改行しながら書く。
+- memo は「営業に関係ありそうな要点」に絞らない。雑談で出た具体的な出来事・個人的な変化・
+  近況の断片も、一見重要度が低そうでもそのまま書く。年齢・性別を確認するためだけの質問はしない。
+- card_note には、相手のカードのメモに足す、この人自身についての情報（仕事・立場・扱っている商品・
+  年齢・性別・家族・住まい・趣味・経歴など、次に会う時も変わらず役に立つ事実）を1行1件で書く。
+  名簿や「これまでの記録」「カードのメモ」に書いてあることは、言い換えでも書かない。新しく
+  分かったことが無ければ空文字にする。card_note に書いた事実は memo に書かない（カードと
+  タイムラインに同じ文を重ねない）。
+- wants_to_meet は「相手がどんな人とつながりたいか・紹介してほしい人物像」（例:「30代のフリーランス」
+  「経営者」）を1件ずつ配列で入れる（memo とは別に必ずここへ入れる）。
+- 【重要】people の memo と card_note と wants_to_meet は毎ターン、対話履歴全体から書き直して必ず出力する。
   前のターンで既に判明している内容も省略しない（保存されるのは最新ターンの抽出結果のため）。
 - 顧客名簿が渡される。既に登録済みの人物の話だと判断できる場合は matched_customer_id に
   その id を入れる。確信が持てない場合は customer_ref.needs_confirmation を true にし、
@@ -62,7 +69,7 @@ export const ASSISTANT_SYSTEM_PROMPT = `あなたは osarAI のパートナーAI
 export interface AssistantPromptContext {
   /** JSTの現在日時（例: 2026年8月6日(水) 21:30） */
   now: string;
-  /** 顧客名簿（id/名前/関係性/ニーズの1行形式） */
+  /** 顧客名簿（id/名前/関係性/メモ冒頭の1行形式） */
   customerRoster: string;
   /** 商品名簿（名寄せ用） */
   productRoster: string;
@@ -70,6 +77,8 @@ export interface AssistantPromptContext {
   userContext: string;
   /** これまでの対話履歴（整形済み） */
   history: string;
+  /** 話に出た相手のカードのメモ全文（名簿は冒頭だけなので、card_note の重複を避けるために渡す） */
+  knownMemos?: string;
   /** 話題に出ている相手の記録（buildContext の出力）。相談の根拠にする */
   relatedContext?: string;
 }
@@ -83,6 +92,7 @@ export function buildAssistantPrompt(ctx: AssistantPromptContext): string {
     `ユーザー自身について:\n${ctx.userContext || 'なし'}`,
     // 話題に出ている相手の記録（過去の会議の議事録を含む）。相談にはこれを踏まえて具体的に答える。
     ...(ctx.relatedContext ? [`話題に出ている相手のこれまでの記録（相談にはこれを踏まえて具体的に答える。書かれていないことは推測しない）:\n${ctx.relatedContext}`] : []),
+    ...(ctx.knownMemos ? [`話に出た相手のカードのメモ（ここにあることは card_note に書かない）:\n${ctx.knownMemos}`] : []),
     `対話履歴:\n${ctx.history}`,
   ].join('\n\n');
 }

@@ -12,7 +12,7 @@ import { importRecording } from '../lib/recordings.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { useConfirm } from '../components/ConfirmDialog.js';
 import { MinutesView } from '../components/ReviewCard.js';
-import type { AiSummary, InteractionSource } from '@osarai/shared';
+import { customerMemo, interactionSummaryText, personWantsToMeet, type AiSummary, type InteractionSource } from '@osarai/shared';
 
 // 録音取り込み機能はphase2に見送り（議事録『review』・回答A）。UIを非表示にする。
 // 実装本体(importRecording/onPickRecording)は残し、フラグ切替でphase2に復帰できるようにする。
@@ -110,28 +110,27 @@ export function CustomerDetail() {
         <h1 style={{ margin: '0 0 8px' }}>{customer.name}</h1>
         {/* 2026-09-27 機能を絞る（人判断）: 温度感・年齢・性別・扱っている商品は CRM 時代の項目で、
             この層には意味が伝わりにくいので画面から外した（DB のデータは残している）。
-            ニーズとつながりたい人は「この人のメモ」1つにまとめて見せる。 */}
+            2026-11-03（0035）: この人のメモは自由記述1本（profile_notes。無ければ旧ニーズ等を畳んだ文章）。
+            つながりたい人は将来のマッチング用に構造のまま持つので、メモの下に分けて見せる。
+            メモは下の「名前・メモを編集」で書き直せる。 */}
         {(() => {
-          const cf = (customer.custom_fields ?? {}) as Record<string, unknown>;
-          const wantsToMeet = Array.isArray(cf.wants_to_meet)
-            ? cf.wants_to_meet.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-            : [];
-          const memo = [
-            ...(customer.needs ?? '')
-              .split(/\s*\/\s*|\n/)
-              .map((x) => x.trim())
-              .filter(Boolean),
-            ...wantsToMeet.map((w) => `つながりたい人: ${w}`),
-          ];
-          if (memo.length === 0) return null;
+          const memo = customerMemo(customer);
+          const wantsToMeet = personWantsToMeet({ custom_fields: customer.custom_fields });
+          if (!memo && wantsToMeet.length === 0) return null;
           return (
             <div style={{ margin: '4px 0' }}>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>この人のメモ</div>
-              <ul style={{ margin: '2px 0 0', paddingLeft: 18, fontSize: 14, lineHeight: 1.7 }}>
-                {memo.map((m, i) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ul>
+              {memo && (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>この人のメモ</div>
+                  <p style={{ margin: '2px 0 0', fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{memo}</p>
+                </>
+              )}
+              {wantsToMeet.length > 0 && (
+                <p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.6 }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>つながりたい人: </span>
+                  {wantsToMeet.join('、')}
+                </p>
+              )}
             </div>
           );
         })()}
@@ -213,6 +212,8 @@ export function CustomerDetail() {
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 10 }}>
           {interactions.map((ix) => {
             const summary = ix.ai_summary as AiSummary | null;
+            // その回の要約（summary・0035。無ければ旧 points/needs/next_actions を畳んだ文章）
+            const memo = interactionSummaryText(ix);
             const when = ix.met_at ?? ix.created_at;
             return (
               <li
@@ -222,19 +223,10 @@ export function CustomerDetail() {
                 <div style={{ fontSize: 12, color: '#9a9183' }}>
                   {new Date(when).toLocaleString('ja-JP')} ・ {SOURCE_LABEL[ix.source] ?? ix.source}
                 </div>
-                {summary?.points?.length ? (
-                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                    {summary.points.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))}
-                  </ul>
+                {memo ? (
+                  <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{memo}</p>
                 ) : !summary?.minutes ? (
                   <RawText text={ix.transcript ?? ix.raw_text ?? '（内容なし）'} />
-                ) : null}
-                {summary?.next_actions?.length ? (
-                  <p style={{ margin: '6px 0 0', color: 'var(--color-primary)', fontSize: 13 }}>
-                    次アクション: {summary.next_actions.join(' / ')}
-                  </p>
                 ) : null}
                 {/* 会議録音の議事録（T3/T7）。次回会う直前に読み返す用途なので、既定で開いた状態で出す */}
                 {summary?.minutes ? (

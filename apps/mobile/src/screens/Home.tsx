@@ -8,7 +8,7 @@ import { listTasks, type Task } from '../lib/tasks.js';
 import { listSavedMeetings, type SavedMeeting } from '../lib/meeting.js';
 import { listCustomers, type Customer } from '../lib/db.js';
 import { supabase } from '../lib/supabase.js';
-import { meetingRecapLine as recapLine } from '@osarai/shared';
+import { meetingRecapLine as recapLine, interactionSummaryText } from '@osarai/shared';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { ChatBubbleIcon } from '../components/NavIcons.js';
 import { BellIcon } from '../components/BellIcon.js';
@@ -55,14 +55,15 @@ export function Home() {
       if (ids.length) {
         const { data } = await supabase
           .from('interactions')
-          .select('customer_id, ai_summary, met_at')
+          .select('customer_id, summary, ai_summary, met_at')
           .in('customer_id', ids)
           .order('met_at', { ascending: false, nullsFirst: false })
           .limit(30);
         for (const r of data ?? []) {
           if (recaps.has(r.customer_id)) continue;
-          const sum = (r.ai_summary ?? {}) as { minutes?: string; points?: string[] };
-          const line = recapLine(sum.minutes ?? null) ?? sum.points?.[0] ?? null;
+          const sum = (r.ai_summary ?? {}) as { minutes?: string };
+          // 議事録が無ければ、その回の要約（summary・0035。無ければ旧 points 等）の1行目
+          const line = recapLine(sum.minutes ?? null) ?? (interactionSummaryText(r).split('\n')[0] || null);
           if (line) recaps.set(r.customer_id, line);
         }
       }
@@ -97,7 +98,8 @@ export function Home() {
         const key = `${SELF_INTRO_PROMPTED_KEY}:${p.id}`;
         if (localStorage.getItem(key)) return;
         const up = (p.user_profile as Record<string, unknown> | null) ?? {};
-        const empty = Object.keys(up).length === 0;
+        // 自分のメモ（profile_text・0035）だけが書かれている場合も「入力済み」とみなす
+        const empty = Object.keys(up).length === 0 && !(p.profile_text ?? '').trim();
         localStorage.setItem(key, '1');
         if (empty) navigate('/welcome');
       })

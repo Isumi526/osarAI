@@ -6,7 +6,7 @@
 // アプリ内通知（ベル）に必ず残し、プッシュ用トークンがあれば push も送る（lib/notify）。
 // T10#4: cron/スケジューラは共有シークレットヘッダ必須。secret未設定時の素通しフォールバック禁止。
 import { NextResponse } from 'next/server';
-import { jstDateString, jstDayStartUtc, meetingRecapLine } from '@osarai/shared';
+import { jstDateString, jstDayStartUtc, meetingRecapLine, interactionSummaryText } from '@osarai/shared';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { activeUsers, notifyUser } from '@/lib/notify';
 
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
         db.from('customers').select('name').eq('id', customerId).maybeSingle(),
         db
           .from('interactions')
-          .select('ai_summary')
+          .select('summary, ai_summary')
           .eq('customer_id', customerId)
           .order('met_at', { ascending: false, nullsFirst: false })
           .limit(5),
@@ -86,8 +86,9 @@ export async function GET(req: Request) {
       const name = c?.name ?? '相手';
       let recap: string | null = null;
       for (const r of ix ?? []) {
-        const sum = (r.ai_summary ?? {}) as { minutes?: string; points?: string[] };
-        recap = meetingRecapLine(sum.minutes ?? null) ?? sum.points?.[0] ?? null;
+        const sum = (r.ai_summary ?? {}) as { minutes?: string };
+        // 議事録が無ければ、その回の要約（summary・0035。無ければ旧 points 等）の1行目
+        recap = meetingRecapLine(sum.minutes ?? null) ?? (interactionSummaryText(r).split('\n')[0] || null);
         if (recap) break;
       }
       const hm = new Date(s.start_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });

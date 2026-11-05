@@ -1,5 +1,5 @@
 // 自分をおさらいする（既存の顧客向けおさらいとは別・AI対話で自分自身を深掘り）。
-// 何度でも実行可能。抽出結果(notes)はprofiles.user_profileに蓄積され、AI戦略相談の
+// 何度でも実行可能。抽出結果(notes)は自分のメモ(profiles.profile_text・0035)に追記され、AI戦略相談の
 // コンテキストに含まれる。低優先度機能のためテキストのみ(音声入力なし)の軽量実装。
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';

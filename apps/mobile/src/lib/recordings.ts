@@ -2,12 +2,13 @@
 // 音声ファイル/Blob を base64 にして /api/transcribe へ。サーバーがStorage保存+文字起こし+
 // 要約+interaction作成まで行う。録れた時だけの任意導線。
 import { apiPost } from './api.js';
-import type { AiSummary, InteractionSource } from '@osarai/shared';
+import type { InteractionSource } from '@osarai/shared';
 
 export interface TranscribeResponse {
   interactionId: string;
   transcript: string;
-  summary: AiSummary;
+  /** その回の要約（自由記述・0035） */
+  summary: string;
 }
 
 export async function importRecording(input: {

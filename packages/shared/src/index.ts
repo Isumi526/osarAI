@@ -12,3 +12,4 @@ export * from './prompts/meeting';
 export * from './jst';
 export * from './temperature';
 export * from './name-match';
+export * from './memo';

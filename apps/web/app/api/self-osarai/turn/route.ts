@@ -1,9 +1,9 @@
 // 「自分をおさらいする」対話 1ターン処理（顧客向けおさらいとは別）。
 // 顧客カード/interactionsは作らず、抽出結果(notes)はクライアントが完了時に
-// profiles.user_profile.notesへ直接蓄積する。ステートレス(履歴は毎回クライアントから送る)
+// 自分のメモ(profiles.profile_text・0035。旧 user_profile.notes)へ追記する。ステートレス(履歴は毎回クライアントから送る)
 // なので専用のセッションテーブルは持たない(低優先度機能のため軽量実装)。
 import { NextResponse } from 'next/server';
-import { SELF_OSARAI_SYSTEM_PROMPT, type SelfOsaraiTurnResult } from '@osarai/shared';
+import { SELF_OSARAI_SYSTEM_PROMPT, selfMemo, type SelfOsaraiTurnResult } from '@osarai/shared';
 import { authedFromRequest, corsPreflight, CORS_HEADERS } from '@/lib/api-auth';
 import { getEntitlement } from '@/lib/entitlement';
 import { geminiJson, GEMINI_MODEL_DIALOGUE, type GeminiSchema } from '@/lib/gemini';
@@ -82,15 +82,15 @@ export async function POST(req: Request) {
   // （AC④: 何度でも実行でき過去の蓄積の上に積み増す。同じことを聞き直さず差分を深掘りするため）。
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, user_profile')
+    .select('display_name, user_profile, profile_text')
     .eq('id', user.id)
     .maybeSingle();
   const userProfile = (profile?.user_profile as { notes?: string[]; job?: string; products?: string } | null) ?? {};
-  const existingNotes = (userProfile.notes ?? []).filter((n) => typeof n === 'string' && n.trim());
-  const notesBlock =
-    existingNotes.length > 0
-      ? `\n\nこれまでに蓄積された、この人についての気づき:\n${existingNotes.map((n) => `- ${n}`).join('\n')}`
-      : '\n\nこれまでに蓄積された気づき: なし（初回）';
+  // 自分のメモ（profile_text・0035）を優先し、無ければ旧 user_profile.notes を読む
+  const existingMemo = selfMemo({ profile_text: profile?.profile_text, user_profile: userProfile });
+  const notesBlock = existingMemo
+    ? `\n\nこれまでに蓄積された、この人についての気づき:\n${existingMemo}`
+    : '\n\nこれまでに蓄積された気づき: なし（初回）';
 
   // 議事録『review(2回目)』要望: 初回はまず名前を確認し、仕事・扱っている商品が
   // 未登録なら優先的にヒアリングする(Settingsの構造化フィールドの空欄状況を伝える)。

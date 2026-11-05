@@ -1125,7 +1125,7 @@ function ScheduleForm({
     setNewCustomerError(null);
     try {
       const created = await createCustomer(
-        { name, needs: newCustomerNeeds.trim() || null, relationType: null },
+        { name, profileNotes: newCustomerNeeds.trim() || null, relationType: null },
         profile,
       );
       onCustomerCreated(created);

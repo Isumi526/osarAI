@@ -14,7 +14,7 @@ import { ConfettiBurst } from '../components/ConfettiBurst.js';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea.js';
 import { ScreenHeader } from '../components/ScreenHeader.js';
 import { BOTTOM_NAV_HEIGHT, NAV_OVERHANG } from '../components/BottomNav.js';
-import type { OsaraiExtracted } from '@osarai/shared';
+import { personMemo, type OsaraiExtracted } from '@osarai/shared';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -64,9 +64,6 @@ const HINTS: { label: string; message: string }[] = [
   { label: '次回の約束・アクションについて話す', message: '次回の約束やアクションについて話したいです。' },
 ];
 
-// 配列⇔複数行テキストの相互変換（サマリ編集フォーム用）
-const toLines = (v?: string[]) => (v ?? []).join('\n');
-const fromLines = (v: string) => v.split('\n').map((s) => s.trim()).filter(Boolean);
 
 export function Osarai() {
   const navigate = useNavigate();
@@ -96,9 +93,8 @@ export function Osarai() {
   const abortRef = useRef<AbortController | null>(null);
 
   // サマリ確認・修正フォーム（F-02 AC: 生成されたサマリをユーザーが確認・修正できる）
-  const [editPoints, setEditPoints] = useState('');
-  const [editNeeds, setEditNeeds] = useState('');
-  const [editNextActions, setEditNextActions] = useState('');
+  // 要点/ニーズ/次アクションに分けず、自由記述のメモ1本で確認・修正する（2026-11-03・0035）
+  const [editMemo, setEditMemo] = useState('');
   const [editName, setEditName] = useState('');
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -149,9 +145,7 @@ export function Osarai() {
     setSavedCustomerId(null);
     setSavedInteractionId(null);
     setError(null);
-    setEditPoints('');
-    setEditNeeds('');
-    setEditNextActions('');
+    setEditMemo('');
     setEditName('');
     setIsNewCustomer(false);
     setAutoNamePrefill(false);
@@ -243,9 +237,7 @@ export function Osarai() {
     const autoName = !res.isNewCustomer && !!detectedName && isPlaceholderCustomerName(existingCustomerName);
     setAutoNamePrefill(autoName);
     setEditName(prefillName(res.isNewCustomer, res.customerName) || (autoName ? detectedName : ''));
-    setEditPoints(toLines(ext.points));
-    setEditNeeds(toLines(ext.needs));
-    setEditNextActions(toLines(ext.next_actions));
+    setEditMemo(personMemo(ext));
   }
 
   // 送信: 生成中でも受け付け、ユーザー発話を即表示してキューに積む(逐次ワーカーが処理)。
@@ -340,9 +332,7 @@ export function Osarai() {
     setError(null);
     try {
       await updateInteractionSummary(savedInteractionId, savedCustomerId, {
-        points: fromLines(editPoints),
-        needs: fromLines(editNeeds),
-        next_actions: fromLines(editNextActions),
+        memo: editMemo,
         ...(isNewCustomer || autoNamePrefill ? { name: editName.trim() } : {}),
       });
       setConfirmed(true);
@@ -535,32 +525,12 @@ export function Osarai() {
               </label>
             )}
 
-            <label style={{ display: 'block', marginBottom: 10 }}>
-              要点（1行に1つ）
-              <AutoResizeTextarea
-                value={editPoints}
-                onChange={(e) => setEditPoints(e.target.value)}
-                rows={3}
-                style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
-              />
-            </label>
-
-            <label style={{ display: 'block', marginBottom: 10 }}>
-              ニーズ（1行に1つ）
-              <AutoResizeTextarea
-                value={editNeeds}
-                onChange={(e) => setEditNeeds(e.target.value)}
-                rows={2}
-                style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
-              />
-            </label>
-
             <label style={{ display: 'block', marginBottom: 12 }}>
-              次アクション（1行に1つ）
+              メモ（話した内容・相手の状況・約束したことなど）
               <AutoResizeTextarea
-                value={editNextActions}
-                onChange={(e) => setEditNextActions(e.target.value)}
-                rows={2}
+                value={editMemo}
+                onChange={(e) => setEditMemo(e.target.value)}
+                rows={4}
                 style={{ width: '100%', padding: 10, fontSize: 15, marginTop: 4 }}
               />
             </label>

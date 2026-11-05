@@ -313,7 +313,7 @@ export function MeetingRecord() {
       const known = existing.find((c) => normalize(c.name) === normalize(nm));
       const res = await commitMeeting({
         meetingId,
-        proposals: { ...EMPTY, people: [{ customer_id: known?.id ?? null, name: known?.name ?? nm, points: [], needs: [], next_actions: [], custom_fields: {} }] },
+        proposals: { ...EMPTY, people: [{ customer_id: known?.id ?? null, name: known?.name ?? nm, memo: '', wants_to_meet: [] }] },
         minutes,
         speakerNames: {},
       });
@@ -507,7 +507,7 @@ export function MeetingRecord() {
     }
     setProposals({
       ...proposals,
-      people: [...proposals.people, { customer_id: known?.id ?? null, name: known?.name ?? nm, points: [], needs: [], next_actions: [], custom_fields: {} }],
+      people: [...proposals.people, { customer_id: known?.id ?? null, name: known?.name ?? nm, memo: '', wants_to_meet: [] }],
     });
   }
 
